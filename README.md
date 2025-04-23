@@ -29,4 +29,4 @@ Key publications:
   complex domains", Phys. Rev. E (2014).
   https://doi.org/10.1103/PhysRevE.89.023303
 
-Please see the [doc] folder for more details.
+Documentation available at the [doc](/doc/) folder and [here](https://docs.google.com/document/d/1_3WR3MR7mFyE9LxzcSeXy--G3qgnA3TBxO8aDqUDW2Q/edit?usp=sharing).
