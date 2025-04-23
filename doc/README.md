@@ -19,5 +19,5 @@ A typical workflow with HemeLB consists of four steps:
    [python-tools](../python-tools) directory. [Documentation](user/python-tools.md)
 
 
-[Developer documentation](dev)
+[Developer documentation](/doc/dev/)
 
