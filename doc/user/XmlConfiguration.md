@@ -88,8 +88,8 @@ The `<geometry>` element is required. It has one, required, child element:
         * `<label value="multiscale_label_string" />`
     * `type="velocity"`
       * `subtype="parabolic"` - Poiseuille flow in a cylinder, i.e. parabolic
-		* `<radius value="float" units="lattice" />` -  radius of tube (in lattice units)
-		* `<maximum value="float" units="lattice">` -  maximum velocity (in lattice units)
+		* `<radius value="float" units="m" />` -  radius of tube 
+		* `<maximum value="float" units="m/s">` -  maximum velocity 
 	  * `subtype="womersley"`
 		* `<womersley_velocity>` - a Womersley flow in a cylinder
 		* `<pressure_gradient_amplitude value="float" units="lattice"/>`
