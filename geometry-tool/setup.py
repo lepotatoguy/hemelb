@@ -49,7 +49,7 @@ setup(
         "numpy < 1.20; python_version < '3.7'",
         "numpy; python_version >= '3.7'",
         "vtk ~= 9.0",
-        #"vmtk ~= 1.5",
+        "vmtk ~= 1.5",
     ],
     extras_require={
         "gui": ["wxPython"],
