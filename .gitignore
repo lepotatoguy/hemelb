@@ -41,6 +41,6 @@ _skbuild
 dist
 .vagrant
 
-outputs/*
+hemelb-experiements/*
 results/*
 personal/*
