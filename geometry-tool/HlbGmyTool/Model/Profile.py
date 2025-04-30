@@ -18,6 +18,26 @@ from .Vector import Vector
 from .Iolets import ObservableListOfIolets, IoletLoader
 
 
+import sys
+import types
+
+# Make fake HemeLbSetupTool package and submodules for ensuring .pro to .pr2 works as expected
+heme_mod = types.ModuleType('HemeLbSetupTool')
+heme_mod.__path__ = []
+sys.modules['HemeLbSetupTool'] = heme_mod
+sys.modules['HemeLbSetupTool.Profile'] = types.ModuleType('HemeLbSetupTool.Profile')
+sys.modules['HemeLbSetupTool.Model'] = types.ModuleType('HemeLbSetupTool.Model')
+
+class LegacyProfileUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        if module.startswith("HemeLbSetupTool.Profile"):
+            module = module.replace("HemeLbSetupTool.Profile", "HlbGmyTool.Model.Profile")
+        elif module.startswith("HemeLbSetupTool.Model"):
+            module = module.replace("HemeLbSetupTool.Model", "HlbGmyTool.Model")
+        return super().find_class(module, name)
+
+
+
 class LengthUnit(Observable):
     def __init__(self, sizeInMetres, name, abbrv):
         self.SizeInMetres = sizeInMetres
@@ -205,7 +225,8 @@ class Profile(Observable):
 
     def LoadProfileV1(self, filename):
         with open(filename, "rb") as f:
-            restored = pickle.Unpickler(f, fix_imports=True).load()
+            # restored = pickle.Unpickler(f, fix_imports=True).load()
+            restored = LegacyProfileUnpickler(f, fix_imports=True).load()
         restored._ResetPaths(filename)
         self.CloneFrom(restored)
         return
