@@ -3,41 +3,54 @@
 # the HemeLB team and/or their institutions, as detailed in the
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
+#! /usr/bin/env python
 import sys
+import numpy as np
 from ..parsers.extraction import ExtractedProperty
 
+def unpack(filename, out_csv):
 
-def unpack(filename, stream=sys.stdout):
     propFile = ExtractedProperty(filename)
 
-    print('# Dump of file "{}"'.format(filename), file=stream)
-    print("# File has {} sites.".format(propFile.siteCount), file=stream)
-    print("# File has {} fields:".format(propFile.fieldCount), file=stream)
-    for name, xdrType, memType, length, offset in propFile._fieldSpec:
-        print('#     "{0}", length {1}'.format(name, length), file=stream)
-    print("# Geometry origin = {} m".format(propFile.originMetres), file=stream)
-    print("# Voxel size = {} m".format(propFile.voxelSizeMetres), file=stream)
+    with open(out_csv, "w") as f:
+        f.write(f'# Dump of file "{filename}"\n')
+        f.write(f"# File has {propFile.siteCount} sites.\n")
+        f.write(f"# File has {propFile.fieldCount} fields:\n")
+        for name, xdrType, memType, length, offset in propFile._fieldSpec:
+            f.write(f'#     "{name}", length {length}\n')
+        f.write(f"# Geometry origin = {propFile.originMetres} m\n")
+        f.write(f"# Voxel size = {propFile.voxelSizeMetres} m\n")
 
-    header = "# " + ", ".join(
-        name for name, xdrType, memType, length, offset in propFile._fieldSpec
-    )
-    print(header, file=stream)
+        header_names = [name for name, _, _, _, _ in propFile._fieldSpec]
+        f.write("# " + ", ".join(header_names) + "\n")
 
-    for t in propFile.times:
-        fields = propFile.GetByTimeStep(t)
-        print("# Timestep {:d}".format(t), file=stream)
+        for t in propFile.times:
+            f.write(f"# Timestep {t}\n")
 
-        for row in fields:
-            print(
-                ", ".join(
-                    str(getattr(row, name))
-                    for name, xdrType, memType, length, offset in propFile._fieldSpec
-                ),
-                file=stream,
-            )
+            fields = propFile.GetByTimeStep(t)
 
-        print("", file=stream)
+            # Collect all columns into a 2D array
+            data_cols = []
+            for name in header_names:
+                col_data = fields[name]
+                # Flatten multi-dimensional fields per row
+                if fields.dtype[name].shape != ():
+                    col_data = col_data.reshape(col_data.shape[0], -1)
+                else:
+                    col_data = col_data.reshape(-1, 1)
+                data_cols.append(col_data)
+
+            data = np.hstack(data_cols)
+
+            # Write all rows at once
+            np.savetxt(f, data, delimiter=",", fmt="%s")
+
+            f.write("\n")  # blank line after timestep
 
 
 def main():
-    unpack(sys.argv[1])
+    if len(sys.argv) != 3:
+        print("Usage: hlb-dump-extracted-properties input.xtr output.csv")
+        sys.exit(1)
+
+    unpack(sys.argv[1], sys.argv[2])
