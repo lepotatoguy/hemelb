@@ -3,7 +3,6 @@
 # the HemeLB team and/or their institutions, as detailed in the
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
-#! /usr/bin/env python
 import sys
 import numpy as np
 from ..parsers.extraction import ExtractedProperty
