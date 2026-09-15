@@ -5,9 +5,8 @@
 
 from contextlib import contextmanager
 import os.path
-import pickle
-import types
 
+from ..Model.Profile import FakeUnpickler as ProfileFakeUnpickler
 from ..Model.Profile import Profile
 from ..Model.Vector import Vector
 from ..Model.Iolets import Inlet, Outlet
@@ -21,7 +20,7 @@ old2new = {
 }
 
 
-class FakeUnpickler(pickle.Unpickler):
+class FakeUnpickler(ProfileFakeUnpickler):
     """Pickler to update old profiles.
 
     This Unpickler will not properly unpickle types from within the
@@ -36,34 +35,15 @@ class FakeUnpickler(pickle.Unpickler):
 
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._classes = {}
-        self._HST = types.ModuleType("HemeLbSetupTool")
-
-    def _get_or_make_mod(self, moduleName):
-        parts = moduleName.split(".")
-        hst = parts.pop(0)
-        assert hst == "HemeLbSetupTool"
-        full = hst
-        cur = self._HST
-        while parts:
-            name = parts.pop(0)
-            if not hasattr(cur, name):
-                mod = types.ModuleType(f"{full}.{name}")
-                mod.__package__ = full
-                full = mod.__name__
-                setattr(cur, name, mod)
-            cur = getattr(cur, name)
-        return cur
-
     def _get_or_make_class(self, mod, className):
         try:
             return getattr(mod, className)
         except AttributeError:
-            real = old2new[(mod.__name__, className)]
+            real = old2new.get((mod.__name__, className))
 
             def __up__(this):
+                if real is None:
+                    return this
                 o = real()
                 for k, v in this.__dict__.items():
                     if hasattr(v, "__up__"):
@@ -84,19 +64,12 @@ class FakeUnpickler(pickle.Unpickler):
             setattr(mod, className, fake)
             return fake
 
-    def find_class(self, moduleName, className):
-        if moduleName.startswith("HemeLbSetupTool"):
-            mod = self._get_or_make_mod(moduleName)
-            return self._get_or_make_class(mod, className)
-        return super().find_class(moduleName, className)
-
 
 def LoadFakeProfile(filename):
     # Fiddle an unpickler to give us a simple object with just the
     # pickled attributes set, unmodified.
-    un = FakeUnpickler(open(filename, "rb"))
-
-    fake = un.load()
+    with open(filename, "rb") as stream:
+        fake = FakeUnpickler(stream).load()
     return fake
 
 
@@ -117,8 +90,11 @@ def UpdateOutputGeometryFile(profile):
         print("Info: updating from Config to Geometry")
         print('Info: old file "' + outfile + '"')
     except AttributeError:
-        outfile = profile.OutputGeometryFile
+        outfile = getattr(profile, "OutputGeometryFile", None)
         pass
+
+    if outfile is None:
+        return
 
     base, ext = os.path.splitext(outfile)
     if ext != ".gmy":
@@ -130,7 +106,11 @@ def UpdateOutputGeometryFile(profile):
 
 
 def RebaseFilePath(profile, attr):
-    filename = getattr(profile, attr)
+    filename = getattr(profile, attr, None)
+    if filename is None:
+        return
+    if not isinstance(filename, str):
+        raise ValueError("Profile path %s is not a string" % attr)
     if os.path.isabs(filename):
         print(
             "Info: "
@@ -158,8 +138,10 @@ def UpdateProfileAttributes(profile):
     if hasattr(profile, "Cycles") and hasattr(profile, "Steps"):
         # Really old
         # First check doesn't have new style time info
-        assert not hasattr(profile, "TimeStepSeconds")
-        assert not hasattr(profile, "DurationSeconds")
+        if hasattr(profile, "TimeStepSeconds") or hasattr(profile, "DurationSeconds"):
+            raise ValueError("Legacy profile mixes old and new timing fields")
+        if profile.Steps <= 0 or profile.Cycles <= 0:
+            raise ValueError("Profile Steps and Cycles must be positive")
         profile.TimeStepSeconds = pulsatile_period_s / profile.Steps
         profile.DurationSeconds = pulsatile_period_s * profile.Cycles
         del profile.Cycles
@@ -185,15 +167,27 @@ def UpdateProfileAttributes(profile):
         continue
 
     for io in profile.Iolets:
-        io.Pressure.x -= reference_pressure_mmHg
+        if hasattr(io, "Pressure"):
+            io.Pressure.x -= reference_pressure_mmHg
     return
 
 
 def Upgrade(infilename, outfilename):
     # Load in to faked data/namespace only types
     oldProfile = LoadFakeProfile(infilename)
+    base_path = os.path.dirname(os.path.abspath(infilename))
+    for attr in ("OutputGeometryFile", "OutputXmlFile", "StlFile"):
+        value = getattr(oldProfile, attr, None)
+        if value is not None and not isinstance(value, str):
+            raise ValueError("Legacy profile path %s is not a string" % attr)
+        if value is not None and not os.path.isabs(value):
+            setattr(oldProfile, attr, os.path.abspath(os.path.join(base_path, value)))
     # Do stuff to attributes
     UpdateProfileAttributes(oldProfile)
+    for attr in ("OutputGeometryFile", "OutputXmlFile", "StlFile"):
+        value = getattr(oldProfile, attr, None)
+        if value is not None and not os.path.isabs(value):
+            setattr(oldProfile, attr, os.path.abspath(os.path.join(base_path, value)))
     # Convert to current types holding data but maybe a bit wonky.
     halfway = oldProfile.__up__()
     # Create a proper profile.

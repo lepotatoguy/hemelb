@@ -25,8 +25,6 @@ def main():
 
     # Import our module late to give erroneous args a chance to be caught
     # quickly
-    from ..Model.Profile import Profile
+    from ..Util.ProfileUpdateTools import Upgrade
 
-    p = Profile()
-    p.LoadFromFile(args.old)
-    p.Save(args.new)
+    Upgrade(args.old, args.new)
