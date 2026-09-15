@@ -1,5 +1,6 @@
 import os
 import pickle
+import sys
 
 import pytest
 
@@ -78,3 +79,20 @@ def test_profile_upgrade_preserves_input_paths_when_output_moves(tmp_path):
     profile = Profile()
     profile.LoadFromFile(str(output))
     assert profile.StlFile == os.path.splitext(source)[0] + ".stl"
+
+
+def test_pro_to_pr2_entrypoint_writes_a_loadable_profile(tmp_path, monkeypatch):
+    from HlbGmyTool.scripts.pro_to_pr2 import main
+
+    output = tmp_path / "converted.pr2"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["hlb-pro2pr2", LEGACY_PROFILE, str(output)],
+    )
+
+    main()
+
+    profile = Profile()
+    profile.LoadFromFile(str(output))
+    assert profile.DurationSeconds == pytest.approx((60.0 / 70.0) * 3)

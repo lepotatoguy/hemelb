@@ -28,3 +28,7 @@ def main():
     from ..Util.ProfileUpdateTools import Upgrade
 
     Upgrade(args.old, args.new)
+
+
+if __name__ == "__main__":
+    main()
