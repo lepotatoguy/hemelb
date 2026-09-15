@@ -14,6 +14,7 @@ from .Observer import Observable
 
 old2new = {
     ("HemeLbSetupTool.Model.Profile", "Profile"): Profile,
+    ("HemeLbSetupTool.Model.Vector", "Vector"): Vector,
     ("HemeLbSetupTool.Vector", "Vector"): Vector,
     ("HemeLbSetupTool.Iolets", "Inlet"): Inlet,
     ("HemeLbSetupTool.Iolets", "Outlet"): Outlet,
