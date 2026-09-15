@@ -197,13 +197,13 @@ class ExtractedProperty:
 
         self.filename = filename
         self._file = open(filename, "rb")
-
-        self._ReadMainHeader()
-        self._ReadFieldHeader()
-        self._DetermineTimes()
-
-        # At this point, we can close the file. All external access uses memory maps.
-        self._file.close()
+        try:
+            self._ReadMainHeader()
+            self._ReadFieldHeader()
+            self._DetermineTimes()
+        finally:
+            # All external access uses memory maps after initialization.
+            self._file.close()
         return
 
     def _ReadMainHeader(self):

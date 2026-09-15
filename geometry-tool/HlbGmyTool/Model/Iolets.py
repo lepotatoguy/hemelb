@@ -49,7 +49,7 @@ class Iolet(Observable, metaclass=AutoReg):
             continue
 
         for k in kwargs:
-            raise TypeError("__init__() got an unexpected keyword argument '%'" % k)
+            raise TypeError("__init__() got an unexpected keyword argument '%s'" % k)
 
         return
 
@@ -96,11 +96,13 @@ class Iolet(Observable, metaclass=AutoReg):
 
         # valid intersection
         t = num / den
+        if t < 0.0 or t > 1.0:
+            return np.finfo(float).max, None
         x = p1 + t * p21
 
         rSq = np.sum((x - p0) ** 2)
 
-        if rSq <= self.Radius:
+        if rSq <= self.Radius ** 2:
             return t, x
 
         return np.finfo(float).max, None
@@ -135,7 +137,7 @@ class SinusoidalPressureIolet(Iolet):
             phs = self.Pressure.z
             ans = "p = %.2f + %.2f cos(wt + %.0f°)" % (avg, amp, phs)
             return ans
-        except:
+        except (AttributeError, TypeError, ValueError):
             return ""
         return
 

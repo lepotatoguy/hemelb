@@ -6,6 +6,9 @@
 from io import StringIO
 import os.path
 
+import numpy as np
+
+import hlb.converters.ExtractedPropertyTextDump as dump_module
 from hlb.converters.ExtractedPropertyTextDump import unpack
 
 
@@ -14,3 +17,59 @@ def test_simple(diffTestDir):
     snap = os.path.join(diffTestDir, "CleanExtracted", "flow_snapshot.xtr")
     buf = StringIO()
     unpack(snap, stream=buf)
+
+
+def test_unpack_expands_vector_headers_and_values(monkeypatch):
+    fields = np.zeros(
+        1,
+        dtype=[("grid", ">i4", (3,)), ("velocity", ">f4", (3,)), ("pressure", ">f4")],
+    )
+    fields["grid"][0] = (1, 2, 3)
+    fields["velocity"][0] = (0.1, 0.2, 0.3)
+    fields["pressure"][0] = 4.0
+
+    class FakeProperty:
+        siteCount = 1
+        fieldCount = 3
+        originMetres = np.zeros(3)
+        voxelSizeMetres = 0.5
+        _fieldSpec = [
+            ("grid", None, None, (3,), 0),
+            ("velocity", None, None, (3,), 0),
+            ("pressure", None, None, (), 0),
+        ]
+        times = [7]
+
+        def __init__(self, filename):
+            pass
+
+        def GetByTimeStep(self, timestep):
+            return fields
+
+    monkeypatch.setattr(dump_module, "ExtractedProperty", FakeProperty)
+    output = StringIO()
+    unpack("fake.xtr", stream=output)
+
+    lines = output.getvalue().splitlines()
+    header = next(line for line in lines if line.startswith("# grid_0"))
+    data = next(line for line in lines if line.startswith("1,"))
+    assert header == "# grid_0, grid_1, grid_2, velocity_0, velocity_1, velocity_2, pressure"
+    assert data.split(",") == ["1", "2", "3", "0.1", "0.2", "0.3", "4.0"]
+
+
+def test_unpack_can_write_to_a_file(monkeypatch, tmp_path):
+    class FakeProperty:
+        siteCount = 0
+        fieldCount = 0
+        originMetres = np.zeros(3)
+        voxelSizeMetres = 0.5
+        _fieldSpec = []
+        times = []
+
+        def __init__(self, filename):
+            pass
+
+    monkeypatch.setattr(dump_module, "ExtractedProperty", FakeProperty)
+    output = tmp_path / "dump.csv"
+    unpack("fake.xtr", out_csv=output)
+    assert output.read_text().splitlines()[-1] == "# "
