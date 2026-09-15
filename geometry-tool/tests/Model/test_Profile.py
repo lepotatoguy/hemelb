@@ -3,6 +3,7 @@ import pickle
 import sys
 
 import pytest
+import yaml
 
 from HlbGmyTool.Model.Profile import Profile
 from HlbGmyTool.Util.ProfileUpdateTools import LoadFakeProfile, Upgrade
@@ -96,3 +97,17 @@ def test_pro_to_pr2_entrypoint_writes_a_loadable_profile(tmp_path, monkeypatch):
     profile = Profile()
     profile.LoadFromFile(str(output))
     assert profile.DurationSeconds == pytest.approx((60.0 / 70.0) * 3)
+
+
+def test_pro_to_pr2_output_matches_sample_pr2_schema(tmp_path):
+    output = tmp_path / "converted.pr2"
+    Upgrade(LEGACY_PROFILE, str(output))
+
+    with open(output) as converted_stream, open(
+        os.path.join(os.path.dirname(LEGACY_PROFILE), "poiseuille_flow_test.pr2")
+    ) as sample_stream:
+        converted = yaml.safe_load(converted_stream)
+        sample = yaml.safe_load(sample_stream)
+
+    assert set(converted) == set(sample)
+    assert set(converted["Iolets"][0]) == set(sample["Iolets"][0])
