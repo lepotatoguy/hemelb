@@ -3,19 +3,26 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
 # Parse command line arguments
 parser = ArgumentParser(
-    description="Generate the config file " "described by a profile file"
+    description="Generate HemeLB geometry and XML files from a profile.",
+    formatter_class=RawDescriptionHelpFormatter,
+    epilog="""Examples:
+  hlb-gmy-cli profile.pr2
+  hlb-gmy-cli profile.pr2 --geometry output.gmy --xml output.xml
+  hlb-gmy-cli profile.pr2 --voxel 5e-5
+
+The --geometry, --xml, and --voxel options override values in the profile.
+--voxel is specified in metres. Legacy .pro profiles are accepted, but .pr2
+profiles are recommended for reproducible runs.""",
 )
 
 parser.add_argument(
     "profile",
     nargs=1,
-    help="The profile to "
-    "use. Other options given override those in the "
-    "profile file.",
+    help="Profile to use (.pr2, or legacy .pro). Command-line options override it.",
     metavar="PATH",
 )
 
@@ -23,18 +30,22 @@ parser.add_argument(
     "--geometry",
     default=None,
     dest="OutputGeometryFile",
-    help="Config output file",
+    help="Output geometry file (.gmy). Overrides the profile value.",
     metavar="PATH",
 )
 parser.add_argument(
-    "--xml", default=None, dest="OutputXmlFile", help="XML output file", metavar="PATH"
+    "--xml",
+    default=None,
+    dest="OutputXmlFile",
+    help="Output XML file. Overrides the profile value.",
+    metavar="PATH",
 )
 parser.add_argument(
     "--voxel",
     default=None,
     type=float,
     dest="VoxelSizeMetres",
-    help="The voxel size in metres",
+    help="Voxel size in metres. Overrides the profile value.",
     metavar="FLOAT",
 )
 

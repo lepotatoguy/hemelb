@@ -156,6 +156,35 @@ is just VTK trying to display the mesh before the source file is
 specified.)
 
 
+## Run the command-line generator
+
+The installed command is `hlb-gmy-cli`. It takes a profile file and generates
+the geometry and XML files described by that profile:
+
+```
+hlb-gmy-cli profile.pr2
+```
+
+Values can be overridden for one run without editing the profile:
+
+```
+hlb-gmy-cli profile.pr2 \
+  --geometry output.gmy \
+  --xml output.xml \
+  --voxel 5e-5
+```
+
+The `--voxel` value is in metres. The `--geometry` and `--xml` options select
+the output files. Legacy `.pro` files are accepted for migration, but `.pr2`
+files are recommended for reproducible runs. Convert a legacy profile with:
+
+```
+hlb-pro2pr2 old-profile.pro new-profile.pr2
+```
+
+Use `hlb-gmy-cli --help` for the complete option list and examples.
+
+
 ## Profile (.pr2) files
 
 The geometry tool can store the the data it will use to generate a
@@ -166,4 +195,4 @@ are stored by default in hexadecimal to avoid precision loss
 (https://docs.python.org/3/library/stdtypes.html#float.hex) but can be
 set in decimal if more convenient.
 
-Paths are relative to the geometry file's location.
+Paths in a profile are interpreted relative to that profile file's location.
