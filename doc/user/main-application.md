@@ -2,6 +2,10 @@
 
 A simple guide to compile and run HemeLB
 
+For an automated install on macOS or Linux, use `Scripts/install_hemelb.sh`
+([Installing HemeLB](install.md)). The rest of this page describes a manual
+build.
+
 ## Dependencies
 
 The main HemeLB application requires:

@@ -1,5 +1,8 @@
 # HemeLB
 
+To install everything on macOS or Linux in one step, see
+[Installing HemeLB](user/install.md).
+
 A typical workflow with HemeLB consists of four steps:
 
 1. A preprocessing step where you create a mesh or geometry file (we
