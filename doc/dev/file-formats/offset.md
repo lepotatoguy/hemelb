@@ -1,8 +1,9 @@
 # Offset files
 
 These store where each MPI rank of the simulation wrote its contiguous
-chunk of data. This makes resuming a checkpoint on the same number of
-ranks much easier and faster.
+chunk of data. The checkpoint reader also uses the offsets when restarting
+with a different number of ranks. See
+[checkpoint-restart.md](../checkpoint-restart.md) for the current behavior.
 
 The file has a header and a body.
 
