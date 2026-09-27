@@ -88,7 +88,7 @@ namespace hemelb::extraction
 	offset_file_name = io::formats::offset::ExtractionToOffset(basename);
 	// Build the pattern
 	output_file_pattern += beginning;
-	output_file_pattern += "%*ld";
+	output_file_pattern += "%0*lu";
 	output_file_pattern += end;
       }
 
@@ -244,11 +244,11 @@ namespace hemelb::extraction
         if (sz < 0)
             throw Exception() << "Formatting error";
 
-        // +1 for the null terminator
-        std::string ans(sz + 1, '\0');
+        // Keep the terminator outside the returned filename.
+        std::vector<char> ans(sz + 1);
         std::snprintf(ans.data(), ans.size(),
                       pattern.data(), args...);
-        return ans;
+        return std::string(ans.data(), sz);
     }
 
     void LocalPropertyOutput::Write(unsigned long timestepNumber, unsigned long totalSteps)
