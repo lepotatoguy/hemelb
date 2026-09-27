@@ -6,6 +6,7 @@
 #include <cmath>
 #include <list>
 #include <algorithm>
+#include <limits>
 #include <utility>
 #include <zlib.h>
 
@@ -28,6 +29,9 @@ namespace hemelb::geometry
 {
     namespace fmt = io::formats;
     using gmy = fmt::geometry;
+    namespace {
+      constexpr std::size_t MAX_GMY_BUFFER_SIZE = 64U * (std::size_t(1) << 20);
+    }
 
     // Helper for checking that integers are allowed values for enums.
     template <typename Enum, Enum... allowed>
@@ -92,7 +96,7 @@ namespace hemelb::geometry
         GmyReadResult geometry = ReadPreamble();
 
         log::Logger::Log<log::Debug, log::OnePerCore>("Reading file header");
-        ReadHeader(geometry.GetBlockCount());
+        ReadHeader(geometry.GetBlockCount(), geometry.GetSitesPerBlock());
         timings[reporting::Timers::fileRead].Stop();
 
         {
@@ -187,6 +191,13 @@ namespace hemelb::geometry
      */
     GmyReadResult GeometryReader::ReadPreamble()
     {
+      MPI_Offset fileSize = 0;
+      if (computeComms.AmNodeLeader())
+        fileSize = file.GetSize();
+      computeComms.GetNodeComm().Broadcast(fileSize, 0);
+      if (fileSize < static_cast<MPI_Offset>(gmy::PreambleLength))
+        throw Exception() << "Geometry file is shorter than its preamble";
+
       std::vector<char> preambleBuffer = ReadAllProcesses(0, gmy::PreambleLength);
 
       // Create an Xdr translator based on the read-in data.
@@ -239,6 +250,16 @@ namespace hemelb::geometry
       read_check(blocksZ);
       read_check(blockSize);
 
+      if (blocksX == 0 || blocksY == 0 || blocksZ == 0 || blockSize == 0)
+        throw Exception() << "Geometry dimensions and block size must be positive";
+
+      const auto blockCount = std::uint64_t(blocksX) * blocksY * blocksZ;
+      if (blockCount > std::uint64_t(std::numeric_limits<int>::max()) / gmy::HeaderRecordLength)
+        throw Exception() << "Geometry header exceeds the supported read size";
+      const auto headerBytes = blockCount * gmy::HeaderRecordLength;
+      if (std::uint64_t(fileSize) < gmy::PreambleLength + headerBytes)
+        throw Exception() << "Geometry file is shorter than its block header";
+
       // Read the padding unsigned int.
       unsigned paddingValue;
       preambleReader.read(paddingValue);
@@ -252,7 +273,7 @@ namespace hemelb::geometry
      * Results are placed in the member arrays fluidSitesPerBlock,
      * bytesPerCompressedBlock and bytesPerUncompressedBlock.
      */
-    void GeometryReader::ReadHeader(site_t blockCount)
+    void GeometryReader::ReadHeader(site_t blockCount, site_t sitesPerBlock)
     {
       site_t headerByteCount = GetHeaderLength(blockCount);
       std::vector<char> headerBuffer = ReadAllProcesses(gmy::PreambleLength, headerByteCount);
@@ -273,10 +294,31 @@ namespace hemelb::geometry
         preambleReader.read(bytes);
         preambleReader.read(uncompressedBytes);
 
+        if (sites > sitesPerBlock)
+          throw Exception() << "Geometry block " << block << " has more fluid sites than sites per block";
+        if (bytes > MAX_GMY_BUFFER_SIZE)
+          throw Exception() << "Compressed geometry block " << block << " exceeds the 64 MiB read buffer";
+        if (sites > 0 && (bytes == 0 || uncompressedBytes == 0))
+          throw Exception() << "Geometry block " << block << " has missing compressed data";
+        const auto maxUncompressed = std::uint64_t(sitesPerBlock) * gmy::MaxFluidSiteRecordLength;
+        if (uncompressedBytes > maxUncompressed)
+          throw Exception() << "Geometry block " << block << " declares too much uncompressed data";
+
         fluidSitesOnEachBlock.push_back(sites);
         bytesPerCompressedBlock.push_back(bytes);
         bytesPerUncompressedBlock.push_back(uncompressedBytes);
       }
+
+      std::uint64_t declaredBytes = 0;
+      for (auto bytes: bytesPerCompressedBlock)
+        declaredBytes += bytes;
+      MPI_Offset fileSize = 0;
+      if (computeComms.AmNodeLeader())
+        fileSize = file.GetSize();
+      computeComms.GetNodeComm().Broadcast(fileSize, 0);
+      const auto bodyStart = gmy::PreambleLength + std::uint64_t(headerByteCount);
+      if (std::uint64_t(fileSize) - bodyStart < declaredBytes)
+        throw Exception() << "Geometry file is shorter than its declared block data";
     }
 
     // Args are vectors with index representing a block ID.
@@ -313,9 +355,6 @@ namespace hemelb::geometry
         // collective MPI IO). Going to use the node communicator to
         // set up a shared memory allocation to hold this and then
         // filter in parallel.
-        constexpr auto MiB = std::size_t(1) << 20;
-        constexpr std::size_t MAX_GMY_BUFFER_SIZE = 64U * MiB;
-
         log::Logger::Log<log::Info, log::Singleton>("Streaming geometry data and caching required blocks.");
         log::Logger::Log<log::Debug, log::Singleton>("Maximum buffer size %lu B", MAX_GMY_BUFFER_SIZE);
 
@@ -486,10 +525,14 @@ namespace hemelb::geometry
         timings[reporting::Timers::readParse].Start();
         // Create an Xdr interpreter.
         auto blockData = DecompressBlockData(compressedBlockData,
-                                             bytesPerUncompressedBlock[block_gmy]);
-        io::XdrMemReader lReader(&blockData.front(), blockData.size());
+                                             bytesPerUncompressedBlock[block_gmy], block_gmy);
+        if (blockData.empty())
+          throw Exception() << "Geometry block " << block_gmy << " has no site data";
+        io::XdrMemReader lReader(blockData);
 
         ParseBlock(geometry, block_gmy, lReader);
+        if (lReader.GetPosition() != blockData.size())
+          throw Exception() << "Geometry block " << block_gmy << " has trailing site data";
 
         // If debug-level logging, check that we've read in as many sites as anticipated.
         if constexpr (build_info::VALIDATE_GEOMETRY) {
@@ -515,38 +558,32 @@ namespace hemelb::geometry
     }
 
     std::vector<char> GeometryReader::DecompressBlockData(const std::vector<char>& compressed,
-                                                          const unsigned int uncompressedBytes)
+                                                          const unsigned int uncompressedBytes, site_t blockGmy)
     {
       timings[reporting::Timers::unzip].Start();
-      // For zlib return codes.
-      int ret;
+      if (compressed.empty() || uncompressedBytes == 0)
+        throw Exception() << "Geometry block " << blockGmy << " has empty compressed or uncompressed data";
 
       // Set up the buffer for decompressed data. We know how long the the data is
       std::vector<char> uncompressed(uncompressedBytes);
 
       // Set up the inflator
-      z_stream stream;
-      stream.zalloc = Z_NULL;
-      stream.zfree = Z_NULL;
-      stream.opaque = Z_NULL;
+      z_stream stream{};
       stream.avail_in = compressed.size();
-      stream.next_in = reinterpret_cast<unsigned char*>(const_cast<char*>(&compressed.front()));
+      stream.next_in = reinterpret_cast<unsigned char*>(const_cast<char*>(compressed.data()));
 
-      ret = inflateInit(&stream);
+      int ret = inflateInit(&stream);
       if (ret != Z_OK)
-        throw Exception() << "Decompression error for block";
+        throw Exception() << "Decompression error for geometry block " << blockGmy;
 
       stream.avail_out = uncompressed.size();
-      stream.next_out = reinterpret_cast<unsigned char*>(&uncompressed.front());
+      stream.next_out = reinterpret_cast<unsigned char*>(uncompressed.data());
 
       ret = inflate(&stream, Z_FINISH);
-      if (ret != Z_STREAM_END)
-        throw Exception() << "Decompression error for block";
-
-      uncompressed.resize(uncompressed.size() - stream.avail_out);
-      ret = inflateEnd(&stream);
-      if (ret != Z_OK)
-        throw Exception() << "Decompression error for block";
+      const bool complete = ret == Z_STREAM_END && stream.total_out == uncompressedBytes && stream.avail_in == 0;
+      const int endRet = inflateEnd(&stream);
+      if (!complete || endRet != Z_OK)
+        throw Exception() << "Decompression error for geometry block " << blockGmy;
 
       timings[reporting::Timers::unzip].Stop();
       return uncompressed;
@@ -562,19 +599,19 @@ namespace hemelb::geometry
       for (site_t localSiteIndex = 0; localSiteIndex < geometry.GetSitesPerBlock();
           ++localSiteIndex)
       {
-        geometry.Blocks[block].Sites.push_back(ParseSite(reader));
+        try {
+          geometry.Blocks[block].Sites.push_back(ParseSite(reader));
+        } catch (Exception const& error) {
+          throw Exception() << "Malformed geometry block " << block << " site "
+                            << localSiteIndex << ": " << error.what();
+        }
       }
     }
 
     GeometrySite GeometryReader::ParseSite(io::XdrReader& reader)
     {
       // Read the site type
-      unsigned readSiteType;
-      bool success = reader.read(readSiteType);
-      if (!success)
-      {
-        log::Logger::Log<log::Error, log::OnePerCore>("Error reading site type");
-      }
+      unsigned readSiteType = reader.read<unsigned>();
       auto siteType = SiteTypeValidator::Run(readSiteType);
       GeometrySite readInSite(siteType == gmy::SiteType::FLUID);
 
@@ -594,8 +631,7 @@ namespace hemelb::geometry
       {
         // read the type of the intersection and create a link...
         auto intersectionType = [&]() {
-          unsigned readType;
-          reader.read(readType);
+          unsigned readType = reader.read<unsigned>();
           return CutTypeValidator::Run(readType);
         } ();
 
@@ -606,18 +642,15 @@ namespace hemelb::geometry
         if (link.type == gmy::CutType::WALL)
         {
           isGmyWallSite = true;
-          float distance;
-          reader.read(distance);
+          float distance = reader.read<float>();
           link.distanceToIntersection = distance;
         }
         // inlets and outlets (which together with none make up the other intersection types)
         // have an iolet id and a distance float...
         else if (link.type != gmy::CutType::NONE)
         {
-          float distance;
-          unsigned ioletId;
-          reader.read(ioletId);
-          reader.read(distance);
+          unsigned ioletId = reader.read<unsigned>();
+          float distance = reader.read<float>();
 
           link.ioletId = ioletId;
           link.distanceToIntersection = distance;
@@ -639,8 +672,7 @@ namespace hemelb::geometry
       }
 
       auto normalAvailable = [&]() {
-        unsigned normalAvailable;
-        reader.read(normalAvailable);
+        unsigned normalAvailable = reader.read<unsigned>();
         return WallNormalAvailabilityValidator::Run(normalAvailable);
       }();
       readInSite.wallNormalAvailable = (normalAvailable == gmy::WallNormalAvailability::AVAILABLE);
@@ -656,9 +688,9 @@ namespace hemelb::geometry
 
       if (readInSite.wallNormalAvailable)
       {
-        reader.read(readInSite.wallNormal[0]);
-        reader.read(readInSite.wallNormal[1]);
-        reader.read(readInSite.wallNormal[2]);
+        readInSite.wallNormal[0] = reader.read<float>();
+        readInSite.wallNormal[1] = reader.read<float>();
+        readInSite.wallNormal[2] = reader.read<float>();
       }
 
       return readInSite;

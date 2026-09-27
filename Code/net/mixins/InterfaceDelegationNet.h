@@ -5,6 +5,10 @@
 
 #ifndef HEMELB_NET_MIXINS_INTERFACEDELEGATIONNET_H
 #define HEMELB_NET_MIXINS_INTERFACEDELEGATIONNET_H
+
+#include <limits>
+#include "Exception.h"
+
 namespace hemelb
 {
   namespace net
@@ -49,48 +53,35 @@ namespace hemelb
         template<class T>
         void RequestGatherVReceive(std::vector<T>& bigBuffer, const std::vector<int>& countsIn)
         {
-          // It may seem inefficient to go through the list twice (it is), but it avoids any nastiness
-          // in 32 / 64 bit problems, because we can take our displacement as simply the difference
-          // between two addresses (by allocating the bigBuffer before the address calculation).
-
           int totalCount = 0;
-          for (std::vector<int>::const_iterator count_iterator = countsIn.begin();
-              count_iterator != countsIn.end(); count_iterator++)
-          {
-            totalCount += *count_iterator;
+          if (countsIn.size() != static_cast<std::size_t>(Size()))
+            throw Exception() << "Gather receive counts must match communicator size";
+          for (int count: countsIn) {
+            if (count < 0 || count > std::numeric_limits<int>::max() - totalCount)
+              throw Exception() << "Gather receive count is invalid or too large";
+            totalCount += count;
           }
 
-          // Allocate the large buffer we'll receive all data into.
           bigBuffer.resize(totalCount);
-          bigBuffer.reserve(1);
 
           std::vector<int> & displacements = this->GetDisplacementsBuffer();
           std::vector<int> &counts = this->GetCountsBuffer();
 
-          // Now store the displacement and count for each sending proc.
           int countSoFar = 0;
-
-          for (std::vector<int>::const_iterator count_iterator = countsIn.begin();
-              count_iterator != countsIn.end(); count_iterator++)
-          {
-            int nextCount = *count_iterator;
-
+          for (int nextCount: countsIn) {
             counts.push_back(nextCount);
-            displacements.push_back(&bigBuffer[countSoFar] - &bigBuffer[0]);
-
+            displacements.push_back(countSoFar);
             countSoFar += nextCount;
           }
 
-          // And store the pointer and culminating arrays.
-          RequestGatherVReceive(&bigBuffer.front(), &displacements.front(), &counts.front());
+          RequestGatherVReceive(bigBuffer.data(), displacements.data(), counts.data());
         }
 
         template<class T>
         void RequestGatherReceive(std::vector<T> &buffer)
         {
-          // Ensure vector has some underlying array, even if it's unused.
-          buffer.reserve(1);
-          RequestGatherReceive(&buffer.front());
+          buffer.resize(Size());
+          RequestGatherReceive(buffer.data());
         }
 
         template<class T>
@@ -102,7 +93,9 @@ namespace hemelb
         template<class T>
         void RequestGatherVSend(std::vector<T> &payload, proc_t toRank)
         {
-          RequestGatherVSend(&payload.front(), payload.size(), toRank);
+          if (payload.size() > std::size_t(std::numeric_limits<int>::max()))
+            throw Exception() << "Gather send count is too large";
+          RequestGatherVSend(payload.data(), static_cast<int>(payload.size()), toRank);
         }
 
         /***
@@ -112,7 +105,9 @@ namespace hemelb
         template<class T>
         void RequestAllToAllSend(std::vector<T> &buffer)
         {
-          RequestAllToAllSend(&buffer.front(), 1);
+          if (buffer.size() != static_cast<std::size_t>(Size()))
+            throw Exception() << "All-to-all send buffer must match communicator size";
+          RequestAllToAllSend(buffer.data(), 1);
         }
         /***
          * This is for a scalar all to all
@@ -121,7 +116,9 @@ namespace hemelb
         template<class T>
         void RequestAllToAllReceive(std::vector<T> &buffer)
         {
-          RequestAllToAllReceive(&buffer.front(), 1);
+          if (buffer.size() != static_cast<std::size_t>(Size()))
+            throw Exception() << "All-to-all receive buffer must match communicator size";
+          RequestAllToAllReceive(buffer.data(), 1);
         }
 
         template<class T>

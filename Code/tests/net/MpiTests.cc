@@ -6,6 +6,7 @@
 #include <catch2/catch.hpp>
 
 #include "net/mpi.h"
+#include "net/net.h"
 
 namespace hemelb
 {
@@ -44,6 +45,37 @@ namespace hemelb
 	// Same ranks, but different context.
 	REQUIRE(commWorld2 != commWorld);
       }
+    }
+
+    TEST_CASE("MPI gather handles empty vectors", "[net]") {
+      auto comm = MpiCommunicator::World();
+      Net net(comm);
+      std::vector<int> empty;
+      std::vector<int> received;
+      std::vector<int> counts(comm.Size(), 0);
+      net.RequestGatherVSend(empty, 0);
+      if (comm.Rank() == 0)
+        net.RequestGatherVReceive(received, counts);
+      net.Dispatch();
+      if (comm.Rank() == 0)
+        REQUIRE(received.empty());
+
+      int value = comm.Rank();
+      std::vector<int> scalarReceived;
+      net.RequestGatherSend(value, 0);
+      if (comm.Rank() == 0)
+        net.RequestGatherReceive(scalarReceived);
+      net.Dispatch();
+      if (comm.Rank() == 0) {
+        REQUIRE(scalarReceived.size() == static_cast<std::size_t>(comm.Size()));
+        for (int rank = 0; rank < comm.Size(); ++rank)
+          REQUIRE(scalarReceived[rank] == rank);
+      }
+
+      REQUIRE_THROWS_WITH(net.RequestAllToAllSend(empty),
+                          Catch::Matchers::Contains("must match communicator size"));
+      REQUIRE_THROWS_WITH(net.RequestAllToAllReceive(empty),
+                          Catch::Matchers::Contains("must match communicator size"));
     }
   }
 }

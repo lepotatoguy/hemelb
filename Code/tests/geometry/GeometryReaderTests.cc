@@ -5,6 +5,11 @@
 
 #include <memory>
 #include <fstream>
+#include <filesystem>
+#include <iterator>
+#include <limits>
+
+#include <zlib.h>
 
 #include <catch2/catch.hpp>
 
@@ -24,6 +29,129 @@ namespace hemelb
 {
   namespace tests
   {
+    namespace {
+      void WriteXdrUInt(std::fstream& file, std::streamoff offset, std::uint32_t value) {
+        const char bytes[] = {
+            static_cast<char>(value >> 24), static_cast<char>(value >> 16),
+            static_cast<char>(value >> 8), static_cast<char>(value)};
+        file.seekp(offset);
+        file.write(bytes, sizeof(bytes));
+        REQUIRE(file.good());
+      }
+
+      void WriteXdrUInt(std::vector<char>& data, std::size_t offset, std::uint32_t value) {
+        for (int byte = 0; byte < 4; ++byte)
+          data[offset + byte] = static_cast<char>(value >> (24 - 8 * byte));
+      }
+    }
+
+    TEST_CASE("GmyReadResult checks dimensions before allocating blocks", "[geometry]") {
+      geometry::GmyReadResult small({3, 4, 5}, 8);
+      REQUIRE(small.GetBlockCount() == 60);
+      REQUIRE(small.GetSitesPerBlock() == 512);
+      REQUIRE_THROWS_WITH(geometry::GmyReadResult({0, 1, 1}, 8),
+                          Catch::Matchers::Contains("dimensions must be positive"));
+      REQUIRE_THROWS_WITH(geometry::GmyReadResult({65535, 65535, 1}, 8),
+                          Catch::Matchers::Contains("header exceeds the supported read size"));
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "GeometryReader rejects a header larger than its file", "[geometry]") {
+      CopyResourceToTempdir("large_cylinder.gmy");
+      MoveToTempdir();
+      std::fstream geometryFile("large_cylinder.gmy", std::ios::in | std::ios::out | std::ios::binary);
+      REQUIRE(geometryFile.is_open());
+      WriteXdrUInt(geometryFile, 12, 65535);
+      WriteXdrUInt(geometryFile, 16, 65535);
+      geometryFile.close();
+
+      auto timings = std::make_unique<reporting::Timers>(Comms());
+      geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
+      REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
+                          Catch::Matchers::Contains("header exceeds the supported read size"));
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "GeometryReader rejects impossible decompressed length", "[geometry]") {
+      CopyResourceToTempdir("large_cylinder.gmy");
+      MoveToTempdir();
+      std::fstream geometryFile("large_cylinder.gmy", std::ios::in | std::ios::out | std::ios::binary);
+      REQUIRE(geometryFile.is_open());
+      WriteXdrUInt(geometryFile, 40, std::numeric_limits<std::uint32_t>::max());
+      geometryFile.close();
+
+      auto timings = std::make_unique<reporting::Timers>(Comms());
+      geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
+      REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
+                          Catch::Matchers::Contains("declares too much uncompressed data"));
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "GeometryReader rejects truncated block data", "[geometry]") {
+      CopyResourceToTempdir("large_cylinder.gmy");
+      MoveToTempdir();
+      const auto size = std::filesystem::file_size("large_cylinder.gmy");
+      std::filesystem::resize_file("large_cylinder.gmy", size - 1);
+
+      auto timings = std::make_unique<reporting::Timers>(Comms());
+      geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
+      REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
+                          Catch::Matchers::Contains("shorter than its declared block data"));
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "GeometryReader rejects corrupted compressed data", "[geometry]") {
+      CopyResourceToTempdir("large_cylinder.gmy");
+      MoveToTempdir();
+      std::fstream geometryFile("large_cylinder.gmy", std::ios::in | std::ios::out | std::ios::binary);
+      REQUIRE(geometryFile.is_open());
+      geometryFile.seekp(32 + 20 * 12);
+      const char badZlibHeader = 0;
+      geometryFile.write(&badZlibHeader, 1);
+      REQUIRE(geometryFile.good());
+      geometryFile.close();
+
+      auto timings = std::make_unique<reporting::Timers>(Comms());
+      geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
+      REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
+                          Catch::Matchers::Contains("Decompression error for geometry block 0"));
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "GeometryReader reports a truncated site record", "[geometry]") {
+      CopyResourceToTempdir("large_cylinder.gmy");
+      MoveToTempdir();
+      std::ifstream input("large_cylinder.gmy", std::ios::binary);
+      REQUIRE(input.is_open());
+      std::vector<char> sample(std::istreambuf_iterator<char>{input}, {});
+      input.close();
+
+      // Replace the first block in the sample with a compressed fluid site type
+      // that has no following link data. Keep the remaining sample blocks intact.
+      const char incompleteSite[] = {0, 0, 0, 1};
+      std::vector<unsigned char> compressed(compressBound(sizeof(incompleteSite)));
+      uLongf compressedLength = compressed.size();
+      REQUIRE(compress2(compressed.data(), &compressedLength,
+                        reinterpret_cast<const Bytef*>(incompleteSite), sizeof(incompleteSite),
+                        Z_BEST_COMPRESSION) == Z_OK);
+      constexpr std::size_t bodyStart = 32 + 20 * 12;
+      constexpr std::size_t originalFirstBlockLength = 978;
+      WriteXdrUInt(sample, 36, compressedLength);
+      WriteXdrUInt(sample, 40, sizeof(incompleteSite));
+      std::vector<char> damaged(sample.begin(), sample.begin() + bodyStart);
+      damaged.insert(damaged.end(), compressed.begin(), compressed.begin() + compressedLength);
+      damaged.insert(damaged.end(), sample.begin() + bodyStart + originalFirstBlockLength, sample.end());
+      std::ofstream output("large_cylinder.gmy", std::ios::binary | std::ios::trunc);
+      output.write(damaged.data(), damaged.size());
+      REQUIRE(output.good());
+      output.close();
+
+      auto timings = std::make_unique<reporting::Timers>(Comms());
+      geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
+      REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
+                          Catch::Matchers::Contains("Malformed geometry block 0 site 0: Truncated XDR data"));
+    }
+
     TEST_CASE_METHOD(helpers::FolderTestFixture,
                      "GeometryReader rejects a compressed block larger than its buffer", "[geometry]") {
       CopyResourceToTempdir("large_cylinder.gmy");
