@@ -29,8 +29,8 @@ namespace hemelb::io
     const char* get_bytes(size_t n) override;
   private:
     const char* start;
-    const char* current;
     size_t len;
+    size_t position = 0;
   };
 }
 

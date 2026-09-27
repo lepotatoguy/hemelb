@@ -5,12 +5,42 @@
 
 #include "geometry/GmyReadResult.h"
 #include "geometry/LookupTree.h"
+#include "io/formats/geometry.h"
+
+#include <limits>
 
 namespace hemelb::geometry {
+    namespace {
+        site_t CheckedBlockCount(Vec16 const& dimensions) {
+            std::uint64_t count = 1;
+            for (auto dimension: dimensions) {
+                if (dimension == 0)
+                    throw Exception() << "Geometry block dimensions must be positive";
+                if (count > std::uint64_t(std::numeric_limits<site_t>::max()) / dimension)
+                    throw Exception() << "Geometry block count overflows site_t";
+                count *= dimension;
+            }
+            constexpr auto recordLength = io::formats::geometry::HeaderRecordLength;
+            if (count > std::uint64_t(std::numeric_limits<int>::max()) / recordLength)
+                throw Exception() << "Geometry header exceeds the supported read size";
+            return static_cast<site_t>(count);
+        }
+
+        site_t CheckedSitesPerBlock(U16 blockSize) {
+            if (blockSize == 0)
+                throw Exception() << "Geometry block size must be positive";
+            auto size = std::uint64_t(blockSize);
+            auto count = size * size * size;
+            if (count > std::uint64_t(std::numeric_limits<site_t>::max()))
+                throw Exception() << "Geometry site count per block overflows site_t";
+            return static_cast<site_t>(count);
+        }
+    }
+
     GmyReadResult::GmyReadResult(const Vec16& dimensionsInBlocks, U16 blockSize) :
             dimensionsInBlocks(dimensionsInBlocks), blockSize(blockSize),
-            blockCount(dimensionsInBlocks.x() * dimensionsInBlocks.y() * dimensionsInBlocks.z()),
-            sitesPerBlock(util::NumericalFunctions::IntegerPower(blockSize, 3)),
+            blockCount(CheckedBlockCount(dimensionsInBlocks)),
+            sitesPerBlock(CheckedSitesPerBlock(blockSize)),
             Blocks(blockCount)
     {
     }

@@ -131,15 +131,10 @@ class SinusoidalPressureIolet(Iolet):
 
     @property
     def PressureEquation(self):
-        try:
-            avg = self.Pressure.x
-            amp = self.Pressure.y
-            phs = self.Pressure.z
-            ans = "p = %.2f + %.2f cos(wt + %.0f°)" % (avg, amp, phs)
-            return ans
-        except (AttributeError, TypeError, ValueError):
-            return ""
-        return
+        avg = self.Pressure.x
+        amp = self.Pressure.y
+        phs = self.Pressure.z
+        return "p = %.2f + %.2f cos(wt + %.0f°)" % (avg, amp, phs)
 
     pass
 

@@ -133,20 +133,16 @@ namespace hemelb::geometry::octree {
         auto biggest_dim = *std::max_element(dimensionsInBlocks.begin(), dimensionsInBlocks.end());
         // What power of two is greater than or equal to the biggest dimension of the domain?
         U16 N = 1;
-        U16 cube_size = 2U;
+        std::uint32_t cube_size = 2U;
         while (cube_size < biggest_dim) {
             ++N;
             cube_size *= 2;
         }
-//        U64 max_blocks = cube_size;
-//        max_blocks *= cube_size;
-//        max_blocks *= cube_size;
-
         LookupTree ans(N);
 
         // Geometry file format decrees this layout of blocks
         auto const block_strides = util::Vector3D<std::size_t>(
-                dimensionsInBlocks.y() * dimensionsInBlocks.z(),
+                std::size_t(dimensionsInBlocks.y()) * dimensionsInBlocks.z(),
                 dimensionsInBlocks.z(),
                 1
         );

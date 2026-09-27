@@ -46,7 +46,7 @@ namespace hemelb::geometry
 
         // Read the block header with basic size data for each block in
         // the domain.
-        void ReadHeader(site_t blockCount);
+        void ReadHeader(site_t blockCount, site_t sitesPerBlock);
 
         // map from block GMY index to vect of data
         using block_cache = std::map<U64, std::vector<char>>;
@@ -74,7 +74,7 @@ namespace hemelb::geometry
 
         // Decompress the block data
         std::vector<char> DecompressBlockData(const std::vector<char>& compressed,
-                                              const unsigned int uncompressedBytes);
+                                              const unsigned int uncompressedBytes, site_t blockGmy);
 
         // Given a reader for a block's data, parse that into the
         // GmyReadResult at the given index.

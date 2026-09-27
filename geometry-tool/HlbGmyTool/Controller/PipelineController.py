@@ -4,7 +4,6 @@
 # license in the file LICENSE.
 
 import operator
-from math import sqrt
 from functools import reduce
 
 from vtk import vtkInteractorStyleTrackballCamera
@@ -100,10 +99,6 @@ class PipelineController(HasVtkObjectKeys, HasPlacedIoletListKeys, ObjectControl
             SimpleObservingMapper(self.PlacedIolets, "SelectedIndex"),
         )
 
-        self.GetValueForKey("SetSurfaceSource")(
-            profileController.GetValueForKey("StlReader.GetOutputPort")()
-        )
-
         # self.PlacedSeed = PlacedSeed(self)
 
         profileController.BindValue(
@@ -117,7 +112,7 @@ class PipelineController(HasVtkObjectKeys, HasPlacedIoletListKeys, ObjectControl
         )
 
         profileController.AddObserver(
-            "StlReader.Modified", self.HandleSurfaceSourceModified
+            "HasLoadedStlFile", self.HandleStlLoadStateChanged
         )
 
         self.AddDependency("SeedPlaceButtonEnabled", "mode")
@@ -191,26 +186,24 @@ class PipelineController(HasVtkObjectKeys, HasPlacedIoletListKeys, ObjectControl
         self.SetValueForKey("PlacedSeed.representation.Radius", side)
         return
 
-    def HandleSurfaceSourceModified(self, change):
-        # THis gets the Controller, so get the model object underneath
-        source = change.obj.GetValueForKey("StlReader").delegate
-        source.Update()
-        surf = source.GetOutput()
-        surf.ComputeBounds()
+    def HandleStlLoadStateChanged(self, change):
+        profile = self.profileController.delegate
+        if not profile.HasLoadedStlFile:
+            if self.delegate.SurfaceMapper.GetNumberOfInputConnections(0):
+                self.delegate.SetSurfaceSource(None)
+                self.delegate.SurfaceActor.VisibilityOff()
+                self.delegate.Render()
+            return
 
+        source = profile.StlReader
+        self.delegate.SetSurfaceSource(source.GetOutputPort())
+        self.delegate.SurfaceActor.VisibilityOn()
+        surf = source.GetOutput()
         self.GetValueForKey("Locator.SetDataSet")(surf)
         self.GetValueForKey("Locator.BuildLocator")()
-        bounds = surf.GetBounds()
-        # VTK standard bounding box
-        # Compute diagonal length
-        size = sqrt(
-            (bounds[1] - bounds[0]) ** 2
-            + (bounds[3] - bounds[2]) ** 2
-            + (bounds[5] - bounds[4]) ** 2
-        )
 
         # Set the WidgetSize to 1% of the BB diagonal
-        self.SetValueForKey("WidgetSize", 0.01 * size)
+        self.SetValueForKey("WidgetSize", 0.01 * profile.BoundingBoxSize)
         self.delegate.ResetView()
         return
 

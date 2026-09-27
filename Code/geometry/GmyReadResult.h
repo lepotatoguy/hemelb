@@ -68,7 +68,7 @@ namespace hemelb::geometry
          */
         inline site_t GetBlockIdFromBlockCoordinates(U16 blockI, U16 blockJ, U16 blockK) const
         {
-          return (blockI * dimensionsInBlocks.y() + blockJ) * dimensionsInBlocks.z() + blockK;
+          return (site_t(blockI) * dimensionsInBlocks.y() + blockJ) * dimensionsInBlocks.z() + blockK;
         }
 
         inline U64 GetBlockIdFromBlockCoordinates(Vec16 ijk) const {

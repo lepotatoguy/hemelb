@@ -150,10 +150,9 @@ optional arguments:
   --xml PATH       XML output file
 ```
 
-The terminal will produced a few errors that can ignore, like:
-`vtkSTLReader (0x7fdaa773bf10): A FileName must be specified.`. (This
-is just VTK trying to display the mesh before the source file is
-specified.)
+The mesh preview stays empty until an STL file has loaded. If VTK
+reports an STL reading or pipeline error after a file is selected,
+check the file and the error instead of ignoring it.
 
 
 ## Run the command-line generator

@@ -3,6 +3,7 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 add_test_lib(test_geometry
+  BasicDecompositionTests.cc
   GeometryReaderTests.cc
   LatticeDataTests.cc
   NeedsTests.cc
