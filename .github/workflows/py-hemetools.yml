@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - 'fix/**'
+      - 'feature/**'
     paths:
       - '.github/workflows/py-*'
       - 'python-tools/**'
@@ -14,6 +16,9 @@ on:
     # Run every Monday 0700 UTC
     - cron: '0 7 * * 1'
 
+  workflow_dispatch:
+    # Run on demand
+
 jobs:
   python-lint:
     runs-on: ubuntu-22.04
@@ -23,10 +28,10 @@ jobs:
         working-directory: python-tools
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
@@ -53,7 +58,7 @@ jobs:
       HEMELB_TESTS_DIR: ${{ github.workspace }}/tests
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           path: main
 
@@ -65,7 +70,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
