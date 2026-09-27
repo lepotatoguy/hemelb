@@ -4,6 +4,7 @@
 // license in the file LICENSE.
 
 #include <memory>
+#include <fstream>
 
 #include <catch2/catch.hpp>
 
@@ -23,6 +24,26 @@ namespace hemelb
 {
   namespace tests
   {
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "GeometryReader rejects a compressed block larger than its buffer", "[geometry]") {
+      CopyResourceToTempdir("large_cylinder.gmy");
+      MoveToTempdir();
+
+      // Change the first block length in the sample GMY header to 64 MiB + 1.
+      std::fstream geometryFile("large_cylinder.gmy", std::ios::in | std::ios::out | std::ios::binary);
+      REQUIRE(geometryFile.is_open());
+      geometryFile.seekp(36);
+      const char oversizedLength[] = {0x04, 0x00, 0x00, 0x01};
+      geometryFile.write(oversizedLength, sizeof(oversizedLength));
+      REQUIRE(geometryFile.good());
+      geometryFile.close();
+
+      auto timings = std::make_unique<reporting::Timers>(Comms());
+      geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
+      REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
+                          Catch::Matchers::Contains("exceeds the 64 MiB read buffer"));
+    }
+
     TEST_CASE_METHOD(helpers::FolderTestFixture, "GeometryReaderTests") {
       auto timings = std::make_unique<reporting::Timers>(Comms());
       

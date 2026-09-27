@@ -324,6 +324,14 @@ namespace hemelb::geometry
         // Work out where blocks live in the gmy **file**
         std::size_t const nBlocksGmy = bytesPerCompressedBlock.size();
         log::Logger::Log<log::Debug, log::Singleton>("Number of GMY blocks %lu", nBlocksGmy);
+        auto const oversized_block = std::find_if(
+            bytesPerCompressedBlock.begin(), bytesPerCompressedBlock.end(),
+            [](unsigned int bytes) { return bytes > MAX_GMY_BUFFER_SIZE; });
+        if (oversized_block != bytesPerCompressedBlock.end()) {
+            throw Exception() << "Compressed geometry block "
+                              << std::distance(bytesPerCompressedBlock.begin(), oversized_block)
+                              << " exceeds the 64 MiB read buffer";
+        }
         std::size_t const dataStart = gmy::PreambleLength + GetHeaderLength(geometry.GetBlockCount());
 
         // N + 1 elements, elem i holds the start of block i, elem i+1 holds the end
@@ -345,6 +353,8 @@ namespace hemelb::geometry
         // Full size of buffer across node communicator
         auto total_buf_size = std::min(blockBoundsGmy[nBlocksGmy] - blockBoundsGmy[0],
                                        MAX_GMY_BUFFER_SIZE);
+        if (total_buf_size == 0)
+            return ans;
 
         auto&& nodeComm = computeComms.GetNodeComm();
         auto local_buf_size = (total_buf_size - 1) / nodeComm.Size() + 1;
@@ -370,6 +380,9 @@ namespace hemelb::geometry
           // upper bound gives the first elem after max_read_pos or _end if none
           auto end_ptr = std::upper_bound(first_block_ptr, blockBoundsGmy_end, max_read_pos) - 1;
           std::size_t n_blocks = end_ptr - first_block_ptr;
+          if (n_blocks == 0)
+            throw Exception() << "Geometry reader cannot fit block " << i_first_block
+                              << " in its read buffer";
           auto read_size = *end_ptr - *first_block_ptr;
           log::Logger::Log<log::Debug, log::Singleton>("Reading blocks from %lu count %lu", i_first_block, n_blocks);
 

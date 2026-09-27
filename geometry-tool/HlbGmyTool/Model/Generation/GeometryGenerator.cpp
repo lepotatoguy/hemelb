@@ -14,6 +14,8 @@
 #include "Debug.h"
 
 #include <cassert>
+#include <memory>
+#include <sstream>
 #include "io/formats/geometry.h"
 
 using namespace hemelb::io::formats;
@@ -46,7 +48,7 @@ void GeometryGenerator::Execute(bool skipNonIntersectingBlocks) {
     // Open the BlockStarted context of the writer; this will
     // deal with flushing the state to the file (or not, in the
     // case where there are no fluid sites).
-    BlockWriter* blockWriterPtr = writer.StartNextBlock();
+    std::unique_ptr<BlockWriter> blockWriterPtr(writer.StartNextBlock());
     Block& block = *blockIt;
 
     int side = 0;  // represents whether the block is inside (-1) outside (+1)
@@ -99,7 +101,6 @@ void GeometryGenerator::Execute(bool skipNonIntersectingBlocks) {
     }
     blockWriterPtr->Finish();
     blockWriterPtr->Write(writer);
-    delete blockWriterPtr;
   }
   writer.Close();
 }
@@ -128,9 +129,10 @@ void GeometryGenerator::WriteFluidSite(BlockWriter& blockWriter, Site& site) {
       }
       blockWriter << static_cast<float>(site.Links[i].Distance);
     } else {
-      // TODO: throw some exception
-      std::cout << "Unknown cut type " << static_cast<unsigned int>(cutType)
-                << " for site " << site.GetIndex() << std::endl;
+      std::ostringstream message;
+      message << "Unknown cut type " << static_cast<unsigned int>(cutType)
+              << " for site " << site.GetIndex();
+      throw GenerationErrorMessage(message.str());
     }
   }
 

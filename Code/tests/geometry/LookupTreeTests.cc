@@ -14,6 +14,18 @@
 namespace hemelb::tests
 {
     using namespace geometry::octree;
+
+    TEST_CASE("LookupTree - dimensions above 32768 blocks", "[geometry]") {
+        std::vector<site_t> sites(32769, 0);
+        sites.back() = 1;
+        auto tree = build_block_tree(Vec16{32769, 1, 1}, sites);
+
+        REQUIRE(tree.n_levels == 16);
+        REQUIRE(tree.levels[0].sites_per_node[0] == 1);
+        REQUIRE(tree.levels[tree.n_levels].node_ids.size() == 1);
+        REQUIRE((tree.GetLeafCoords(0) == Vec16{32768, 0, 0}));
+    }
+
     TEST_CASE("LookupTree - 1D bit twiddling", "[geometry]") {
         // Need to take 16 bit unsigned, spread the bits out into triples,
         // do anything to the "extra" bits and then go back ok.

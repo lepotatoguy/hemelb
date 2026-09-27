@@ -106,7 +106,9 @@ void BlockWriter::Write(GeometryWriter& gw) {
     if (this->buffer == NULL)
       throw GenerationErrorMessage("Cannot write NULL buffer");
 
-    std::fwrite(this->buffer, 1, this->CompressedBlockLength, gw.bodyFile);
+    if (std::fwrite(this->buffer, 1, this->CompressedBlockLength, gw.bodyFile) !=
+        this->CompressedBlockLength)
+      throw GenerationErrorMessage("Failed to write compressed geometry block");
   }
   *(gw.headerEncoder) << this->nFluidSites << this->CompressedBlockLength
                       << this->UncompressedBlockLength;
