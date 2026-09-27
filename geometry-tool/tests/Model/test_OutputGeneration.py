@@ -14,11 +14,31 @@ from HlbGmyTool.Model import OutputGeneration
 from HlbGmyTool.Model.Profile import Profile
 from HlbGmyTool.Model.Vector import Vector
 from HlbGmyTool.Model.Iolets import Iolet
+from vtk import vtkSphereSource, vtkTriangleFilter
 from hlb.parsers.geometry.simple import ConfigLoader
 from hlb.utils.xml_compare import XmlChecker
 import fixtures
 
 dataDir = os.path.join(os.path.split(__file__)[0], "data")
+
+
+def test_pipeline_walk_stops_at_source():
+    source = vtkSphereSource()
+    disconnected_filter = vtkTriangleFilter()
+    triangle_filter = vtkTriangleFilter()
+    triangle_filter.SetInputConnection(source.GetOutputPort())
+
+    assert OutputGeneration.getpipeline(disconnected_filter) == [disconnected_filter]
+    assert OutputGeneration.getpipeline(triangle_filter) == [source, triangle_filter]
+
+
+def test_pipeline_walk_reports_unexpected_failures():
+    class FailingAlgorithm:
+        def GetNumberOfInputPorts(self):
+            raise RuntimeError("pipeline failed")
+
+    with pytest.raises(RuntimeError, match="pipeline failed"):
+        OutputGeneration.getpipeline(FailingAlgorithm())
 
 
 class TestPolyDataGenerator:

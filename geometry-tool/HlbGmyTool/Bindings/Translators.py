@@ -46,26 +46,31 @@ class Translator(object):
 
 class QuickTranslator(Translator):
     """Simple translator using functions supplied to the constructor
-    to go forwards and backwards.
+    to go forwards and backwards. Only declared input errors are
+    converted to binding errors.
     """
 
-    def __init__(self, forwards, backwards, inner=None):
+    def __init__(
+        self, forwards, backwards, inner=None, forward_errors=(), backward_errors=()
+    ):
         Translator.__init__(self, inner)
         self.forwards = forwards
         self.backwards = backwards
+        self.forward_errors = forward_errors
+        self.backward_errors = backward_errors
         return
 
     def TranslateStage(self, val):
         try:
             return self.forwards(val)
-        except:
-            raise FormattingError()
+        except self.forward_errors as exc:
+            raise FormattingError(str(exc)) from exc
 
     def UntranslateStage(self, val):
         try:
             return self.backwards(val)
-        except:
-            raise ValidationError()
+        except self.backward_errors as exc:
+            raise ValidationError(str(exc)) from exc
 
     pass
 

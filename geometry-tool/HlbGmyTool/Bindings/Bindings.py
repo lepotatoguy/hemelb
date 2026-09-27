@@ -87,7 +87,7 @@ class ValueBinding(object):
             # last known good
             print(
                 "Warning: Could not convert input to model key %s because: %s"
-                % (self.modelMapper.key, e.message)
+                % (self.modelMapper.key, str(e))
             )
             source.Set(self.modelMapper.Get())
             pass

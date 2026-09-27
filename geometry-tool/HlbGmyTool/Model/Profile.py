@@ -70,6 +70,7 @@ class Profile(Observable):
 
         # We need a reader to get the polydata
         self.StlReader = vtkSTLReader()
+        self.HasLoadedStlFile = False
 
         # And a way to estimate the voxel size
         self.SideLengthCalculator = AverageSideLengthCalculator()
@@ -92,8 +93,7 @@ class Profile(Observable):
         self.BoundingBoxSize = 0.0
         self.AddDependency("DefaultIoletRadius", "BoundingBoxSize")
 
-        # When the STL changes, we should reset the voxel size and
-        # update the vtkSTLReader.
+        # Load a valid STL and update the mesh measurements when it changes.
         self.AddObserver("StlFile", self.OnStlFileChanged)
         return
 
@@ -117,9 +117,14 @@ class Profile(Observable):
                 setattr(self, k, val)
 
     def OnStlFileChanged(self, change):
+        self.HasLoadedStlFile = False
+        if not self.HaveValidStlFile:
+            self.BoundingBoxSize = 0.0
+            return
+
         self.StlReader.SetFileName(self.StlFile)
-        self.VoxelSize = self.SideLengthCalculator.GetOutputValue()
         self.StlReader.Update()
+        self.VoxelSize = self.SideLengthCalculator.GetOutputValue()
         surf = self.StlReader.GetOutput()
         surf.ComputeBounds()
         bounds = surf.GetBounds()
@@ -130,6 +135,7 @@ class Profile(Observable):
             + (bounds[3] - bounds[2]) ** 2
             + (bounds[5] - bounds[4]) ** 2
         )
+        self.HasLoadedStlFile = True
         return
 
     @property

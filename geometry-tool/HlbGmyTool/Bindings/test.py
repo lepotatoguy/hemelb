@@ -64,7 +64,9 @@ class View(object):
                 "Value",
                 wx.EVT_TEXT,
                 translator=QuickTranslator(
-                    lambda k: str(k - 273.0), lambda c: float(c) + 273.0
+                    lambda k: str(k - 273.0),
+                    lambda c: float(c) + 273.0,
+                    backward_errors=(ValueError, TypeError),
                 ),
             ),
         )
@@ -82,7 +84,9 @@ class View(object):
                 "Value",
                 wx.EVT_TEXT,
                 translator=QuickTranslator(
-                    lambda k: str(k * 1.8 - 460.0), lambda f: (float(f) + 460.0) / 1.8
+                    lambda k: str(k * 1.8 - 460.0),
+                    lambda f: (float(f) + 460.0) / 1.8,
+                    backward_errors=(ValueError, TypeError),
                 ),
             ),
         )

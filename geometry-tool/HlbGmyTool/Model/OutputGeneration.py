@@ -662,19 +662,24 @@ class PolyDataCloser(vtkProgrammableFilter):
 
 def getpreviousstage(algo):
     """Given a vtkAlgorithm, get the previous algorithm in its pipeline."""
-    return algo.GetInputConnection(0, 0).GetProducer()
+    if algo.GetNumberOfInputPorts() == 0:
+        return None
+    if algo.GetNumberOfInputConnections(0) == 0:
+        return None
+    connection = algo.GetInputConnection(0, 0)
+    if connection is None:
+        return None
+    return connection.GetProducer()
 
 
 def getpipeline(last):
     """Return a list of all the algorithms in a pipeline, given the last one."""
     pipe = [last]
     while True:
-        try:
-            prev = getpreviousstage(pipe[0])
-            pipe.insert(0, prev)
-        except:
+        prev = getpreviousstage(pipe[0])
+        if prev is None:
             break
-        continue
+        pipe.insert(0, prev)
 
     return pipe
 
