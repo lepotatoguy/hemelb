@@ -24,6 +24,7 @@ _LEGACY_MODULE = "HemeLbSetupTool"
 # Legacy profiles store timing as cycles of a 70 beats per minute pulse.
 LEGACY_CARDIAC_PERIOD_S = 60.0 / 70.0
 
+
 class FakeUnpickler(pickle.Unpickler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -51,9 +52,13 @@ class FakeUnpickler(pickle.Unpickler):
         try:
             return getattr(mod, className)
         except AttributeError:
+
             def __up__(this):
                 return this  # no-op upgrade
-            fake = type(className, (object,), {"__module__": mod.__name__, "__up__": __up__})
+
+            fake = type(
+                className, (object,), {"__module__": mod.__name__, "__up__": __up__}
+            )
             setattr(mod, className, fake)
             return fake
 
@@ -64,7 +69,6 @@ class FakeUnpickler(pickle.Unpickler):
         raise pickle.UnpicklingError(
             "global '%s.%s' is not allowed in legacy profiles" % (moduleName, className)
         )
-
 
 
 class LengthUnit(Observable):
@@ -290,7 +294,9 @@ class Profile(Observable):
             elif attr in ("StlFile", "OutputGeometryFile", "OutputXmlFile"):
                 if val is not None:
                     if not isinstance(val, str):
-                        raise ValueError("Legacy profile path %s is not a string" % attr)
+                        raise ValueError(
+                            "Legacy profile path %s is not a string" % attr
+                        )
                     val = os.path.abspath(os.path.join(base_path, val))
             if val is not None:
                 values[attr] = val

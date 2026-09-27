@@ -102,7 +102,7 @@ class Iolet(Observable, metaclass=AutoReg):
 
         rSq = np.sum((x - p0) ** 2)
 
-        if rSq <= self.Radius ** 2:
+        if rSq <= self.Radius**2:
             return t, x
 
         return np.finfo(float).max, None

@@ -53,7 +53,10 @@ def test_unpack_expands_vector_headers_and_values(monkeypatch):
     lines = output.getvalue().splitlines()
     header = next(line for line in lines if line.startswith("# grid_0"))
     data = next(line for line in lines if line.startswith("1,"))
-    assert header == "# grid_0, grid_1, grid_2, velocity_0, velocity_1, velocity_2, pressure"
+    assert (
+        header
+        == "# grid_0, grid_1, grid_2, velocity_0, velocity_1, velocity_2, pressure"
+    )
     assert data.split(",") == ["1", "2", "3", "0.1", "0.2", "0.3", "4.0"]
 
 
