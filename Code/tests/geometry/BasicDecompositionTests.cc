@@ -5,14 +5,19 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <numeric>
 #include <vector>
 
 #include <catch2/catch.hpp>
 
 #include "geometry/GmyReadResult.h"
+#include "geometry/GeometryReader.h"
 #include "geometry/LookupTree.h"
 #include "geometry/decomposition/BasicDecomposition.h"
+#include "lb/lattices/D3Q15.h"
+#include "reporting/Timers.h"
+#include "tests/helpers/FolderTestFixture.h"
 
 namespace hemelb::tests {
     namespace {
@@ -48,5 +53,29 @@ namespace hemelb::tests {
 
     TEST_CASE("Basic decomposition rejects a site count overflow", "[geometry]") {
         REQUIRE_THROWS_AS(DecomposeCounts({std::numeric_limits<U64>::max(), 1}, 0, 2), Exception);
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "Basic decomposition assigns the provided large cylinder geometry to four ranks",
+                     "[geometry]") {
+        CopyResourceToTempdir("large_cylinder.gmy");
+        MoveToTempdir();
+
+        auto timings = std::make_unique<reporting::Timers>(Comms());
+        geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
+        auto result = reader.LoadAndDecompose("large_cylinder.gmy");
+        const auto& tree = result.block_store->GetTree();
+        REQUIRE(tree.levels[0].sites_per_node[0] == 5576);
+
+        std::vector<proc_t> block_owners(result.GetBlockCount());
+        const auto owners = geometry::decomposition::BasicDecomposition(result, 4)
+                                .Decompose(tree, block_owners);
+        REQUIRE(owners.size() == 20);
+        REQUIRE(std::is_sorted(owners.begin(), owners.end()));
+        REQUIRE(std::all_of(owners.begin(), owners.end(), [](int rank) { return rank >= 0 && rank < 4; }));
+        for (int rank = 0; rank < 4; ++rank)
+            REQUIRE(std::count(owners.begin(), owners.end(), rank) > 0);
+        REQUIRE(std::accumulate(tree.levels[tree.n_levels].sites_per_node.begin(),
+                                tree.levels[tree.n_levels].sites_per_node.end(), U64{0}) == 5576);
     }
 }
