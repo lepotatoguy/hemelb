@@ -42,6 +42,9 @@ def checkpoint_at(output, timestep):
             matches.append(path)
     if len(matches) != 1:
         raise AssertionError(f"Expected one checkpoint at timestep {timestep}, got {matches}")
+    expected_name = f"checkpoint_{timestep:03d}.xtr"
+    if matches[0].name != expected_name:
+        raise AssertionError(f"Expected {expected_name}, got {matches[0].name}")
     return matches[0]
 
 
