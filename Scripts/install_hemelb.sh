@@ -160,7 +160,7 @@ find_conda() {
     if [[ -z "${CONDA_BASE:-}" ]]; then
         log "Installing Miniforge (conda) into $HOME/miniforge3"
         local installer="Miniforge3-$OS-$ARCH.sh"
-        curl -fsSL -o "/tmp/$installer" \
+        curl -fsSL --retry 5 --retry-connrefused -o "/tmp/$installer" \
             "https://github.com/conda-forge/miniforge/releases/latest/download/$installer"
         bash "/tmp/$installer" -b -p "$HOME/miniforge3"
         rm -f "/tmp/$installer"
@@ -214,6 +214,8 @@ install_gmy_tool() {
     # VMTK package, so letting it resolve dependencies would fail.
     log "Installing the Python tools and geometry tool"
     rm -rf "$SRC/geometry-tool/_skbuild"
+    # Use the environment's CGAL, Boost and VTK, not Homebrew or system copies.
+    export CMAKE_PREFIX_PATH="$CONDA_PREFIX"
     python -m pip install --no-deps --no-build-isolation "$SRC/python-tools"
     python -m pip install --no-deps --no-build-isolation "$SRC/geometry-tool"
 
