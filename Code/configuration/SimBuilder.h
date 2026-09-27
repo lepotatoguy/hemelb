@@ -66,7 +66,7 @@ namespace hemelb::configuration {
         template<typename T>
         T ConvertToLatticeUnits(T const& val, std::string_view units)
         {
-            return unit_converter->template ConvertToLatticeUnits(units, val);
+            return unit_converter->ConvertToLatticeUnits(units, val);
         }
 
         // Fully build the T = SimulationMaster<Traits> from the configuration.
