@@ -181,6 +181,25 @@ files are recommended for reproducible runs. Convert a legacy profile with:
 hlb-pro2pr2 old-profile.pro new-profile.pr2
 ```
 
+If the output name is omitted, the new file is written next to the old one
+with a `.pr2` extension. The converter can also be run as
+`python -m HlbGmyTool.scripts.pro_to_pr2`.
+
+Notes on legacy `.pro` files:
+
+- A `.pro` file is a Python pickle. It is read with a restricted loader
+  that only accepts the old `HemeLbSetupTool` classes. Any other object in
+  the file is rejected, so opening a profile cannot run arbitrary code.
+- Very old profiles store `Steps` and `Cycles` instead of times. They are
+  converted assuming a 70 beats per minute pulse (period 60/70 s):
+  `TimeStepSeconds = period / Steps` and `DurationSeconds = period * Cycles`.
+  Both fields must be positive, and a profile may not mix the old and new
+  timing fields.
+- Paths to the STL, geometry and XML files are resolved relative to the
+  profile's own folder.
+- An example of the expected output is
+  `Code/tests/pythontests/resources/poiseuille_flow_test.pr2`.
+
 Use `hlb-gmy-cli --help` for the complete option list and examples.
 
 

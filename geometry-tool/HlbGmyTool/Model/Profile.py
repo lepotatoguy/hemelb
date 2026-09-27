@@ -15,13 +15,14 @@ from vtk import vtkSTLReader
 from ..Util.Observer import Observable
 from .SideLengthCalculator import AverageSideLengthCalculator
 from .Vector import Vector
-# from .Iolets import ObservableListOfIolets, IoletLoader
 from .Iolets import ObservableListOfIolets, IoletLoader, Inlet, Outlet
 
 import types
 
 
 _LEGACY_MODULE = "HemeLbSetupTool"
+# Legacy profiles store timing as cycles of a 70 beats per minute pulse.
+LEGACY_CARDIAC_PERIOD_S = 60.0 / 70.0
 
 class FakeUnpickler(pickle.Unpickler):
     def __init__(self, *args, **kwargs):
@@ -32,7 +33,8 @@ class FakeUnpickler(pickle.Unpickler):
     def _get_or_make_mod(self, moduleName):
         parts = moduleName.split(".")
         hst = parts.pop(0)
-        assert hst == "HemeLbSetupTool"
+        if hst != _LEGACY_MODULE:
+            raise pickle.UnpicklingError("not a legacy profile module: %s" % moduleName)
         full = hst
         cur = self._HST
         while parts:
@@ -274,8 +276,8 @@ class Profile(Observable):
                 raise ValueError("Legacy profile mixes old and new timing fields")
             if halfway.Steps <= 0 or halfway.Cycles <= 0:
                 raise ValueError("Profile Steps and Cycles must be positive")
-            halfway.TimeStepSeconds = (60.0 / 70.0) / halfway.Steps
-            halfway.DurationSeconds = (60.0 / 70.0) * halfway.Cycles
+            halfway.TimeStepSeconds = LEGACY_CARDIAC_PERIOD_S / halfway.Steps
+            halfway.DurationSeconds = LEGACY_CARDIAC_PERIOD_S * halfway.Cycles
 
         base_path = os.path.dirname(os.path.abspath(filename))
         values = {}

@@ -7,7 +7,7 @@ from contextlib import contextmanager
 import os.path
 
 from ..Model.Profile import FakeUnpickler as ProfileFakeUnpickler
-from ..Model.Profile import Profile
+from ..Model.Profile import LEGACY_CARDIAC_PERIOD_S, Profile
 from ..Model.Vector import Vector
 from ..Model.Iolets import Inlet, Outlet
 from .Observer import Observable
@@ -130,7 +130,7 @@ def UpdateProfileAttributes(profile):
         continue
 
     # Ancient arb. params
-    pulsatile_period_s = 60.0 / 70.0
+    pulsatile_period_s = LEGACY_CARDIAC_PERIOD_S
     reference_pressure_mmHg = 80.0
 
     if hasattr(profile, "Cycles") ^ hasattr(profile, "Steps"):
