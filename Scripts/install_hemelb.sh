@@ -123,7 +123,8 @@ install_linux_deps() {
     run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential cmake git curl ca-certificates pkg-config \
         libopenmpi-dev openmpi-bin libboost-dev libtinyxml-dev \
-        libparmetis-dev libmetis-dev libctemplate-dev zlib1g-dev
+        libparmetis-dev libmetis-dev libctemplate-dev zlib1g-dev \
+        libgl1 libglx0 libopengl0 libxt6
 }
 
 # ---------------------------------------------------------------------------
