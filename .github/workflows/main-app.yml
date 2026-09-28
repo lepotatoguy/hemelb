@@ -8,6 +8,12 @@ on:
     paths:
       - Code/**
       - dependencies/**
+      # CMake modules are loaded by Code/CMakeLists.txt; the super build
+      # (CMakeLists.txt) is also run end to end by install-script.yml.
+      - CMake/**
+      - CMakeLists.txt
+      - .github/workflows/main-app.yml
+      - .github/actions/**
   pull_request:
   schedule:
     # Run every Monday 0700 UTC
