@@ -131,18 +131,60 @@ this file records what changed and how it was checked at the time.
 
 ### Verification record
 
-Results as recorded when each change was made. Test counts grow as tests are
-added, so earlier numbers are lower.
+Every row is a run that was actually performed; nothing here is estimated.
+Test counts grow as tests are added, so earlier rows show lower numbers.
+"Byte-identical" means the output file was compared byte for byte with the
+stated reference. Local runs are on macOS 27 (Apple Silicon, AppleClang
+21, CMake 4.3.2) unless the platform column says otherwise.
 
-| Date | Change | Platform | Result |
+#### Main application (C++)
+
+| Date | Change (commits) | Platform | What was run | Result |
+| --- | --- | --- | --- | --- |
+| 2026-09-27 | 64-bit initial decomposition (`11eee676`, `f2d0deba`) | macOS | `hemelb-tests`; `large_cylinder`, 200 steps on 4 ranks, compared with upstream `432d3386` | 77 cases, 32,403 assertions passed. Same site count on every rank and byte-identical `whole.xtr` |
+| 2026-09-27 | Lookup tree sizing and geometry file I/O guards (`6f3ca6fe`) | macOS | `hemelb-tests`; `large_cylinder` as above | 79 cases, 32,411 assertions passed; output byte-identical to the previous change |
+| 2026-09-27 | Geometry validation, empty MPI buffers (`1ddfd2e8`) | macOS | `hemelb-tests`, including the empty-gather test on 4 ranks; `large_cylinder` as above | 87 cases, 32,443 assertions passed; 4-rank test passed; output byte-identical to the previous change |
+| 2026-09-27 | Checkpoint restart across process counts (`2a0c3dbb`, `8548b4c4`) | macOS | `checkpoint_restart_mpi.py`: write on N processes, restart at step 2 on M, compare step 4 by grid position | 2 to 1, 1 to 2, 2 to 4 and 1 to 1 all matched exactly; 73 cases, 32,386 assertions passed |
+| 2026-09-28 | Clear errors and checkpoint geometry check (`739df888`) | macOS | `hemelb-tests`; `ctest`; restart script; HemePure SixBranch (5 outlets) with a 1-inlet/1-outlet XML; `four_cube.gmy` (1 block) on 2 ranks; an XML pointing to a missing `.gmy` | 89 cases, 32,448 assertions passed; `ctest` passed. Restarts still matched exactly; a different voxel size or origin was rejected. SixBranch stopped with the outlet-count message instead of a segmentation fault (exit 139 before); `four_cube` gave the process-count message; the missing file was named |
+| 2026-09-28 | Stricter `.gmy` reader on real files (#16) | macOS | 17 geometries (repository tests, `hemelb-tests`, HemePure cases, up to 2,010,048 sites) read by the new reader and by a build of the `432d3386` reader | Same active blocks, fluid sites and outcome for every file |
+
+#### Installer
+
+| Date | Change (commits) | Platform | What was run | Result |
+| --- | --- | --- | --- | --- |
+| 2026-09-27 | Install script, all branches merged (`c4bd8579` to `e24ff725`) | macOS | Fresh clone, `install_hemelb.sh --no-system-deps` (Homebrew packages already present) | HemeLB built; 87 cases, 32,443 assertions passed; geometry tool and Python tools installed; compiled modules import; `hlb-gmy-gui` launcher uses the framework Python |
+| 2026-09-27 | ParMETIS and TinyXML built from source | macOS | Manual super build with both forced to `Build`; `large_cylinder`, 50,000 steps on 4 ranks | Built; tests passed; the run finished (203 s) |
+| 2026-09-27 | Install script (`a6ae73ee`) | Ubuntu 24.04 amd64 in Docker (emulated), GCC | Fresh clone, full `install_hemelb.sh`, then `large_cylinder` 200 steps on 4 ranks | 87 cases, 32,443 assertions passed; the run finished; Miniforge, the environment and both tools installed; `hlb-gmy-cli` ran |
+| 2026-09-27 onward | Install script in CI (`57707e06`) | GitHub `ubuntu-24.04` and `macos-14` | `install-script.yml`: full install, then (from `72403769`) the Poiseuille flow test | Passed on both at `86baf636` (about 5 min on Ubuntu, 8 min on macOS) and at every later run recorded here, including `7864e1d0` |
+
+Not tested: Intel Macs, Debian itself (only Ubuntu), Ubuntu releases other
+than 24.04, Linux on ARM, and non-apt distributions.
+
+#### Geometry tool
+
+| Date | Change (commits) | Platform | What was run | Result |
+| --- | --- | --- | --- | --- |
+| 2026-09-27 | `hlb-gmy-cli` checks and options (`68ac81bc`) | macOS, Python 3.11 | Test suite; experiments on `test.pr2` and the Poiseuille profile: missing STL, `--voxel 0`, wrong output extension, missing output folder, `1e-5` in a profile | 41 tests passed (39 plus 1 skipped module without wxPython). Missing STL: exit 2 with a message (segmentation fault before); voxel 0: exit 2 (traceback before); `1e-5` parsed |
+| 2026-09-27 | GUI fixes and silent-case warnings (`a6ede457`, `8eb12d75`) | macOS, Python 3.11 | The real GUI window driven by button events: open profile twice, Generate with a missing folder, voxel 0, Add/Remove iolets, Save Profile; warnings checked on every repository profile | Iolets kept on reload (2 became 1, then 0, before); failures shown in message boxes; progress window closes. No warnings on valid profiles; `test.gmy` byte-identical to the stored reference |
+| 2026-09-27 | Closed and open STL surfaces | macOS | The same tube generated from a closed and an open STL; iolets moved beyond the vessel end | Identical geometries; iolets beyond the end gave 0 inlet and 0 outlet sites, which now triggers a warning |
+| 2026-09-28 | Phase label, pulse period, DEBUG button, help, Python range (`1cb3e02c`) | macOS, Python 3.11 | Test suite, with and without wxPython | 59 tests passed; 53 passed and 1 module skipped without wxPython; `test.gmy` byte-identical |
+| 2026-09-28 | Poiseuille flow test in Python 3 (`72403769`) | macOS, 4 ranks | `poiseuilleflowtest.py`: generate with `hlb-gmy-cli`, run HemeLB, compare the velocity profile | 3 tests passed; velocity within 1e-3 m/s of the analytical profile. The first attempt with the sample profile's 0.75 mm iolets gave 0 inlet and 0 outlet sites and no flow, which led to the 1.5 mm iolets and the "only just reaches" warning |
+
+#### Python tools
+
+| Date | Change (commits) | Platform | What was run | Result |
+| --- | --- | --- | --- | --- |
+| 2026-09-27 | `xdrlib` replaced by `hlb.utils.pyxdr`, Cython 3 (`955870ea`) | macOS | `pyxdr` compared with `xdrlib` on fixed encodings and 3,000 random byte strings; test suite; extraction dump (11,165 lines), offset and geometry parsers, site counts, self-consistency check compared with the previous version | Same values, positions and exceptions as `xdrlib`. Python 3.11 with Cython 0.29.37: 29 passed; 3.11 with Cython 3.3.0: 29 passed; 3.13 with Cython 3.3.0: 20 passed, 9 skipped (they need `xdrlib`). All outputs byte-identical |
+| 2026-09-28 | `.pxd` files in the sdist (`0c696dd7`) | macOS | tox from a clean `git archive` (the first CI run after `955870ea` failed on every Python version because the sdist lacked them) | 3.11: 29 passed; 3.13: 20 passed, 9 skipped; outputs byte-identical |
+| 2026-09-28 | Dump tool arguments (`72403769`) | macOS, Python 3.11 | Test suite; dump of the stored extraction file | 31 tests passed; output byte-identical |
+
+#### Continuous integration
+
+| Date | Commit | Workflows | Result |
 | --- | --- | --- | --- |
-| 2026-09-27 | 64-bit decomposition | macOS, AppleClang | `hemelb-tests`: 77 cases, 32,403 assertions passed. `large_cylinder`, 200 steps, 4 ranks: same per-rank site counts and byte-identical `whole.xtr` as upstream `432d3386` |
-| 2026-09-27 | Geometry I/O guards | macOS, AppleClang | 79 cases, 32,411 assertions passed; `large_cylinder` output byte-identical to the previous change |
-| 2026-09-27 | Geometry validation, empty MPI buffers | macOS, AppleClang | 87 cases, 32,443 assertions passed; 4-rank empty-gather test passed; `large_cylinder` output byte-identical to the previous change |
-| 2026-09-27 | Checkpoint restart | macOS, AppleClang | `checkpoint_restart_mpi.py` passed for 2 to 1, 1 to 2, 2 to 4 and 1 to 1 processes (all distributions matched); 73 cases, 32,386 assertions passed |
-| 2026-09-27 | Install script, all changes merged | macOS 27 arm64, AppleClang 21, CMake 4.3.2 | Fresh clone: 87 cases, 32,443 assertions passed; geometry and Python tools installed and imported |
-| 2026-09-27 | Install script, all changes merged | Ubuntu 24.04 amd64 (Docker), GCC | Fresh clone: 87 cases, 32,443 assertions passed; `large_cylinder` 200 steps on 4 ranks finished; tools installed; `hlb-gmy-cli` ran |
-| 2026-09-28 | Error messages, checkpoint geometry check | macOS, AppleClang | 89 cases, 32,448 assertions passed; `ctest` (unit tests and restart script) passed; restarts 2 to 1, 1 to 2, 2 to 4, 1 to 1 matched exactly and mismatched voxel size and origin were rejected; SixBranch, `four_cube` and a missing `.gmy` gave the new messages |
-| 2026-09-28 | Geometry tool changes | macOS, Python 3.11 | 59 tests passed; without wxPython 53 passed and 1 module skipped; `test.gmy` byte-identical to the stored reference |
-| 2026-09-28 | Poiseuille flow test | macOS, 4 ranks | 3 tests passed; velocity within 1e-3 m/s of the analytical profile |
-| 2026-09-28 | Python tools | macOS, Python 3.11 | 31 tests passed; extraction dump byte-identical |
+| 2026-09-27 | `86baf636` | All four, first full run on the fork | All passed after the GUI tests were made to skip without wxPython (the first Geometry tool run had failed on that import) |
+| 2026-09-28 | `7864e1d0` (last code change) | Geometry tool: lint and Python 3.8 to 3.11 (6 jobs). Python tools: lint and Python 3.8 to 3.13 (7). Main application: code checks and GCC 11, 12 and 13 in fluid-only and RBC mode (7). Install script: Ubuntu 24.04 and macOS 14 (2) | All 22 jobs passed |
+
+Later commits (`c9b8e012`, `c40ea158`, `8beba9a2`) change documentation
+only, which does not trigger the workflows. Their check was that every
+relative link and anchor in `doc/`, `README.md` and this file resolves.
