@@ -1,7 +1,7 @@
 name: 'Get the tests repo'
 description: |
-  Checkout the hemelb-tests repo.
-  Make sure to set GITHUB_TOKEN in environment!
+  Checkout the hemelb-tests repo. If it has a branch with the same name as
+  the branch being tested, use that; otherwise use main.
 
 inputs:
   path:
@@ -11,37 +11,27 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - id: ref_name
-      shell: bash
-      run: |
-        if [ $GITHUB_EVENT_NAME = "pull_request" ]; then
-          branch=$GITHUB_HEAD_REF
-        else
-          branch=$GITHUB_REF_NAME
-        fi
-        echo "value=$branch" >> $GITHUB_OUTPUT
-
-    - uses: octokit/request-action@v2.x
-      id: check_branch_exists
-      continue-on-error: true
-      with:
-        route: GET /repos/{org}/{repo}/branches/{branch}
-        org: hemelb-codes
-        repo: hemelb-tests
-        branch: ${{ steps.ref_name.outputs.value }}
-
     - id: branch
       shell: bash
+      # The branch name comes from the environment and is always quoted, so a
+      # pull request branch name cannot inject shell commands.
       run: |
-        if [ ${{ steps.check_branch_exists.outputs.status }} = 200 ]; then
-          ans=${{ steps.ref_name.outputs.value }}
+        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          branch="$GITHUB_HEAD_REF"
+        else
+          branch="$GITHUB_REF_NAME"
+        fi
+        if git ls-remote --exit-code --heads \
+            https://github.com/hemelb-codes/hemelb-tests.git "refs/heads/$branch" > /dev/null 2>&1; then
+          ans="$branch"
         else
           ans=main
         fi
+        echo "Using hemelb-tests branch: $ans"
         echo "value=$ans" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v5
       with:
         repository: hemelb-codes/hemelb-tests
         ref: ${{ steps.branch.outputs.value }}
-        path: ${{ inputs.path }}        
+        path: ${{ inputs.path }}

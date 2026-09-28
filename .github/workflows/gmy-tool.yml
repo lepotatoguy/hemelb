@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+      - 'fix/**'
+      - 'feature/**'
     paths:
       - '.github/workflows/gmy-*'
       - 'geometry-tool/**'
@@ -21,11 +23,14 @@ on:
     # Run every Monday 0700 UTC
     - cron: '0 7 * * 1'
 
+  workflow_dispatch:
+    # Run on demand
+
 jobs:
   lint-python:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Run black to check Python formatting
         working-directory: geometry-tool
@@ -34,7 +39,7 @@ jobs:
   lint-cpp:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Run clang-format
         working-directory: geometry-tool/HlbGmyTool/Model/Generation
@@ -56,10 +61,10 @@ jobs:
       VMTK_VERSION: 1.5.0
       VMTK_DIR: /opt/vmtk
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -75,7 +80,7 @@ jobs:
             libopengl0 libglx0 libxt6
 
       - name: pip cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         env:
           # Increase this value to reset cache
           CACHE_NUMBER: 0
@@ -102,7 +107,7 @@ jobs:
 
       - name: Store VMTK dir on error
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: failed-vmtk-tree
           path: ${{ env.VMTK_DIR }}
@@ -113,7 +118,7 @@ jobs:
 
       - name: Store build tree on error
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: failed-build-tree
           path: geometry-tool/_skbuild
@@ -132,7 +137,7 @@ jobs:
 
       - name: Store failed install
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: failed-python-${{ matrix.python-version }}
           path: fail-${{ matrix.python-version }}.tar.gz

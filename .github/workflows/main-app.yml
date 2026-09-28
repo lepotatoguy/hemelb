@@ -3,9 +3,17 @@ on:
   push:
     branches:
       - main
+      - 'fix/**'
+      - 'feature/**'
     paths:
       - Code/**
       - dependencies/**
+      # CMake modules are loaded by Code/CMakeLists.txt; the super build
+      # (CMakeLists.txt) is also run end to end by install-script.yml.
+      - CMake/**
+      - CMakeLists.txt
+      - .github/workflows/main-app.yml
+      - .github/actions/**
   pull_request:
   schedule:
     # Run every Monday 0700 UTC
@@ -31,7 +39,7 @@ jobs:
 
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Check copyright statements
         run: python Scripts/checkCopyright.py
@@ -49,7 +57,7 @@ jobs:
         compiler: [gnu-11, gnu-12, gnu-13]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v5
 
     - uses: ./.github/actions/setup-compilers
       with:
@@ -86,7 +94,7 @@ jobs:
 
     - name: Store build tree on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: fluid-only-failed-build-tree
         path: build
@@ -112,7 +120,7 @@ jobs:
 
     - name: Store results on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: fluid-only-failed-diffTest
         path: hemelb-tests/diffTest/results
@@ -123,9 +131,14 @@ jobs:
         MPIRUN_FLAGS: --oversubscribe
       run: ./run.sh
 
+    - name: Restart checkpoints on different process counts
+      env:
+        MPIRUN_FLAGS: --oversubscribe
+      run: python3 Code/tests/checkpoint_restart_mpi.py --hemelb "$(command -v hemelb)"
+
     - name: Store results on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: fluid-only-failed-checkpointTest
         path: hemelb-tests/fluid-checkpoint/results
@@ -140,7 +153,7 @@ jobs:
         compiler: [gnu-11, gnu-12, gnu-13]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v5
 
     - uses: ./.github/actions/setup-compilers
       with:
@@ -184,7 +197,7 @@ jobs:
 
     - name: Store build tree on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: rbc-failed-build-tree
         path: build
