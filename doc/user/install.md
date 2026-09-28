@@ -5,10 +5,16 @@ tool and Python tools. It supports macOS (Apple Silicon and Intel) and
 Debian/Ubuntu Linux.
 
 ```sh
-git clone https://github.com/lepotatoguy/hemelb.git
+git clone -b fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
 cd hemelb
 Scripts/install_hemelb.sh
 ```
+
+The script is on the `fix/hemelb-improvements` branch; the `-b` option
+selects it. You need `git` and an internet connection. On macOS, running
+`git` for the first time offers to install the Xcode Command Line Tools,
+which the build also needs. On GitHub's CI runners the whole install takes
+about 5 minutes on Linux and 8 minutes on macOS; a laptop may take longer.
 
 The script does not ask questions. By default it:
 

@@ -11,6 +11,21 @@ This software was started at University College London and has since
 been developed by a large number of people (see AUTHORS). It is open
 source under the LGPL license (see LICENSE).
 
+## Install
+
+On macOS (Apple Silicon or Intel) or Debian/Ubuntu Linux:
+
+```sh
+git clone -b fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
+cd hemelb
+Scripts/install_hemelb.sh
+```
+
+This builds HemeLB into `~/.local/hemelb` and installs the geometry tool
+and Python tools into a conda environment called `gmy-tool`. See
+[doc/user/install.md](doc/user/install.md) for options and details, and
+[doc/README.md](doc/README.md) for the full workflow.
+
 Key publications:
 
 - M.D. Mazzeo & P.V. Coveney, "HemeLB: A high performance parallel
