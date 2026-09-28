@@ -95,6 +95,37 @@ this file records what changed and how it was checked at the time.
 - `hlb-dump-extracted-properties` has `--help` and reports a missing file in
   one line; output is unchanged.
 - `hlb-gmy-gui --help` typos; 5 broken documentation links.
+- `pip install './geometry-tool[gui]'` failed with "No matching distribution
+  found for vmtk~=1.5", because VMTK is only on conda-forge. `setup.py` now
+  leaves VMTK out of the requirements when it is already installed
+  (importable or in the active conda environment's package records) and
+  keeps it otherwise; a missing VMTK at run time gives an ImportError that
+  says how to install it. The tool's CMake now searches `$CONDA_PREFIX`
+  first, because a plain pip build otherwise found Homebrew's CGAL 6 and
+  failed on `CGAL/AABB_polyhedron_triangle_primitive.h`. In a fresh
+  environment it then failed on CGAL 5.6's `iterator.h`, which current Clang
+  rejects; the build now compiles against a corrected copy of that header in
+  its build folder, so the installer no longer edits the environment's CGAL.
+  The old workarounds (editing `setup.py`,
+  `bodge-packages-for-setuptools.sh`) are no longer needed.
+- `INSTALL` described the CMake 2.8-era build (CppUnit, `USE_MULTIMACHINE`);
+  it now gives the install commands, the minimum, bundled and tested
+  version of every dependency, and the tested platforms. The build guide
+  said Boost 1.54; the build requires 1.77.
+- Exact versions, so installs do not change as new releases appear:
+  `geometry-tool/conda-lock/osx-64.txt` and `linux-64.txt` pin every package
+  of the conda environment (220 and 266) to an exact build and the install
+  script creates the environment from them;
+  `geometry-tool/conda-environment.yml` pins every listed package exactly
+  (Python 3.11.8, VMTK 1.5.0, VTK 9.2.6, CGAL 5.6.1, and so on);
+  `geometry-tool/pyproject.toml` pins pip's build tools (setuptools 75.3.0,
+  wheel 0.45.1, scikit-build 0.19.0, pybind11 2.13.6, cmake 3.28.3), chosen
+  to support Python 3.8 to 3.11; the installer pins `python.app=1.4`. The
+  exact compiler, CMake, MPI and library versions tested on each platform are
+  listed in `INSTALL`.
+- The install CI also runs on Intel macOS (`macos-15-intel`). A `macos-13`
+  job was tried first and stayed queued with no runner for over 35 minutes,
+  consistent with that image having been retired.
 
 - Python tools work on Python 3.12 and 3.13. The standard library's
   `xdrlib` (removed in 3.13) is replaced by `hlb.utils.pyxdr`, which is
@@ -169,6 +200,8 @@ than 24.04, Linux on ARM, and non-apt distributions.
 | 2026-09-27 | Closed and open STL surfaces | macOS | The same tube generated from a closed and an open STL; iolets moved beyond the vessel end | Identical geometries; iolets beyond the end gave 0 inlet and 0 outlet sites, which now triggers a warning |
 | 2026-09-28 | Phase label, pulse period, DEBUG button, help, Python range (`1cb3e02c`) | macOS, Python 3.11 | Test suite, with and without wxPython | 59 tests passed; 53 passed and 1 module skipped without wxPython; `test.gmy` byte-identical |
 | 2026-09-28 | Poiseuille flow test in Python 3 (`72403769`) | macOS, 4 ranks | `poiseuilleflowtest.py`: generate with `hlb-gmy-cli`, run HemeLB, compare the velocity profile | 3 tests passed; velocity within 1e-3 m/s of the analytical profile. The first attempt with the sample profile's 0.75 mm iolets gave 0 inlet and 0 outlet sites and no flow, which led to the 1.5 mm iolets and the "only just reaches" warning |
+| 2026-09-28 | Plain `pip install '.[gui]'` with VMTK from conda | macOS, conda env `gmy-tool` (Python 3.8.18, VMTK 1.5.0, CGAL 5.6) | The command that failed in the HemeLB Made Easy tutorial, without flags; the geometry-tool tests; `vmtk_requirement()` with and without VMTK present | Built and installed; 59 tests passed. With VMTK: no VMTK requirement; without: `vmtk ~= 1.5` kept. Before the CMake change the same command found Homebrew CGAL 6 and failed |
+| 2026-09-28 | Exact versions and lock files | macOS; conda solves for osx-64 and linux-64 | Solved the exactly pinned environment for both platforms (linux-64 with a simulated glibc 2.39) and wrote lock files, checking every package URL exists; created a new environment from the osx-64 lock; installed the Python tools and, with plain `pip install './geometry-tool[gui]'`, the geometry tool using the pinned build tools; ran both test suites | Both solves succeeded (220 and 266 packages; all URLs found). The locked environment has Python 3.11.8, VMTK 1.5.0 and CGAL 5.6.1. Without the header fix the plain install failed on CGAL's `iterator.h`; with it, installed. Geometry tool 59 passed; Python tools 31 passed (with `HEMELB_TESTS_DIR`) |
 
 #### Python tools
 

@@ -18,6 +18,34 @@ if sys.platform == "darwin":
     release, versioninfo, machine = platform.mac_ver()
     os.environ["MACOSX_DEPLOYMENT_TARGET"] = release
 
+
+def vmtk_requirement():
+    """The VMTK requirement to declare to pip.
+
+    VMTK 1.5 is only published on conda-forge, not PyPI, so pip cannot
+    install it and cannot see a conda-installed copy either. If VMTK is
+    already installed (importable, or recorded in the active conda
+    environment), leave it out so pip does not look for it on PyPI.
+    Otherwise keep it, so pip still stops rather than install a tool that
+    cannot run.
+    """
+    import glob
+    import importlib.util
+
+    if importlib.util.find_spec("vmtk") is not None:
+        return []
+    # pip builds in an isolated environment where the conda packages are not
+    # importable, so also check the conda environment's package records.
+    prefix = os.environ.get("CONDA_PREFIX")
+    if prefix and glob.glob(os.path.join(prefix, "conda-meta", "vmtk-1.5*.json")):
+        return []
+    print(
+        "VMTK 1.5 not found. It is only available from conda-forge: "
+        "conda env create -f geometry-tool/conda-environment.yml",
+        file=sys.stderr,
+    )
+    return ["vmtk ~= 1.5"]
+
 setup(
     name="HlbGmyTool",
     version="1.2",
@@ -50,8 +78,8 @@ setup(
         "numpy < 1.20; python_version < '3.7'",
         "numpy; python_version >= '3.7'",
         "vtk ~= 9.0",
-        "vmtk ~= 1.5",
-    ],
+    ]
+    + vmtk_requirement(),
     extras_require={
         "gui": ["wxPython"],
     },

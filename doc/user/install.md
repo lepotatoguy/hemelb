@@ -22,9 +22,9 @@ The script does not ask questions. By default it:
    itself if it is missing), or apt packages on Linux (using `sudo`).
 2. Builds HemeLB and the dependencies it cannot find (for example ParMETIS
    and TinyXML) into `~/.local/hemelb`, then runs `hemelb-tests`.
-3. Creates a conda environment called `gmy-tool` from
-   `geometry-tool/conda-environment.yml` and installs the geometry tool and
-   the Python tools into it. If conda is not installed, Miniforge is
+3. Creates a conda environment called `gmy-tool` with exactly the tested
+   package versions (from `geometry-tool/conda-lock/`) and installs the
+   geometry tool and the Python tools into it. If conda is not installed, Miniforge is
    installed into `~/miniforge3`.
 
 Useful options (see `--help` for all of them):
@@ -67,14 +67,30 @@ can repeat them.
   `linux-64`. On Apple Silicon the conda environment is created with
   `CONDA_SUBDIR=osx-64` and runs under Rosetta 2, which the script installs
   if needed (`softwareupdate --install-rosetta --agree-to-license`).
-- **CGAL with Clang.** The CGAL 5.6 headers in the conda environment
-  contain `this->base() == nullptr` comparisons in
-  `CGAL/boost/graph/iterator.h` that current Clang rejects. The script
-  replaces them with `false` in the environment's copy of that header.
-- **VMTK and pip.** pip cannot see the conda VMTK package, so the tools are
-  installed with `pip install --no-deps --no-build-isolation`. All their
-  dependencies come from the conda environment; `setup.py` does not need
-  editing.
+- **CGAL with Clang.** The CGAL 5.6 headers contain `this->base() ==
+  nullptr` comparisons in `CGAL/boost/graph/iterator.h` that current Clang
+  rejects. The geometry tool's CMake build compiles against a corrected copy
+  of that one header in its build folder; the installed CGAL is not
+  changed.
+- **VMTK and pip.** VMTK is only published on conda-forge, not PyPI.
+  `geometry-tool/setup.py` checks whether VMTK is already installed
+  (importable, or listed in the active conda environment) and only then
+  leaves it out of the requirements, so a plain `pip install
+  './geometry-tool[gui]'` works in the conda environment and still refuses
+  to install without VMTK. The script uses `pip install --no-deps
+  --no-build-isolation` anyway, so every dependency stays at its locked
+  conda version.
+  Older guides said to comment out the VMTK line in `setup.py` or run
+  `bodge-packages-for-setuptools.sh`; neither is needed any more.
+- **CGAL version.** The geometry tool needs CGAL 5 (CGAL 6 removed a header
+  it uses). The environment pins CGAL 5.6.1, and in a conda environment the
+  tool's CMake searches `$CONDA_PREFIX` first, so a Homebrew CGAL 6 is not
+  picked up by mistake.
+- **Exact versions.** The conda environment is created from
+  `geometry-tool/conda-lock/<platform>.txt`, which fixes every package to an
+  exact build, so a later install gets the same environment that was tested.
+  The versions of everything, including the compiler, CMake and MPI that
+  come from Homebrew or apt, are listed in the `INSTALL` file.
 - **macOS GUI.** `hlb-gmy-gui` needs a framework build of Python to open
   windows. The script installs `python.app` and runs
   `geometry-tool/macos-fix-gui-launcher.py` so `hlb-gmy-gui` can be run

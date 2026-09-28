@@ -36,8 +36,17 @@ from vtk import (
 )
 
 from vtk.util.numpy_support import vtk_to_numpy
-from vmtk.vtkvmtk import vtkvmtkPolyDataBoundaryExtractor
-from vmtk.vtkvmtk import vtkvmtkBoundaryReferenceSystems
+
+try:
+    from vmtk.vtkvmtk import vtkvmtkPolyDataBoundaryExtractor
+    from vmtk.vtkvmtk import vtkvmtkBoundaryReferenceSystems
+except ImportError as err:
+    raise ImportError(
+        "The geometry tool needs VMTK 1.5, which is only available from "
+        "conda-forge (not pip). Create the environment with "
+        "'conda env create -f geometry-tool/conda-environment.yml' and "
+        "activate it; see doc/user/geometry-tool.md."
+    ) from err
 
 # from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
 

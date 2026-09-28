@@ -10,19 +10,26 @@ you want to build by hand, for example on a cluster.
 - A C++20 compiler. CI builds with GCC 11, 12 and 13; on macOS, AppleClang
   from the Xcode Command Line Tools works.
 - CMake 3.13 or newer (CMake 4 works).
-- MPI (version 3.0 or later), for example Open MPI or MPICH.
+- MPI 3.0 or later (the code uses MPI-3 neighbourhood collectives), for
+  example Open MPI or MPICH.
 
-These libraries are also needed. Those marked * are downloaded and built for
-you if they are missing (see "Build" below):
+These libraries are also needed. The super build downloads and builds any
+that are missing (see "Build" below), using the version in the last column:
 
-- Boost* header-only libraries, version 1.54 or newer
-- CTemplate*
-- ParMETIS* (graph partitioning)
-- TinyXML* (XML parsing)
-- zlib* (compression; usually already on your system)
-- Catch2* (only for the unit tests)
-- MPWide* (only for multiscale builds)
-- HDF5* and VTK* version 9 (only for the red blood cell model, `HEMELB_BUILD_RBC=ON`)
+| Library | Minimum | Built if missing |
+| --- | --- | --- |
+| Boost (header-only) | 1.77 | 1.77.0 |
+| ParMETIS (graph partitioning) | 4.x | 4.0.2 |
+| TinyXML (XML parsing) | 2.x | 2.6.2 |
+| CTemplate | any | 2.4 |
+| zlib (usually already on your system) | any | 1.2.6 |
+| Catch2 (unit tests only) | 2.x | 2.13.9 |
+| HDF5 (red blood cell model only, `HEMELB_BUILD_RBC=ON`) | 1.8 | 1.8.15 |
+| VTK (red blood cell model only) | 9.0 | 9.1.0 |
+| MPWide (multiscale builds only) | any | 1.1 |
+
+Which versions were actually tested is listed in the `INSTALL` file at the
+top of the repository.
 
 ## Get the code
 

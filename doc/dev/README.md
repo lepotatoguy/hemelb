@@ -52,3 +52,22 @@ run from `tests/` (geometry tool) or use tox (Python tools).
 - `python Scripts/check_once_guards.py`: C++ include guards.
 - `black --check .` (version 22) in `geometry-tool/` and `python-tools/`.
 - `clang-format` (version 14) on `geometry-tool/HlbGmyTool/Model/Generation`.
+
+## Updating pinned versions
+
+Versions are pinned exactly so installs stay reproducible (the full list is
+in `INSTALL`). To move to newer versions:
+
+1. Edit the versions in `geometry-tool/conda-environment.yml`.
+2. Regenerate both lock files. On any machine with conda, solve for each
+   platform with `conda create --dry-run --json -n tmp -c conda-forge
+   --override-channels <pinned packages>`, using `CONDA_SUBDIR=osx-64` or
+   `CONDA_SUBDIR=linux-64` (add `CONDA_OVERRIDE_GLIBC=2.39` when solving
+   for Linux on a Mac). Write the package URLs as an `@EXPLICIT` list to
+   `geometry-tool/conda-lock/<platform>.txt`, or run `conda list --explicit`
+   in an environment created on that platform.
+3. If the build tools change, update `geometry-tool/pyproject.toml`; each
+   version must support Python 3.8 to 3.11.
+4. Create an environment from each lock file, install both tools, and run
+   the geometry-tool and Python-tools tests; then update `INSTALL` and the
+   changelog. CI checks the Linux and macOS locks through the install job.

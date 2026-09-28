@@ -34,8 +34,9 @@ jobs:
       fail-fast: false
       matrix:
         # macos-14 runs on Apple Silicon with AppleClang (osx-64 geometry tool
-        # environment under Rosetta 2); macos-13 is Intel (native osx-64)
-        os: [ubuntu-24.04, macos-14, macos-13]
+        # environment under Rosetta 2); macos-15-intel is Intel (native osx-64).
+        # macos-13 was tried first but never got a runner (its image appears retired).
+        os: [ubuntu-24.04, macos-14, macos-15-intel]
 
     steps:
       - uses: actions/checkout@v5

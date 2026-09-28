@@ -28,31 +28,43 @@ hlb-gmy-cli --help
 
 The tool needs VMTK 1.5, which is easiest to get from conda-forge. VMTK 1.5
 is only published for Linux (x86_64) and Intel macOS with Python 3.8 to
-3.11, so the tool supports those Python versions. All dependencies are listed
-in `geometry-tool/conda-environment.yml`; you also need a C++20 compiler
-(Xcode Command Line Tools on macOS, `build-essential` on Ubuntu).
+3.11, so the tool supports those Python versions. The exact tested
+environment is in `geometry-tool/conda-lock/` (every package pinned); the
+main packages and their versions are also in
+`geometry-tool/conda-environment.yml` and in the `INSTALL` file. You also
+need a C++20 compiler (Xcode Command Line Tools on macOS, `build-essential`
+on Ubuntu).
 
 ```sh
 # On Apple Silicon only: use an Intel environment (runs under Rosetta 2)
 export CONDA_SUBDIR=osx-64
 
-conda env create -f geometry-tool/conda-environment.yml
+# macOS (Intel or Apple Silicon)
+conda create -n gmy-tool --file geometry-tool/conda-lock/osx-64.txt
+# Linux x86_64
+conda create -n gmy-tool --file geometry-tool/conda-lock/linux-64.txt
+
 conda activate gmy-tool
 conda config --env --set subdir osx-64      # Apple Silicon only
 
-# Build against the environment's CGAL, Boost and VTK
-export CMAKE_PREFIX_PATH="$CONDA_PREFIX"
 pip install --no-deps --no-build-isolation ./python-tools
-pip install --no-deps --no-build-isolation ./geometry-tool
+pip install './geometry-tool[gui]'
 ```
 
-Why the flags: `--no-deps` stops pip from trying to install packages that
-conda already provides (pip cannot see conda's VMTK and would fail), and
-`--no-build-isolation` builds against the environment's NumPy and Cython so
-the compiled modules match. The environment includes `vtk-io-ffmpeg` because
-VTK's CMake files expect it. The install script also patches one CGAL header
-(`CGAL/boost/graph/iterator.h`) that current Clang rejects; if the build
-fails there, see `patch_cgal` in `Scripts/install_hemelb.sh`.
+The geometry tool install needs no special flags: its `setup.py` sees that
+VMTK came from conda (VMTK is not on PyPI) and its CMake uses the
+environment's CGAL, Boost and VTK before any Homebrew or system copies. For
+the Python tools, `--no-build-isolation` builds against the environment's
+NumPy and Cython so the compiled modules match, and `--no-deps` keeps pip
+from replacing conda packages. The install script uses both flags for both
+packages. pip builds the tool with the exact build tools pinned in
+`geometry-tool/pyproject.toml`.
+
+On other platforms, `conda env create -f geometry-tool/conda-environment.yml`
+creates the environment from the pinned main packages instead. It includes
+`vtk-io-ffmpeg` because VTK's CMake files expect it. CGAL 5.6 has one header
+(`CGAL/boost/graph/iterator.h`) that current Clang rejects; the tool's build
+uses a corrected copy automatically.
 
 **macOS GUI.** On macOS a GUI program must run with a "framework" build of
 Python, otherwise `hlb-gmy-gui` stops with "This program needs access to the

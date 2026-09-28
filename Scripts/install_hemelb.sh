@@ -171,18 +171,6 @@ find_conda() {
     source "$CONDA_BASE/etc/profile.d/conda.sh"
 }
 
-# CGAL 5.6's graph iterators compare base() against nullptr in a way that
-# current Clang rejects. The comparisons are only used by operator bool, so
-# they are replaced in the environment's copy of the header.
-patch_cgal() {
-    local header="$1/include/CGAL/boost/graph/iterator.h"
-    [[ -f "$header" ]] || return 0
-    chmod u+w "$header"
-    sed -e 's/this->base_reference() == nullptr/false/g' \
-        -e 's/this->base() == nullptr/false/g' "$header" > "$header.tmp"
-    mv "$header.tmp" "$header"
-}
-
 install_gmy_tool() {
     find_conda
 
@@ -203,16 +191,28 @@ install_gmy_tool() {
         die "conda environment '${ENV_PREFIX:-$ENV_NAME}' already exists. Remove it (conda env remove ${env_args[*]}) or choose another with --env-name."
     fi
 
+    # The lock file pins every package to an exact build, so the environment
+    # is the same as the one tested. Other platforms solve the pinned
+    # environment file instead.
+    local subdir="" lock=""
+    if [[ "$OS" == Darwin ]]; then subdir=osx-64
+    elif [[ "$ARCH" == x86_64 ]]; then subdir=linux-64
+    fi
+    if [[ -n "$subdir" ]]; then lock="$SRC/geometry-tool/conda-lock/$subdir.txt"; fi
     log "Creating conda environment ${ENV_PREFIX:-$ENV_NAME}"
-    conda env create "${env_args[@]}" -f "$SRC/geometry-tool/conda-environment.yml"
+    if [[ -n "$lock" && -f "$lock" ]]; then
+        conda create -y "${env_args[@]}" --file "$lock"
+    else
+        conda env create "${env_args[@]}" -f "$SRC/geometry-tool/conda-environment.yml"
+    fi
     conda activate "${ENV_PREFIX:-$ENV_NAME}"
     if [[ -n "${CONDA_SUBDIR:-}" ]]; then
         conda config --env --set subdir "$CONDA_SUBDIR"
     fi
-    patch_cgal "$CONDA_PREFIX"
 
-    # --no-deps: every dependency comes from conda. pip cannot see the conda
-    # VMTK package, so letting it resolve dependencies would fail.
+    # --no-deps: every dependency comes from conda at its locked version, so
+    # pip must not upgrade or add anything. --no-build-isolation: build
+    # against the environment's NumPy, Cython and pybind11.
     log "Installing the Python tools and geometry tool"
     rm -rf "$SRC/geometry-tool/_skbuild"
     # Use the environment's CGAL, Boost and VTK, not Homebrew or system copies.
@@ -222,7 +222,8 @@ install_gmy_tool() {
 
     if [[ "$OS" == Darwin && "$INSTALL_GUI" -eq 1 ]]; then
         log "Setting up the macOS GUI launcher"
-        conda install -y -c conda-forge python.app
+        # Already in the lock file (wxPython needs it); pinned for the fallback.
+        conda install -y -c conda-forge python.app=1.4
         python "$SRC/geometry-tool/macos-fix-gui-launcher.py"
     fi
 
