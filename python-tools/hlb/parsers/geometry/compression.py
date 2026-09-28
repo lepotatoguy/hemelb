@@ -9,7 +9,7 @@ These can be useful for debugging.
 """
 
 import argparse
-import xdrlib
+from ...utils import pyxdr as xdrlib
 import zlib
 
 import numpy as np

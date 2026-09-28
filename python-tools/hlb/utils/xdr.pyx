@@ -3,6 +3,9 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
+# cython: language_level=2
+# (What Cython 0.29 used by default; Cython 3 would default to 3.)
+
 cimport cxdr
 from libc.stdint cimport int32_t, uint32_t
 
