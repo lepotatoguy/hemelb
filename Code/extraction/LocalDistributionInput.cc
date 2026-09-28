@@ -14,8 +14,24 @@
 #include "log/Logger.h"
 #include "util/span.h"
 
+#include <algorithm>
+#include <climits>
+#include <cmath>
+#include <numeric>
+
 namespace hemelb::extraction {
   namespace fmt = hemelb::io::formats;
+
+  // The reader expects each checkpoint record to start with the 8-byte
+  // timestep, which LocalPropertyOutput writes from the I/O rank before its
+  // own sites. That puts it first only if the I/O rank is rank 0.
+  static_assert(net::IOCommunicator::IO_RANK == 0,
+                "Checkpoint records assume the I/O rank writes first");
+
+  void LocalDistributionInput::ExpectGeometry(PhysicalDistance voxelSize, PhysicalPosition const& origin) {
+    expectedVoxelSize = voxelSize;
+    expectedOrigin = origin;
+  }
 
   LocalDistributionInput::LocalDistributionInput(std::filesystem::path dataFilePath,
 						 std::optional<std::filesystem::path> maybeOffsetPath,
@@ -39,128 +55,146 @@ namespace hemelb::extraction {
   {
       auto&& dom = latDat->GetDomain();
       const auto NUMVECTORS = dom.GetLatticeInfo().GetNumVectors();
-
-      // We could supply hints regarding how the file should be read
-      // but we are not doing so yet.
-
-      // Open the file as read-only.
-      // TODO: raise an exception if the file does not exist.
       auto inputFile = net::MpiFile::Open(comms, filePath, MPI_MODE_RDONLY);
-      // Set the view to the file.
       inputFile.SetView(0, MPI_CHAR, MPI_CHAR, "native");
       ReadExtractionHeaders(inputFile, NUMVECTORS);
-
-      // Now read offset file.
       ReadOffsets(offsetPath);
+      const uint64_t siteLength = 3 * sizeof(uint32_t) + NUMVECTORS * sizeof(double);
+      if (allCoresWriteLength < 8 || (allCoresWriteLength - 8) % siteLength != 0 ||
+          checkpointSiteCount != (allCoresWriteLength - 8) / siteLength)
+        throw Exception() << "Checkpoint site count or record length is inconsistent with its offsets";
+      const auto currentSiteCount = comms.AllReduce(uint64_t(dom.GetLocalFluidSiteCount()), MPI_SUM);
+      if (currentSiteCount != checkpointSiteCount)
+        throw Exception() << "Checkpoint has " << checkpointSiteCount
+                          << " sites but current geometry has " << currentSiteCount;
 
-      // Figure out how many checkpoints are in the XTR file and
-      // therefore the position to start at.
-      auto nTimes = [&](){
-	uint64_t fileSize = inputFile.GetSize();
-	auto dataSize = fileSize - totalXtrHeaderLength;
-	if (dataSize % allCoresWriteLength)
-	  throw Exception() << "Checkpoint file length not consistent with integer number of checkpoints";
-	return dataSize / allCoresWriteLength;
-      }();
+      const uint64_t fileSize = inputFile.GetSize();
+      if (fileSize < dataStart || allCoresWriteLength == 0 ||
+          (fileSize - dataStart) % allCoresWriteLength != 0)
+        throw Exception() << "Checkpoint file length is inconsistent with its offsets";
+      const uint64_t nTimes = (fileSize - dataStart) / allCoresWriteLength;
+      if (nTimes == 0)
+        throw Exception() << "Checkpoint file contains no timesteps";
 
-      auto ReadTimeByIndex = [&](uint64_t iTS) {
-	uint64_t ans;
-	std::vector<char> tsbuf(8);
-	inputFile.ReadAt(localStart + iTS*allCoresWriteLength, to_span(tsbuf));
-	io::XdrMemReader dataReader(tsbuf);
-	dataReader.read(ans);
-	return ans;
+      auto readTime = [&](uint64_t index) {
+        std::vector<char> buffer(8);
+        inputFile.ReadAt(dataStart + index * allCoresWriteLength, to_span(buffer));
+        io::XdrMemReader reader(buffer);
+        uint64_t value;
+        reader.read(value);
+        return value;
       };
-
-      uint64_t iTS;
+      uint64_t iTS = 0;
       if (comms.OnIORank()) {
-	if (targetTime) {
-	  // We have a target time - look for it in the file
-	  iTS = 0;
-	  uint64_t len = nTimes;
-	  while(len != 0) {
-	    auto l2 = len/2;
-	    auto m = iTS + l2;
-	    timestep = ReadTimeByIndex(m);
-	    if (timestep < *targetTime) {
-	      iTS = m + 1;
-	      len -= l2 + 1;
-	    } else {
-	      len = l2;
-	    }
-	  }
-
-	  if (timestep != *targetTime)
-	    throw Exception() << "Target timestep " << *targetTime << " not found in checkpoint file.";
-	} else {
-	  // initial time unspecified, use the last one
-	  iTS = nTimes - 1;
-	  timestep = ReadTimeByIndex(iTS);
-	}
+        if (targetTime) {
+          uint64_t low = 0, high = nTimes;
+          while (low < high) {
+            const auto mid = low + (high - low) / 2;
+            if (readTime(mid) < *targetTime) low = mid + 1;
+            else high = mid;
+          }
+          iTS = low;
+          if (iTS == nTimes || readTime(iTS) != *targetTime)
+            throw Exception() << "Target timestep " << *targetTime << " not found in checkpoint file";
+        } else {
+          iTS = nTimes - 1;
+        }
+        timestep = readTime(iTS);
       }
-      comms.Broadcast(timestep, comms.GetIORank());
       comms.Broadcast(iTS, comms.GetIORank());
-      if (!targetTime)
-	targetTime = timestep;
-
+      comms.Broadcast(timestep, comms.GetIORank());
+      targetTime = timestep;
       log::Logger::Log<log::Info, log::Singleton>("Reading checkpoint from timestep %d with index %d", timestep, iTS);
-      // Read the local part of the checkpoint
-      const auto readLength = localStop - localStart;
-      const auto timeStart = iTS * allCoresWriteLength;
 
-      std::vector<char> dataBuffer(readLength);
-      inputFile.ReadAt(timeStart + localStart, to_span(dataBuffer));
-      io::XdrMemReader dataReader(dataBuffer);
+      // Each current rank reads a contiguous share of saved sites, irrespective
+      // of how many ranks wrote the checkpoint. Exchanges use bounded batches.
+      const auto siteAtRank = [&](uint64_t rank) {
+        return (checkpointSiteCount / comms.Size()) * rank +
+               (checkpointSiteCount % comms.Size()) * rank / comms.Size();
+      };
+      const uint64_t firstSite = siteAtRank(comms.Rank());
+      const uint64_t lastSite = siteAtRank(comms.Rank() + 1);
+      const uint64_t batchSites = std::max<uint64_t>(1, std::min<uint64_t>(8192,
+                                  std::min<uint64_t>(INT_MAX, 64 * 1024 * 1024) /
+                                  (siteLength * comms.Size())));
+      const uint64_t largestShare = siteAtRank(comms.Size()) - siteAtRank(comms.Size() - 1);
+      const uint64_t rounds = largestShare / batchSites + (largestShare % batchSites != 0);
+      std::vector<unsigned char> seen(dom.GetLocalFluidSiteCount(), 0);
+      int invalidSite = 0;
+      for (uint64_t round = 0; round < rounds; ++round) {
+        const uint64_t begin = std::min(lastSite, firstSite + round * batchSites);
+        const uint64_t count = std::min(batchSites, lastSite - begin);
+        std::vector<char> dataBuffer(count * siteLength);
+        if (count)
+          inputFile.ReadAt(dataStart + iTS * allCoresWriteLength + 8 + begin * siteLength,
+                           to_span(dataBuffer));
 
-      // Read the timestep
-      if (comms.OnIORank()) {
-	dataReader.read(timestep);
+        std::vector<std::vector<char>> outgoing(comms.Size());
+        for (uint64_t site = 0; site < count; ++site) {
+          const char* record = dataBuffer.data() + site * siteLength;
+          io::XdrMemReader reader(record, 3 * sizeof(uint32_t));
+          util::Vector3D<uint32_t> coords;
+          reader.read(coords.x());
+          reader.read(coords.y());
+          reader.read(coords.z());
+          util::Vector3D<site_t> grid{coords};
+          if (!dom.IsValidLatticeSite(grid)) { invalidSite = 1; continue; }
+          const proc_t owner = dom.GetProcIdFromGlobalCoords(grid);
+          if (owner < 0 || owner >= comms.Size()) { invalidSite = 1; continue; }
+          outgoing[owner].insert(outgoing[owner].end(), record, record + siteLength);
+        }
+        if (comms.AllReduce(invalidSite, MPI_MAX))
+          throw Exception() << "Checkpoint contains a site outside the current fluid geometry";
+
+        std::vector<int> sendCounts(comms.Size()), sendOffsets(comms.Size());
+        int sendTotal = 0;
+        for (int rank = 0; rank < comms.Size(); ++rank) {
+          sendOffsets[rank] = sendTotal;
+          sendCounts[rank] = int(outgoing[rank].size());
+          sendTotal += sendCounts[rank];
+        }
+        std::vector<char> sendBuffer;
+        sendBuffer.reserve(sendTotal);
+        for (auto& portion : outgoing)
+          sendBuffer.insert(sendBuffer.end(), portion.begin(), portion.end());
+        auto recvCounts = comms.AllToAll(sendCounts);
+        std::vector<int> recvOffsets(comms.Size());
+        int recvTotal = 0;
+        for (int rank = 0; rank < comms.Size(); ++rank) {
+          recvOffsets[rank] = recvTotal;
+          recvTotal += recvCounts[rank];
+        }
+        std::vector<char> recvBuffer(recvTotal);
+        net::MpiCall{MPI_Alltoallv}(sendBuffer.data(), sendCounts.data(), sendOffsets.data(), MPI_BYTE,
+                                   recvBuffer.data(), recvCounts.data(), recvOffsets.data(), MPI_BYTE, comms);
+
+        for (uint64_t offset = 0; offset < recvBuffer.size(); offset += siteLength) {
+          io::XdrMemReader reader(recvBuffer.data() + offset, siteLength);
+          util::Vector3D<uint32_t> coords;
+          reader.read(coords.x());
+          reader.read(coords.y());
+          reader.read(coords.z());
+          util::Vector3D<site_t> grid{coords};
+          proc_t owner;
+          site_t index;
+          if (!dom.GetContiguousSiteId(grid, owner, index) || owner != comms.Rank() ||
+              index < 0 || index >= dom.GetLocalFluidSiteCount() || seen[index]) {
+            invalidSite = 1;
+            continue;
+          }
+          seen[index] = 1;
+          distribn_t* oldValues = latDat->GetFOld(index * NUMVECTORS);
+          distribn_t* newValues = latDat->GetFNew(index * NUMVECTORS);
+          for (unsigned i = 0; i < NUMVECTORS; ++i)
+            reader.read(oldValues[i]);
+          std::copy(oldValues, oldValues + NUMVECTORS, newValues);
+        }
+        if (comms.AllReduce(invalidSite, MPI_MAX))
+          throw Exception() << "Checkpoint has an invalid or duplicate site";
       }
-
-      site_t iSite = 0;
-      // while (dataReader.GetPosition() < readLength) {
-      for (; dataReader.GetPosition() < readLength; iSite++) {
-	// Read the grid coord and check it's consistent with latDat.
-	{
-	  // Stored as 32 b unsigned
-	  util::Vector3D<uint32_t> tmp;
-	  dataReader.read(tmp.x());
-	  dataReader.read(tmp.y());
-	  dataReader.read(tmp.z());
-
-	  // Convert to canonical type
-	  util::Vector3D<site_t> grid{tmp};
-	  // Look up the site ID and rank, as decomposed by this run
-	  // of HemeLB, for the grid coordinate read from the
-	  // checkpoint file.
-	  proc_t rank; site_t index;
-	  if (!dom.GetContiguousSiteId(grid, rank, index)) {
-	    // function returns a 'valid' flag
-	    throw Exception() << "Cannot get valid site from extracted site coordinate";
-	  }
-	  if (rank != comms.Rank())
-	    throw Exception() << "Site read on rank " << comms.Rank()
-			      << " but should be read on " << rank;
-	  if (index != iSite)
-	    throw Exception() << "Site read at index " << iSite
-			      << " but should be read at " << index;
-	}
-
-	distribn_t* f_old_p = latDat->GetFOld(iSite * NUMVECTORS);
-	distribn_t* f_new_p = latDat->GetFNew(iSite * NUMVECTORS);
-	// distField is read on IO rank and checked to be equal to
-	// NUMVECTORS so we use that instead of broadcasting and
-	// storing.
-	for (auto i = 0U; i < NUMVECTORS; i++) {
-	  distribn_t field_val;
-	  dataReader.read(field_val);
-	  f_new_p[i] = f_old_p[i] = field_val;
-	}
-      }
-
-      if (iSite != dom.GetLocalFluidSiteCount())
-	throw Exception() << "Read " << iSite
-			  << " sites but expected " << dom.GetLocalFluidSiteCount();
+      const int missingSite = std::find(seen.begin(), seen.end(), 0) != seen.end();
+      if (comms.AllReduce(missingSite, MPI_MAX))
+        throw Exception() << "Checkpoint is missing sites from the current geometry";
     }
 
     void LocalDistributionInput::ReadExtractionHeaders(net::MpiFile& inputFile, const unsigned NUMVECTORS) {
@@ -211,6 +245,21 @@ namespace hemelb::extraction {
 	  preambleReader.read(origin[0]);
 	  preambleReader.read(origin[1]);
 	  preambleReader.read(origin[2]);
+
+	  if (expectedVoxelSize) {
+	    // Written from the same double values, so equal up to rounding.
+	    auto const tol = 1e-9 * std::abs(*expectedVoxelSize);
+	    auto const close = [tol](double a, double b) { return std::abs(a - b) <= tol; };
+	    if (!close(voxelSize, *expectedVoxelSize))
+	      throw Exception() << "Checkpoint was written with voxel size " << voxelSize
+				<< " m but this run uses " << *expectedVoxelSize << " m";
+	    for (int i = 0; i < 3; ++i)
+	      if (!close(origin[i], expectedOrigin[i]))
+		throw Exception() << "Checkpoint was written with origin (" << origin[0] << ", "
+				  << origin[1] << ", " << origin[2] << ") m but this run uses ("
+				  << expectedOrigin[0] << ", " << expectedOrigin[1] << ", "
+				  << expectedOrigin[2] << ") m";
+	  }
 	}
 	// Obtain the total number of sites, fields & header len
 	uint64_t numberOfSites;
@@ -218,6 +267,7 @@ namespace hemelb::extraction {
 	preambleReader.read(numberOfSites);
 	preambleReader.read(numberOfFields);
 	preambleReader.read(lengthOfFieldHeader);
+	checkpointSiteCount = numberOfSites;
 
 	if (numberOfFields != 1 )
 	  throw Exception() << "Checkpoint file must contain exactly one field, the distributions, but has "
@@ -254,8 +304,6 @@ namespace hemelb::extraction {
     }
 
     void LocalDistributionInput::ReadOffsets(const std::string& offsetFileName) {
-      std::vector<uint64_t> offsets;
-
       // Only actually read on IO rank
       if (comms.OnIORank()) {
 	io::XdrFileReader offsetReader(offsetFileName);
@@ -281,29 +329,24 @@ namespace hemelb::extraction {
 			    << " Supported: " << unsigned(fmt::offset::VersionNumber)
 			    << " Input: " << version;
 
-	if (nRanks != comms.Size())
-	  throw Exception() << "Offset file has wrong number of MPI ranks."
-			    << " Running with: " << comms.Size()
-			    << " Input: " << nRanks;
-
-	// Now read the encoded nProcs+1 values
-	// We are going to duplicate these into a flattened array of shape (nRanks, 2)
-	// [start0, end0, start1, end1, ...]
-	// where end_i == start_i+1 (except for the start finish obvs)
-	offsets.resize(2*nRanks);
-	offsetReader.read(offsets[0]);
-	for (int i = 1; i < nRanks; ++i) {
-	  offsetReader.read(offsets[2*i]);
-	  offsets[2*i - 1] = offsets[2*i];
+	if (nRanks < 1)
+	  throw Exception() << "Offset file has no MPI ranks";
+	uint64_t previous;
+	offsetReader.read(dataStart);
+	if (dataStart != totalXtrHeaderLength)
+	  throw Exception() << "Offset file starts at an unexpected position";
+	previous = dataStart;
+	for (int i = 0; i < nRanks; ++i) {
+	  uint64_t next;
+	  offsetReader.read(next);
+	  if (next < previous)
+	    throw Exception() << "Offset file positions are not increasing";
+	  previous = next;
 	}
-	offsetReader.read(offsets[2*nRanks-1]);
-	// Compute the total length of a record
-	allCoresWriteLength = offsets[2*nRanks-1] - offsets[0];
+	allCoresWriteLength = previous - dataStart;
       }
-      // Now bcast/scatter from IO rank to all
+      comms.Broadcast(dataStart, comms.GetIORank());
+      comms.Broadcast(checkpointSiteCount, comms.GetIORank());
       comms.Broadcast(allCoresWriteLength, comms.GetIORank());
-      auto start_finish = comms.Scatter(offsets, 2, comms.GetIORank());
-      localStart = start_finish[0];
-      localStop = start_finish[1];
     }
 }

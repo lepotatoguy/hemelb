@@ -47,6 +47,16 @@ if (HEMELB_BUILD_MULTISCALE)
 endif()
 
 add_test_executable(hemelb-tests main.cc SimulationMasterTests.cc)
+add_test(NAME hemelb-tests COMMAND hemelb-tests)
+
+# Restart a checkpoint on a different number of MPI processes and check the
+# results match; also check mismatched geometries are rejected.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME checkpoint-restart-mpi
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/checkpoint_restart_mpi.py
+            --hemelb $<TARGET_FILE:${HEMELB_EXECUTABLE}> --mpirun ${MPIEXEC_EXECUTABLE})
+endif()
 
 add_subdirectory(helpers)
 

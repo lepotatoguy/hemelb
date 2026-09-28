@@ -26,8 +26,12 @@ ExternalProject_Add(
   dep_ParMETIS
   INSTALL_DIR ${HEMELB_DEPENDENCIES_INSTALL_PREFIX}
   URL ${ParMETIS_TARBALL}
-  CONFIGURE_COMMAND make config prefix=<INSTALL_DIR> ${ParMETIS_CC_OPTION} ${ParMETIS_CXX_OPTION} && 
-  cd metis && 
+  # ParMETIS 4.0.2 declares an old CMake minimum that CMake 4 rejects;
+  # the policy setting is ignored by older CMake versions.
+  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CMAKE_POLICY_VERSION_MINIMUM=3.5
+  make config prefix=<INSTALL_DIR> ${ParMETIS_CC_OPTION} ${ParMETIS_CXX_OPTION} &&
+  cd metis &&
+  ${CMAKE_COMMAND} -E env CMAKE_POLICY_VERSION_MINIMUM=3.5
   make config prefix=<INSTALL_DIR> ${ParMETIS_CC_OPTION} ${ParMETIS_CXX_OPTION}
   BUILD_IN_SOURCE 1
   BUILD_COMMAND make -j${HEMELB_SUBPROJECT_MAKE_JOBS} MAKEFLAGS= #Workaround for bug in ParMETIS makefile treating switches as targets

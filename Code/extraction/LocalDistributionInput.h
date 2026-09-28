@@ -30,7 +30,7 @@ namespace hemelb
   }
   namespace extraction
   {
-    // Read this ranks's part of a checkpoint file.
+    // Read a checkpoint and redistribute its sites to the current domain.
     class LocalDistributionInput
     {
       public:
@@ -46,9 +46,13 @@ namespace hemelb
       // Time is optional, if not supplied will use the last one in
       // the file and will set the argument to that value.
       //
-      // Requires the checkpoint have been saved with exactly the same
-      // domain decomposition as currently running.
       void LoadDistribution(geometry::FieldData* latDat, std::optional<LatticeTimeStep>& initalTime);
+
+      // Require the checkpoint to have been written with this voxel size and
+      // origin (metres). Without it, only the site count and coordinates are
+      // checked, so a checkpoint from a differently scaled or shifted run
+      // would load silently.
+      void ExpectGeometry(PhysicalDistance voxelSize, PhysicalPosition const& origin);
 
     private:
 
@@ -62,10 +66,12 @@ namespace hemelb
       std::filesystem::path offsetPath;
 
       InputField distField;
-      uint64_t localStart;
-      uint64_t localStop;
+      uint64_t dataStart;
+      uint64_t checkpointSiteCount;
       uint64_t timestep;
       uint64_t allCoresWriteLength;
+      std::optional<PhysicalDistance> expectedVoxelSize;
+      PhysicalPosition expectedOrigin;
     };
   }
 }

@@ -6,6 +6,7 @@
 #include "configuration/SimBuilder.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <ranges>
 
 #include "geometry/GeometryReader.h"
@@ -40,10 +41,18 @@ namespace hemelb::configuration {
     }
 
     geometry::GmyReadResult SimBuilder::ReadGmy(lb::LatticeInfo const& lat_info, reporting::Timers& timings, net::IOCommunicator& ioComms) const {
+        auto const& gmy = config.GetDataFilePath();
+        // Without this check a missing file only produces an MPI error
+        // pointing at MpiFile::Open.
+        if (!std::filesystem::is_regular_file(gmy))
+            throw Exception() << "Geometry file " << gmy
+                              << " does not exist or is not a file. Check the path in"
+                              << " <geometry><datafile path=\"...\"/> in the XML file;"
+                              << " a relative path is relative to the XML file.";
         geometry::GeometryReader reader(lat_info,
                                         timings,
                                         ioComms);
-        return reader.LoadAndDecompose(config.GetDataFilePath());
+        return reader.LoadAndDecompose(gmy);
     }
 
     lb::LbmParameters SimBuilder::BuildLbmParams() const {
@@ -68,7 +77,8 @@ namespace hemelb::configuration {
             return lb::EquilibriumInitialCondition{cfg.t0, rho};
         }
         result_type operator()(const configuration::CheckpointIC& cfg) const {
-            return lb::CheckpointInitialCondition{cfg.t0, cfg.cpFile, cfg.maybeOffFile};
+            return lb::CheckpointInitialCondition{cfg.t0, cfg.cpFile, cfg.maybeOffFile,
+                                                  units.GetVoxelSize(), units.GetLatticeOrigin()};
         }
     };
 
@@ -256,5 +266,32 @@ namespace hemelb::configuration {
             reporter->AddReportable(r);
         }
         return reporter;
+    }
+
+    void CheckIoletIds(geometry::Domain const& domain,
+                       std::size_t nInlets, std::size_t nOutlets,
+                       net::MpiCommunicator const& comm) {
+        // For inlets and outlets: one more than the largest id used locally.
+        std::vector<int> used{0, 0};
+        for (site_t i = 0; i < domain.GetLocalFluidSiteCount(); ++i) {
+            auto site = domain.GetSite(i);
+            auto type = site.GetSiteType();
+            if (type == geometry::INLET_TYPE || type == geometry::OUTLET_TYPE) {
+                int& n = used[type == geometry::OUTLET_TYPE ? 1 : 0];
+                n = std::max(n, site.GetIoletId() + 1);
+            }
+        }
+        used = comm.AllReduce(used, MPI_MAX);
+
+        std::size_t const defined[2] = {nInlets, nOutlets};
+        char const* const names[2] = {"inlet", "outlet"};
+        for (int k = 0; k < 2; ++k) {
+            if (std::size_t(used[k]) > defined[k])
+                throw Exception() << "The geometry file uses " << used[k] << " " << names[k]
+                                  << "(s) but the configuration defines " << defined[k]
+                                  << ". Add the missing " << names[k] << "s to the XML file (in the"
+                                  << " same order as in the geometry tool profile), or regenerate"
+                                  << " the geometry.";
+        }
     }
 }

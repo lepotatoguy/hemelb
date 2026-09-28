@@ -77,7 +77,9 @@ function(pass_cmake_defines GROUP output)
   endforeach()
 
   foreach(F_NAME ${_${GROUP}_FWDVARS})
-    if (DEFINED ${F_NAME})
+    # Do not forward failed searches: a dependency built by the super build
+    # does not exist yet at this point, and the inner build must look again.
+    if (DEFINED ${F_NAME} AND NOT "${${F_NAME}}" MATCHES "-NOTFOUND$")
       list(APPEND ans "-D${F_NAME}=${${F_NAME}}")
     endif()
   endforeach()

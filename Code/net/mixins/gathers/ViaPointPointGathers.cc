@@ -67,8 +67,10 @@ namespace hemelb
           // Note that MPI Displacements are given in the arithmetic appropriate to the MPI_Datatype, not void*, i.e. in units of the size
           // It will also potentially fail, if the MPI_Datatype used, is a sparse (strided) type.
           // This class is intended for timing and testing use, not production use.
-          RequestReceiveImpl(static_cast<unsigned char *>(receive_it->Pointer)
-                                 + receive_it->Displacements[source_rank] * size,
+          auto* destination = receive_it->Counts[source_rank] == 0 ? nullptr :
+              static_cast<unsigned char *>(receive_it->Pointer)
+                  + receive_it->Displacements[source_rank] * size;
+          RequestReceiveImpl(destination,
                              receive_it->Counts[source_rank],
                              source_rank,
                              receive_it->Type);
@@ -92,4 +94,3 @@ namespace hemelb
     }
   }
 }
-

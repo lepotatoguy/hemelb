@@ -4,29 +4,34 @@
 // license in the file LICENSE.
 
 #include "io/readers/XdrMemReader.h"
-#include "hassert.h"
 
 namespace hemelb::io
 {
   // Constructor to create an Xdr object based on a memory buffer
   XdrMemReader::XdrMemReader(const char* buf, unsigned int dataLength)
-    : start(buf), current(buf), len(dataLength)
+    : start(buf), len(dataLength)
   {
   }
 
   XdrMemReader::XdrMemReader(const std::vector<char>& dataVec)
-    : start(dataVec.data()), current(start), len(dataVec.size())
+    : start(dataVec.data()), len(dataVec.size())
   {
   }
 
   unsigned XdrMemReader::GetPosition() {
-    return current - start;
+    return position;
   }
 
   const char* XdrMemReader::get_bytes(size_t n) {
-    HASSERT(GetPosition() + n <= len);
-    auto ans = current;
-    current += n;
+    if (n > len - position)
+      throw Exception() << "Truncated XDR data at byte " << position
+                        << ": need " << n << " more bytes, " << len - position << " available";
+    if (n == 0)
+      return start ? start : "";
+    if (!start)
+      throw Exception() << "XDR data buffer is null";
+    auto ans = start + position;
+    position += n;
     return ans;
   }
 
