@@ -43,6 +43,9 @@ conda activate gmy-tool                        # for hlb-gmy-gui, hlb-gmy-cli, .
 mpirun -n 4 hemelb -in input.xml -out results
 ```
 
+Next, follow [Getting started](getting-started.md) for a first run from a
+surface to results.
+
 ## Platform notes
 
 These are handled by the script; they are listed so that a manual install

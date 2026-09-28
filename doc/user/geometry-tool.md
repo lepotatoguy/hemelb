@@ -139,16 +139,36 @@ $ hlb-gmy-gui --help
 usage: hlb-gmy-gui [-h] [--profile PATH] [--stl PATH] [--geometry PATH]
                    [--xml PATH]
 
-Process an input STL file intosuitable input for HemeLB.
+Process an input STL file into suitable input for HemeLB.
 
-optional arguments:
+options:
   -h, --help       show this help message and exit
   --profile PATH   Load the profile to use from an existing file. Other
-                   options givenoverride those inthe profile file.
+                   options given override those in the profile file.
   --stl PATH       The STL file to use as input
   --geometry PATH  Config output file
   --xml PATH       XML output file
 ```
+
+A typical session:
+
+1. **Choose** the STL (or **Open Profile** to continue earlier work) and set
+   its units. The voxel size is set to the surface's average edge length;
+   change it, or press **Reset** to go back to that value.
+2. **Add Inlet** / **Add Outlet**, then **Place** each one on the surface and
+   adjust its centre, normal (pointing into the fluid) and radius. Pressure
+   holds the cosine boundary condition: `x` is the mean and `y` the amplitude
+   (mmHg), `z` the phase in radians. The label under it shows the resulting
+   equation.
+3. **Place** the seed point anywhere inside the vessel.
+4. Choose the output `.gmy` and `.xml` files; **Generate** becomes available
+   when all inputs are valid. Problems and warnings are shown in a message
+   box.
+5. **Save Profile** so you can repeat or script the run with `hlb-gmy-cli`.
+
+The **DEBUG** button, which opens the Python debugger, only appears when
+`hlb-gmy-gui` is started from a terminal, since the debugger reads commands
+from there.
 
 The mesh preview stays empty until an STL file has loaded. If VTK
 reports an STL reading or pipeline error after a file is selected,
@@ -204,8 +224,8 @@ overridden on the command line; `hlb-gmy-cli --help` lists them all.
 
 ```
 hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
-                    [--voxel METRES] [--timestep SECONDS] [--duration SECONDS]
-                    [--geometry PATH] [--xml PATH]
+                    [--voxel METRES] [--timestep SECONDS] [--period SECONDS]
+                    [--duration SECONDS] [--geometry PATH] [--xml PATH]
 ```
 
 ### What a run does
@@ -243,6 +263,7 @@ hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
 | `--seed X Y Z` | `SeedPoint` | A point inside the fluid, in STL units. Used only to pick which surface piece to keep after each iolet cut. |
 | `--voxel METRES` | `VoxelSize` (STL units) | Lattice spacing, given in metres. Halving it gives about 8 times the sites. |
 | `--timestep SECONDS` | `TimeStepSeconds` | Written to the XML. Not adjusted when the voxel size changes. |
+| `--period SECONDS` | `PulsePeriodSeconds` | Period of the cosine pressure at every inlet and outlet; 1 s if not set. |
 | `--duration SECONDS` | `DurationSeconds` | Number of steps in the XML is `round(duration / time step)`. |
 | `--geometry PATH` | `OutputGeometryFile` | Geometry output. Relative to the current folder, not the profile's. |
 | `--xml PATH` | `OutputXmlFile` | XML output. Relative to the current folder. It refers to the geometry by a path relative to itself. |
@@ -255,7 +276,7 @@ hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
 | `simulation/voxel_size`, `origin` | Voxel size and domain origin, in metres |
 | `simulation/stresstype` | Always 1 |
 | `geometry/datafile` | Path of the `.gmy`, relative to the XML |
-| `inlets/inlet`, `outlets/outlet` | One per iolet: a `pressure`/`cosine` condition with `mean` = Pressure.x (mmHg), `amplitude` = Pressure.y (mmHg), `phase` = Pressure.z (rad), `period` fixed at 1 s; the iolet `normal`; its centre in metres as `position` |
+| `inlets/inlet`, `outlets/outlet` | One per iolet: a `pressure`/`cosine` condition with `mean` = Pressure.x (mmHg), `amplitude` = Pressure.y (mmHg), `phase` = Pressure.z (rad), `period` = `PulsePeriodSeconds` (1 s if not set); the iolet `normal`; its centre in metres as `position` |
 | `visualisation` | Fixed defaults |
 | `initialconditions` | Uniform pressure 0 mmHg |
 
@@ -289,7 +310,11 @@ These were found by running the tool on the test profiles in the repository.
   the test vessel a too-small inlet changed the fluid site count from 6,803
   to 7,797). The check uses the nearest wall, so an off-centre iolet on a
   non-circular vessel can still cut only part of the cross-section without a
-  warning; make iolet radii comfortably larger than the vessel.
+  warning; make iolet radii comfortably larger than the vessel. An iolet
+  whose radius only just exceeds the distance to the wall (more than 0.9 of
+  its radius) gets an "only just reaches the surface" warning: the Poiseuille
+  sample profile in `Code/tests/pythontests/resources` (radius 0.75 mm in a
+  pipe of the same width) produced a pipe with no inlet or outlet sites.
 - **Voxel size and units.** `--voxel` is in metres whatever the STL units.
   Reading a millimetre STL as metres (`--stl-units m`) with a fine voxel size
   makes the grid a thousand times too large; the writer then stops with
@@ -309,6 +334,9 @@ hlb-pro2pr2 old-profile.pro new-profile.pr2
 If the output name is omitted, the new file is written next to the old one
 with a `.pr2` extension. The converter can also be run as
 `python -m HlbGmyTool.scripts.pro_to_pr2`.
+
+`hlb-config2gmy INPUT OUTPUT` does the same conversion (it calls the same
+code) but always needs both file names. It is kept for older scripts.
 
 Notes on legacy `.pro` files:
 
@@ -346,6 +374,7 @@ as text) are all accepted.
 | `SeedPoint` (`x`, `y`, `z`) | A point inside the fluid, in STL units |
 | `Iolets` | List of inlets and outlets, each with `Type` (`Inlet` or `Outlet`), `Name`, `Centre`, `Normal` (pointing into the fluid), `Radius` (STL units) and `Pressure` (`x` mean mmHg, `y` amplitude mmHg, `z` phase rad) |
 | `TimeStepSeconds`, `DurationSeconds` | Simulation time step and length |
+| `PulsePeriodSeconds` | Optional. Period of the cosine pressure at every inlet and outlet (default 1 s) |
 | `OutputGeometryFile`, `OutputXmlFile` | Outputs, relative to the profile |
 
 Paths in a profile are interpreted relative to that profile file's location.

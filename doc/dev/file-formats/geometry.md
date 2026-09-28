@@ -119,14 +119,14 @@ For each site the following is given, in order:
 
 	- 2 - INLET
      * an unsigned integer giving the an index to the inlet array
-	   specified in the [XML Config File](../../XMLConfiguration.md).
+	   specified in the [XML Config File](../../user/XmlConfiguration.md).
      * a single precision floating point number giving the distance to
 	   the boundary, as a fraction of the lattice vector, _not_ as a
 	   distance in lattice units.
 
     - 3 - OUTLET
      * an unsigned integer giving the an index to the outlet array
-	   specified in the [XML Config File](../../XMLConfiguration.md).
+	   specified in the [XML Config File](../../user/XmlConfiguration.md).
 
 	 * a single precision floating point number giving the distance to
 	   the boundary, as a fraction of the lattice vector, _not_ as a
