@@ -518,18 +518,21 @@ class ObservableList(Observable, MutableSequence):
     def __getitem__(self, index):
         return self.__contents.__getitem__(index)
 
-    def __setitem__(self, index, obj):
+    # Observers (e.g. list widgets) index rows from 0, so notifications always
+    # carry the actual position, never a negative index such as pop() uses.
+    def _ExistingIndex(self, index):
         if index >= len(self) or index < -len(self):
             raise IndexError("ObservableList assignment index out of range")
+        return index % len(self)
 
+    def __setitem__(self, index, obj):
+        index = self._ExistingIndex(index)
         self.WillChangeValueForKey("@REPLACEMENT", index=index)
         self.__contents.__setitem__(index, obj)
         self.DidChangeValueForKey("@REPLACEMENT", index=index)
 
     def __delitem__(self, index):
-        if index >= len(self) or index < -len(self):
-            raise IndexError("ObservableList assignment index out of range")
-
+        index = self._ExistingIndex(index)
         self.WillChangeValueForKey("@REMOVAL", index=index)
         self.__contents.__delitem__(index)
         self.DidChangeValueForKey("@REMOVAL", index=index)
@@ -537,6 +540,8 @@ class ObservableList(Observable, MutableSequence):
 
     def insert(self, index, object):
         """Insert object before index."""
+        # Same clamping as list.insert
+        index = min(max(index + len(self) if index < 0 else index, 0), len(self))
         self.WillChangeValueForKey("@INSERTION", index=index)
         self.__contents.insert(index, object)
         self.DidChangeValueForKey("@INSERTION", index=index)

@@ -178,7 +178,8 @@ hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
 3. **Check the inputs.** The STL must exist, the voxel size must be
    positive, the seed point must be set, and the outputs must end in `.gmy`
    and `.xml` in folders that exist. Problems are reported together and the
-   command exits with status 2.
+   command exits with status 2. The GUI's Generate button runs the same
+   checks and shows problems in a message box.
 4. **Clip and cap the surface.** At each inlet and outlet the surface is cut
    by the iolet's plane and a sphere of the iolet's radius, the opening is
    capped and labelled with the iolet's id, and the surface piece closest
@@ -186,7 +187,10 @@ hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
 5. **Voxelise.** The capped surface is scaled by the voxel size and every
    lattice site is classified as fluid or solid, in blocks of 8x8x8 sites.
    The domain leaves at least one solid site beyond the surface on each side.
-6. **Write the `.gmy`** and then the **`.xml`**, and print the setup time.
+6. **Warn about silent problems** (see "Things to watch"): an iolet that
+   cannot reach the surface, or a seed point outside the capped surface.
+   Warnings do not stop generation.
+7. **Write the `.gmy`** and then the **`.xml`**, and print the setup time.
 
 ### Options
 
@@ -230,13 +234,18 @@ mpirun -n 4 hemelb -in output.xml -out results
 
 These were found by running the tool on the test profiles in the repository.
 
-- **Seed point.** It is not checked to be inside the vessel. A seed point
-  far outside the surface still gave the same result on a simple vessel,
-  because it only chooses among the pieces left after clipping. On branched
-  geometries a wrong seed point can keep the wrong piece.
-- **Iolet radius.** An iolet whose radius does not cover the vessel
-  cross-section does not cut it, and no error is raised. On the test vessel
-  a too-small inlet changed the fluid site count from 6,803 to 7,797.
+- **Seed point.** After clipping, the tool checks that the seed point is
+  inside the capped surface and prints a warning if it is not (the GUI shows
+  it in a message box). Generation still goes ahead, because on a simple
+  vessel the result can be correct; on branched geometries the wrong piece
+  may have been kept.
+- **Iolet radius.** An iolet only cuts the vessel if the surface comes within
+  its radius of its centre. If it does not, the tool warns that the iolet
+  "does not reach the surface" and that end of the vessel stays closed (on
+  the test vessel a too-small inlet changed the fluid site count from 6,803
+  to 7,797). The check uses the nearest wall, so an off-centre iolet on a
+  non-circular vessel can still cut only part of the cross-section without a
+  warning; make iolet radii comfortably larger than the vessel.
 - **Voxel size and units.** `--voxel` is in metres whatever the STL units.
   Reading a millimetre STL as metres (`--stl-units m`) with a fine voxel size
   makes the grid a thousand times too large; the writer then stops with

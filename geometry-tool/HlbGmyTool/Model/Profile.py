@@ -381,7 +381,7 @@ class Profile(Observable):
 
         generator = PolyDataGenerator(self)
         generator.Execute()
-        return
+        return generator.Warnings
 
     def ResetVoxelSize(self, ignored=None):
         """Action to reset the voxel size to its default value."""

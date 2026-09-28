@@ -45,6 +45,14 @@ this file records what changed and how it was checked at the time.
   crash the generator (segmentation fault) and a zero voxel size ended in a
   Python traceback. It also no longer leaves `exportedsurface.off` in the
   current folder.
+- Geometry tool GUI: opening a profile when one was already loaded dropped
+  inlets and outlets and left the iolet list out of step (clearing the list
+  reported index -1, which the list widget rejected part way through the
+  load). Generate now checks its inputs, always closes the progress window,
+  and reports failures and warnings in a message box; Open Profile reports
+  unreadable files instead of failing silently.
+- `hlb-gmy-cli` and the GUI warn when an iolet cannot reach the surface or
+  the seed point lies outside the capped surface. Generation is unchanged.
 - Profiles accept decimal exponents written without a point (`1e-5`), which
   YAML reads as text; they failed with "invalid hexadecimal floating-point
   string".

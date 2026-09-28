@@ -64,6 +64,32 @@ class TestPolyDataGenerator:
         xmlChecker = XmlChecker.from_path(os.path.join(dataDir, "test.xml"))
         xmlChecker.check_path(outXmlFileName)
 
+    @staticmethod
+    def _test_profile(tmpdir):
+        p = Profile()
+        p.LoadFromFile(os.path.join(dataDir, "test.pr2"))
+        p.OutputGeometryFile = tmpdir.join("test.gmy").strpath
+        p.OutputXmlFile = tmpdir.join("test.xml").strpath
+        return p
+
+    def test_valid_profile_has_no_warnings(self, tmpdir):
+        generator = OutputGeneration.PolyDataGenerator(self._test_profile(tmpdir))
+        assert generator.Warnings == []
+
+    def test_warns_when_an_iolet_cannot_reach_the_surface(self, tmpdir):
+        p = self._test_profile(tmpdir)
+        p.Iolets[0].Radius = 0.01
+        generator = OutputGeneration.PolyDataGenerator(p)
+        assert len(generator.Warnings) == 1
+        assert "Inlet1 does not reach the surface" in generator.Warnings[0]
+
+    def test_warns_when_the_seed_point_is_outside(self, tmpdir):
+        p = self._test_profile(tmpdir)
+        p.SeedPoint = Vector(50.0, 50.0, 50.0)
+        generator = OutputGeneration.PolyDataGenerator(p)
+        assert len(generator.Warnings) == 1
+        assert "seed point is not inside" in generator.Warnings[0]
+
     def test_cube(self, tmpdir):
         """Generate a gmy from a simple cubic profile and check the output"""
         cube = fixtures.cube(tmpdir)

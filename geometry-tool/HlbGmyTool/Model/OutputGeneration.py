@@ -5,6 +5,7 @@
 
 import numpy as np
 import os.path
+import sys
 
 from vtk import (
     vtkClipPolyData,
@@ -30,6 +31,8 @@ from vtk import (
     vtkSphere,
     vtkPolyDataNormals,
     vtkSTLWriter,
+    vtkImplicitPolyDataDistance,
+    vtkSelectEnclosedPoints,
 )
 
 from vmtk.vtkvmtk import vtkvmtkPolyDataBoundaryExtractor
@@ -157,7 +160,60 @@ class PolyDataGenerator(GeometryGenerator):
         self.generator.SetOriginWorking(*(float(x) for x in originWorking))
         self.generator.SetSiteCounts(*(int(x) for x in nSites))
         self.OriginMetres = Vector(originWorking * self.VoxelSizeMetres)
+
+        self.Warnings = self._FindSilentProblems()
+        for warning in self.Warnings:
+            print("Warning: " + warning, file=sys.stderr)
         return
+
+    def _FindSilentProblems(self):
+        """Return warnings for inputs that generate without error but give
+        the wrong fluid region. Generation itself is not changed.
+        """
+        warnings = []
+        profile = self._profile
+
+        # An iolet can only cut the vessel if the surface comes within its
+        # radius of its centre. If not, that end of the vessel stays closed.
+        distance = vtkImplicitPolyDataDistance()
+        distance.SetInput(profile.StlReader.GetOutput())
+        for iolet in profile.Iolets:
+            nearest = abs(
+                distance.EvaluateFunction(
+                    iolet.Centre.x, iolet.Centre.y, iolet.Centre.z
+                )
+            )
+            if nearest > iolet.Radius:
+                warnings.append(
+                    "%s does not reach the surface: the nearest wall is %g from its "
+                    "centre but its radius is %g (STL units), so it cuts nothing. "
+                    "Check its centre, or make the radius larger than the vessel."
+                    % (iolet.Name, nearest, iolet.Radius)
+                )
+
+        # The seed point picks which piece of the clipped surface is kept, so
+        # it must lie inside the fluid.
+        if not profile.HaveValidSeedPoint:
+            warnings.append("the seed point is not set.")
+            return warnings
+        seed = vtkPoints()
+        seed.InsertNextPoint(
+            profile.SeedPoint.x / profile.VoxelSize,
+            profile.SeedPoint.y / profile.VoxelSize,
+            profile.SeedPoint.z / profile.VoxelSize,
+        )
+        seedData = vtkPolyData()
+        seedData.SetPoints(seed)
+        enclosed = vtkSelectEnclosedPoints()
+        enclosed.SetInputData(seedData)
+        enclosed.SetSurfaceData(self.ClippedSurface)
+        enclosed.Update()
+        if not enclosed.IsInside(0):
+            warnings.append(
+                "the seed point is not inside the capped surface, so the wrong "
+                "part of the surface may have been kept. Place it inside the vessel."
+            )
+        return warnings
 
     def _ComputeOriginWorking(self):
         """

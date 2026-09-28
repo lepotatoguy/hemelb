@@ -115,3 +115,31 @@ def test_pro_to_pr2_output_matches_sample_pr2_schema(tmp_path):
 
     assert set(converted) == set(sample)
     assert set(converted["Iolets"][0]) == set(sample["Iolets"][0])
+
+
+def test_reloading_a_profile_keeps_all_iolets(tmp_path):
+    # Opening a profile when one is already loaded used to drop iolets:
+    # clearing the list notified the GUI list with index -1, which raised
+    # and aborted the load part way through.
+    import shutil
+
+    data = os.path.join(os.path.dirname(__file__), "data")
+    for name in ("test.pr2", "test.stl"):
+        shutil.copy(os.path.join(data, name), tmp_path / name)
+    profile = Profile()
+    rows = []
+
+    def on_change(change):
+        if change.key == "@REMOVAL":
+            assert 0 <= change.index < len(rows)
+            del rows[change.index]
+        else:
+            rows.insert(change.index, profile.Iolets[change.index].Name)
+
+    profile.Iolets.AddObserver("@REMOVAL", on_change)
+    profile.Iolets.AddObserver("@INSERTION", on_change)
+
+    for _ in range(3):
+        profile.LoadFromFile(str(tmp_path / "test.pr2"))
+        assert len(profile.Iolets) == 2
+        assert rows == [io.Name for io in profile.Iolets]
