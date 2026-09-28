@@ -27,24 +27,32 @@ current one. The file layouts are described in
 
 The reader assumes the timestep is the first 8 bytes of each record, which
 holds because the I/O rank (rank 0) writes it first
-(`LocalPropertyOutput.cc`).
+(`LocalPropertyOutput.cc`); a `static_assert` on `IOCommunicator::IO_RANK`
+keeps this true.
 
 ## Requirements and limits
 
 - The restarted run must have the same fluid site coordinates and the same
   number of distributions per site. Both are checked.
-- The physical voxel size and origin in the checkpoint header are **not**
-  compared with the current configuration.
+- The voxel size and origin in the checkpoint header must match the current
+  geometry (to within 1e-9 of a voxel). `SimBuilder` passes them to
+  `CheckpointInitialCondition`, and a mismatch stops the run on every rank,
+  so a checkpoint cannot be loaded into a different geometry that happens to
+  have the same site coordinates.
 - A checkpoint and its offset file must come from the same run.
 
 ## Testing
 
 `Code/tests/checkpoint_restart_mpi.py` runs the bundled `large_cylinder`
 case for four timesteps, restarts from timestep 2 with a different process
-count, and compares the distributions at timestep 4 by grid position:
+count, and compares the distributions at timestep 4 by grid position. It
+also checks that a checkpoint is rejected by a run with a different voxel
+size or origin:
 
 ```sh
 python3 Code/tests/checkpoint_restart_mpi.py --hemelb /path/to/hemelb
 ```
 
-It is not yet part of CTest or CI.
+`ctest` runs it (test `checkpoint-restart-mpi`), and so does the "Main
+application" CI workflow. Extra `mpirun` flags (for example
+`--oversubscribe`) can be passed in the `MPIRUN_FLAGS` environment variable.

@@ -1,15 +1,21 @@
 # The HemeLB XML configuration file
 
-This file is the main input file for a HemeLB simulation. If you use
-the geometry tool to generate a .gmy file, it will also create a
-minimal XML file that contains the required geometry-related data,
-however it is currently (2023) not suitable to run immediately and
-must be manually edited. Here we describe the file.
+This file is the main input file for a HemeLB simulation: it says which
+geometry to use, how long to run, what happens at the inlets and outlets,
+how to start, and which results to save.
+
+The geometry tool writes a complete XML file next to the `.gmy`. It runs as
+it is, but it has no `<properties>` section, so it saves no results until
+you add one (see "(Extracted) Properties" below and the
+[Getting started](getting-started.md) walkthrough). Check a file without
+running it with `hemelb-confcheck config.xml`.
+
+The rest of this page is a reference for every element.
 
 All parameters that correspond to a property of the modelled system
 should be given as follows:
 
-    <$NAME value="$VALUE" unit="$UNITS" />
+    <$NAME value="$VALUE" units="$UNITS" />
 where:
  * `$NAME` is a descriptive (considering the context of containing
    elements) name for the physical quantity;
@@ -35,7 +41,7 @@ currently 5.
 The `<simulation>` is required and specifies some global properties of
 the simulation, mainly time-related.
 
-It's child elements are:
+Its child elements are:
 * Required: `<stresstype value="int">` - the type of stresses to calculate. Must correspond to the `enum hemelb::lb::StressTypes`
 * Required: `<step_length value="float" units="s" />` - the length of a time step; units must be s (seconds)
 * Required: `<steps value="int" units="lattice" />` - the length of the main simulation; units must be lattice
@@ -60,6 +66,20 @@ The `<geometry>` element is required. It has one, required, child element:
   
 ## Inlets
 `<inlets>` - the element contains zero or more `<inlet>` subelements
+
+The inlets are numbered in the order they appear, starting from 0, and the
+geometry file refers to them by these numbers (outlets likewise). There must
+be at least as many `<inlet>` elements as the geometry uses; otherwise
+HemeLB stops with "The geometry file uses N inlet(s) but the configuration
+defines M". The geometry tool writes them in the same order as in its
+profile.
+
+Which condition types are allowed depends on how HemeLB was built
+([CMakeOptions.md](CMakeOptions.md)): the default build
+(NASHZEROTHORDERPRESSUREIOLET) needs `type="pressure"`, a LADDIOLET build
+needs `type="velocity"`. The geometry tool always writes
+`type="pressure" subtype="cosine"`, with the phase in radians and the period
+taken from the profile's `PulsePeriodSeconds` (1 s by default).
 
 * `<inlet>` - describes the position and orientation of an inlet plane
   as well as the boundary conditions to impose upon it. Inlets always
@@ -99,6 +119,8 @@ The `<geometry>` element is required. It has one, required, child element:
     * `subtype="file"` - all subelements required
         * `<path value="relative/path/to/velocity/data/file" />`
         * `<radius value="float" units="lattice"/>` or `<radius value="float" units="m"/>`
+        (for inlets that are not circular, see
+        [non-cylindrical-velocity-inlets.md](non-cylindrical-velocity-inlets.md))
 
 ## Outlets
 As for "inlets" but with `s/inlet/outlet/`
@@ -111,25 +133,30 @@ As for "inlets" but with `s/inlet/outlet/`
   * `<uniform value="float" units="mmHg">` - a uniform pressure at all
     sites. Value must be in mmHg.
 
-* `<checkpoint file="rel/path/to/file" offset="rel/path">` - restart from a
+* `<checkpoint file="rel/path/to/file" offsets="rel/path">` - restart from a
   checkpoint + offset file. Attribute `file` is required and gives
-  path to the checkpoint. The offset file is optional - if given it
-  must be a relative path to the file, else must have the same path with
-  the extension replaced by ".off".
+  path to the checkpoint. The `offsets` attribute is optional; if given it
+  must be a relative path to the offset file, otherwise HemeLB uses the
+  checkpoint path with the extension replaced by ".off". The restart may use
+  a different number of MPI processes from the run that wrote the
+  checkpoint, but must use the same geometry: HemeLB stops if the voxel size
+  or origin differ.
 
 ## (Extracted) Properties
 Describe what data to extract under the `<properties>` element. Child elements:
 
 * `<propertyoutput file="path.xtr" period="int"
   timestep_mode="[multi|single]">` - specify the file (under the
-  `results/Extraction` directory) and the output period (in time
+  `results/Extracted` directory) and the output period (in time
   steps). The way that multiple timesteps of data will be handled is
   set by the `timestep_mode` attribute. Valid values are `multi` (the
   default if the attribute is not present) or `single`. For `multi`,
   each subsequent timestep's data will be appended to the same
   file. For `single`, only a single timestep will be written to each
   file; in this case the `file` attribute must contain exactly one
-  `%d` which will be replaced with the timestep number.
+  `%d` which will be replaced with the timestep number, padded with
+  leading zeros (at least 3 digits, more if the run is longer) so the files
+  sort in order, for example `flow_%d.xtr` gives `flow_0100.xtr`.
   - `<geometry type="type">` - the type string must be one of the following:
     + `type="whole"` - all lattice points - no subelements needed
 	+ `type="surface"` - all lattice points with one or more links
@@ -154,8 +181,11 @@ Describe what data to extract under the `<properties>` element. Child elements:
     + `type="tangentialprojectiontraction"`
     + `type="mpirank"`
 
-* `<checkpoint file="path" period="int">` - save a checkpoint file to
-  the given path at the given interval (in timesteps).
+* `<checkpoint file="path" period="int">` - save a checkpoint file at the
+  given interval (in timesteps). Each checkpoint is a separate file, so the
+  path must contain `%d` as for `timestep_mode="single"` (for example
+  `checkpoint_%d.xtr` gives `checkpoint_0200.xtr`). HemeLB also writes an
+  offset file (here `checkpoint_.off`), which a restart needs.
 
 ## Changes
 

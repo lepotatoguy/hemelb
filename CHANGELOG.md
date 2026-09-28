@@ -31,6 +31,15 @@ this file records what changed and how it was checked at the time.
   ([doc/README.md](doc/README.md)), a first-run walkthrough
   ([getting-started.md](doc/user/getting-started.md)), a GUI walkthrough, and
   a guide to every test suite for developers ([doc/dev/README.md](doc/dev/README.md)).
+- Every page under `doc/` was checked against the current code and rewritten
+  where out of date: build and run guide (C++20, CMake 4, `hemelb-confcheck`,
+  `-out` defaults), all CMake options with their real defaults, the XML
+  reference (`units=`, `offsets=`, `results/Extracted`, zero-padded names,
+  checkpoint outputs need `%d`, iolet order and build-dependent condition
+  types), geometry-tool install by hand (conda environment, Rosetta,
+  `--no-deps --no-build-isolation`), velocity weights files, the checkpoint
+  and geometry-reading design notes, file formats, legacy components and
+  ARCHER2 notes. All relative links and anchors resolve.
 
 ### Fixed
 

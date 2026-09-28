@@ -37,6 +37,7 @@ build another executable (give it a different name with `HEMELB_EXECUTABLE`).
 | `HEMELB_INLET_BOUNDARY` | NASHZEROTHORDERPRESSUREIOLET | NASHZEROTHORDERPRESSUREIOLET, LADDIOLET |
 | `HEMELB_OUTLET_BOUNDARY` | NASHZEROTHORDERPRESSUREIOLET | NASHZEROTHORDERPRESSUREIOLET, LADDIOLET |
 | `HEMELB_STENCIL` (RBC interpolation) | FourPoint | TwoPoint, ThreePoint, FourPoint, CosineApprox |
+| `HEMELB_USE_VELOCITY_WEIGHTS_FILE` | OFF | ON reads per-site weights for `subtype="file"` velocity inlets ([non-cylindrical-velocity-inlets.md](non-cylindrical-velocity-inlets.md)) |
 
 The inlet and outlet choice decides which conditions the XML may use:
 NASHZEROTHORDERPRESSUREIOLET needs **pressure** conditions (this is what the

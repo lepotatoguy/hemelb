@@ -6,6 +6,10 @@ layout itself is described in [file-formats](file-formats).
 
 ## Validation when reading
 
+Before reading, `SimBuilder::ReadGmy` checks that the path from the XML is a
+regular file, so a missing file or a folder gives a clear error naming the
+path.
+
 `GeometryReader` treats the file as untrusted input. Every failure raises
 an `Exception` naming the block (and site, where relevant):
 
@@ -46,6 +50,18 @@ distinguish nearby boundaries above about 16.7 million sites). Every rank
 gets at least one non-solid block, and a cumulative count beyond the 64-bit
 range is an error. ParMETIS then refines this split.
 
+Because of that rule, a run cannot use more MPI processes than there are
+blocks containing fluid. HemeLB then stops with a message giving both
+numbers and the largest `mpirun -n` that will work.
+
+## Checks after the domain is built
+
+`SimBuilder` calls `CheckIoletIds` once the domain exists: every inlet and
+outlet ID used by a site in the geometry must have a matching `<inlet>` or
+`<outlet>` element in the XML. A geometry with three outlets and an XML with
+two stops with "The geometry file uses 3 outlet(s) but the configuration
+defines 2", instead of reading past the end of the outlet list.
+
 ## MPI helpers with empty buffers
 
 The vector overloads in `net/mixins/InterfaceDelegationNet.h` accept empty
@@ -60,6 +76,7 @@ variable-count gathers validate counts and use integer displacements.
 | Header, record, decompression and truncation errors (modified copies of `large_cylinder.gmy`) | `Code/tests/geometry/GeometryReaderTests.cc` |
 | Bounds-checked XDR reads | `Code/tests/io/XdrReaderTests.cc` |
 | Lookup tree above 32,768 blocks | `Code/tests/geometry/LookupTreeTests.cc` |
-| Decomposition arithmetic and the `large_cylinder` split | `Code/tests/geometry/BasicDecompositionTests.cc` |
+| Decomposition arithmetic, the `large_cylinder` split and the too-many-processes message | `Code/tests/geometry/BasicDecompositionTests.cc` |
+| Inlet and outlet IDs against the configuration | `Code/tests/configuration/IoletIdCheckTests.cc` |
 | Empty MPI gathers (run with 4 ranks) | `Code/tests/net/MpiTests.cc` |
 | Geometry tool error handling | `geometry-tool/tests/` |

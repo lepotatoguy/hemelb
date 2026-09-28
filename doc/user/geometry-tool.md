@@ -5,129 +5,82 @@
 
 # HemeLB geometry generation tool
 
-This tool (and optional GUI) generate HemeLB input geometry files.
-This was previously called the "setuptool" so you may see references
-to that within the repository.
-
+This tool turns a closed STL surface of a vessel into the two input files
+HemeLB needs: the voxelised geometry (`.gmy`) and a configuration (`.xml`).
+It has a GUI, `hlb-gmy-gui`, for placing inlets, outlets and the seed point
+by eye, and a command-line version, `hlb-gmy-cli`, for scripts and for
+repeating a setup saved in a profile (`.pr2`). It used to be called the
+"setuptool", so you may see that name in older files.
 
 ## Install
 
-Build dependencies:
+The easiest way is the install script, which installs the geometry tool and
+the Python tools into a conda environment called `gmy-tool`
+([Installing HemeLB](install.md)):
 
-- Python >= 3.6
-- Setuptools >= 21.1
-- C++ compiler (C++20)
-- CMake >= 3.13
-- Pybind11
-- scikit-build
-- Boost (header only)
-- VTK >= 9
-- CGAL
-
-Runtime dependencies:
-- Python
-- Numpy
-- PyYAML
-- VTK
-- VMTK
-- wxPython (only for the GUI)
-
-Test dependencies:
-- pytest
-- hlb (NB: this must be compiled with the same version of numpy as
-  used above)
-
-
-## Conda install
-
-VMTK is hard to build yourself but is easily installed via Conda, so
-we present this process here.
-
-### Virtual enviroment setup
-
-We *strongly* recommend that you install into an isolated virtual
-environment.
-
-Create the environment for the tool and specify required
-packages. They live in the `conda-forge` "channel". The
-dependencies are recorded in the `conda-environment.yml` file.
-
-```
-conda env create --file conda-environment.yml
-```
-
-By default this will use `gmy-tool` as the name, but you can use
-anything you wish by adding `--name PREFERED_NAME` to the command
-above.
-
-
-You then need to activate this for your shell session:
-
-```
+```sh
+Scripts/install_hemelb.sh
 conda activate gmy-tool
+hlb-gmy-cli --help
 ```
 
-### Install
+### Installing by hand
 
-With the environment above, install should be as simple as
+The tool needs VMTK 1.5, which is easiest to get from conda-forge. VMTK 1.5
+is only published for Linux (x86_64) and Intel macOS with Python 3.8 to
+3.11, so the tool supports those Python versions. All dependencies are listed
+in `geometry-tool/conda-environment.yml`; you also need a C++20 compiler
+(Xcode Command Line Tools on macOS, `build-essential` on Ubuntu).
 
-```
-pip install '.[gui]'
-```
+```sh
+# On Apple Silicon only: use an Intel environment (runs under Rosetta 2)
+export CONDA_SUBDIR=osx-64
 
-(If your pip version is less than 21.3, add the extra flag `--use-feature=in-tree-build`)
+conda env create -f geometry-tool/conda-environment.yml
+conda activate gmy-tool
+conda config --env --set subdir osx-64      # Apple Silicon only
 
-If you don't want the GUI, you can drop the `[gui]` extra
-specification.
-
-**Note for macOS**: On macOS GUI applications have to be linked
-against some special framework. If you don't fix this up you will get
-a message:
-
-```
-This program needs access to the screen. Please run with a
-Framework build of python, and only when you are logged in
-on the main display of your Mac.
-```
-
-To fix this, you have edit the shebang (`#!`) line in the launcher
-script (`hlb-gmy-gui`) to point to an appropriately linked python
-executable. This is typically `pythonw` but for conda it is part of
-the `python.app` package. Delightfully, this is not in the typical
-`$CONDA_PREFIX/bin` directory, instead its location is (2021)
-`$CONDA_PREFIX/python.app/Contents/MacOS/python`.
-
-We include a script to fix this for you until pip and scikit build
-support doing this automatically:
-
-```
-python macos-fix-gui-launcher.py
+# Build against the environment's CGAL, Boost and VTK
+export CMAKE_PREFIX_PATH="$CONDA_PREFIX"
+pip install --no-deps --no-build-isolation ./python-tools
+pip install --no-deps --no-build-isolation ./geometry-tool
 ```
 
-## Install with custom VMTK
+Why the flags: `--no-deps` stops pip from trying to install packages that
+conda already provides (pip cannot see conda's VMTK and would fail), and
+`--no-build-isolation` builds against the environment's NumPy and Cython so
+the compiled modules match. The environment includes `vtk-io-ffmpeg` because
+VTK's CMake files expect it. The install script also patches one CGAL header
+(`CGAL/boost/graph/iterator.h`) that current Clang rejects; if the build
+fails there, see `patch_cgal` in `Scripts/install_hemelb.sh`.
 
-The hemelb-codes organisation on GitHub includes a project to build
-VMTK  for Ubuntu: https://github.com/hemelb-codes/vmtk-build/
+**macOS GUI.** On macOS a GUI program must run with a "framework" build of
+Python, otherwise `hlb-gmy-gui` stops with "This program needs access to the
+screen". Fix the launcher once after installing:
 
-That will hopefully give you an idea for how to proceed. If you are
-lucky you can just download the tarball. (Some Ubuntu packages will
-have to be installed - see that repo)
+```sh
+conda install -c conda-forge python.app
+python geometry-tool/macos-fix-gui-launcher.py
+```
+
+**Without conda.** The hemelb-codes organisation has a project that builds
+VMTK for Ubuntu (https://github.com/hemelb-codes/vmtk-build/); with VMTK
+installed, `pip install ./python-tools ./geometry-tool` works in the same
+way.
 
 ## Test
 
-Install pytest the usual way via `pip install pytest`.
+With the environment active:
 
-The Conda VMTK package forces you to use an old version of numpy. To
-ensure that the `hlb` package in `python-tools` is built with the same
-one, you need to change to that directory, install Cython (`pip
-install cython`) and then install the package with:
-
-```
-pip install --no-build-isolation .
+```sh
+cd geometry-tool/tests
+pytest
 ```
 
-Run the tests by invoking `py.test` in this directory.
-
+Run the tests from `tests/`, not from `geometry-tool/`: from there Python
+would import the source folder, which lacks the compiled extension. The GUI
+tests are skipped if wxPython is not installed. The
+[developer notes](../dev/README.md#how-to-run-the-tests) list all test suites.
 
 ## Run GUI
 
@@ -356,10 +309,11 @@ Notes on legacy `.pro` files:
 
 ## Profile (.pr2) files
 
-The geometry tool can store the the data it will use to generate a
-geometry file. Saving this is highly recommended for reproducibility!
+The geometry tool can save everything it uses to generate a geometry in a
+profile. Saving one is highly recommended, so you can repeat the run later
+(for example with `hlb-gmy-cli`).
 
-It's a YAML file which can be edited manually. Floating point values
+It is a YAML file which can be edited manually. Floating point values
 are stored by default in hexadecimal to avoid precision loss
 (https://docs.python.org/3/library/stdtypes.html#float.hex) but can be
 set in decimal if more convenient. Integers (`3`), decimals (`0.5`,
