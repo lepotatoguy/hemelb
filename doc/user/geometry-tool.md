@@ -155,6 +155,46 @@ reports an STL reading or pipeline error after a file is selected,
 check the file and the error instead of ignoring it.
 
 
+## Preparing the surface: closed or open
+
+The STL can be **closed** (sealed at the vessel ends, like a can) or **open**
+(ends left open, like a pipe). Both give the same geometry, because the
+tool closes open ends itself:
+
+1. Every hole in the surface is filled with a flat triangulated cap, marked
+   as **wall**.
+2. Each inlet and outlet then removes the part of the surface behind its
+   plane and inside its radius, and caps that opening as the inlet or
+   outlet.
+3. The piece of surface closest to the seed point is kept and voxelised.
+
+Tested on a 10 mm long, 1 mm radius tube, with iolets of radius 1.5 mm and
+a 0.1 mm voxel size:
+
+| Iolet position | Closed tube | Open tube |
+| --- | --- | --- |
+| Inside the vessel, 0.5 mm from each end | 30,968 fluid sites, 316 inlet and 316 outlet sites | identical |
+| Exactly at the ends | 31,600 fluid sites, 316 inlet and 316 outlet sites | identical |
+| 0.5 mm beyond the ends | 31,600 fluid sites, **no inlet or outlet sites** | identical |
+
+What this means in practice:
+
+- **Put an iolet on every end where flow enters or leaves.** An open end
+  without an iolet is filled as wall, so that branch becomes a dead end,
+  without any warning.
+- **Place each iolet on the vessel end or slightly inside it**, with its
+  normal pointing into the fluid. An iolet beyond the end of the surface
+  opens nothing; the tool warns that it "lies outside the vessel".
+- **Make the iolet radius larger than the vessel.** An iolet that cannot
+  reach the wall cuts nothing; the tool warns that it "does not reach the
+  surface".
+- Automatic caps are flat triangulations of each opening. An iolet placed
+  slightly inside the vessel removes the automatic cap at that end (the
+  "inside" row above), which avoids relying on it for irregular or
+  non-planar openings (not tested here).
+- Holes elsewhere in the wall are filled the same way, as wall. Check the
+  generated geometry if the surface has gaps.
+
 ## Run the command-line generator
 
 `hlb-gmy-cli` does what the GUI's "Generate" button does, without a window.
@@ -188,7 +228,8 @@ hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
    lattice site is classified as fluid or solid, in blocks of 8x8x8 sites.
    The domain leaves at least one solid site beyond the surface on each side.
 6. **Warn about silent problems** (see "Things to watch"): an iolet that
-   cannot reach the surface, or a seed point outside the capped surface.
+   cannot reach the surface or lies beyond the end of the vessel, or a seed
+   point outside the capped surface.
    Warnings do not stop generation.
 7. **Write the `.gmy`** and then the **`.xml`**, and print the setup time.
 
@@ -239,6 +280,9 @@ These were found by running the tool on the test profiles in the repository.
   it in a message box). Generation still goes ahead, because on a simple
   vessel the result can be correct; on branched geometries the wrong piece
   may have been kept.
+- **Iolet position.** An iolet placed beyond the end of the surface opens
+  nothing and leaves that end closed; the tool warns that it "lies outside
+  the vessel". See "Preparing the surface" above.
 - **Iolet radius.** An iolet only cuts the vessel if the surface comes within
   its radius of its centre. If it does not, the tool warns that the iolet
   "does not reach the surface" and that end of the vessel stays closed (on

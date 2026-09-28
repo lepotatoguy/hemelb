@@ -90,6 +90,54 @@ class TestPolyDataGenerator:
         assert len(generator.Warnings) == 1
         assert "seed point is not inside" in generator.Warnings[0]
 
+    @pytest.mark.parametrize("capped", [True, False])
+    @pytest.mark.parametrize("end_z, expect_warning", [(4.5, False), (5.5, True)])
+    def test_open_and_closed_tubes(self, tmpdir, capped, end_z, expect_warning):
+        # Closed ("can") and open ("pipe") surfaces behave the same: open ends
+        # are capped as wall, and iolets must lie on or inside the vessel end.
+        from vtk import (
+            vtkCylinderSource,
+            vtkSTLWriter,
+            vtkTransform,
+            vtkTransformPolyDataFilter,
+            vtkTriangleFilter,
+        )
+        from HlbGmyTool.Model.Iolets import Inlet, Outlet
+
+        source = vtkCylinderSource()
+        source.SetRadius(1.0)
+        source.SetHeight(10.0)
+        source.SetResolution(32)
+        source.SetCapping(capped)
+        rotate = vtkTransform()
+        rotate.RotateX(90)
+        transform = vtkTransformPolyDataFilter()
+        transform.SetTransform(rotate)
+        transform.SetInputConnection(source.GetOutputPort())
+        triangles = vtkTriangleFilter()
+        triangles.SetInputConnection(transform.GetOutputPort())
+        writer = vtkSTLWriter()
+        writer.SetFileName(tmpdir.join("tube.stl").strpath)
+        writer.SetInputConnection(triangles.GetOutputPort())
+        writer.Write()
+
+        p = Profile()
+        p.StlFile = tmpdir.join("tube.stl").strpath
+        p.VoxelSize = 0.2
+        p.SeedPoint = Vector(0.0, 0.0, 0.0)
+        p.Iolets.append(
+            Inlet(Centre=Vector(0, 0, -end_z), Normal=Vector(0, 0, 1), Radius=1.5)
+        )
+        p.Iolets.append(
+            Outlet(Centre=Vector(0, 0, end_z), Normal=Vector(0, 0, -1), Radius=1.5)
+        )
+        p.OutputGeometryFile = tmpdir.join("tube.gmy").strpath
+        p.OutputXmlFile = tmpdir.join("tube.xml").strpath
+
+        generator = OutputGeneration.PolyDataGenerator(p)
+        outside = [w for w in generator.Warnings if "lies outside the vessel" in w]
+        assert len(outside) == (2 if expect_warning else 0)
+
     def test_cube(self, tmpdir):
         """Generate a gmy from a simple cubic profile and check the output"""
         cube = fixtures.cube(tmpdir)

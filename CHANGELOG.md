@@ -51,8 +51,12 @@ this file records what changed and how it was checked at the time.
   load). Generate now checks its inputs, always closes the progress window,
   and reports failures and warnings in a message box; Open Profile reports
   unreadable files instead of failing silently.
-- `hlb-gmy-cli` and the GUI warn when an iolet cannot reach the surface or
-  the seed point lies outside the capped surface. Generation is unchanged.
+- `hlb-gmy-cli` and the GUI warn when an iolet cannot reach the surface,
+  lies beyond the end of the vessel (it then opens nothing, and the vessel
+  has no inlet or outlet there), or when the seed point lies outside the
+  capped surface. Generation is unchanged. The geometry tool guide now
+  explains that closed and open STL surfaces both work, and where iolets
+  must be placed.
 - Profiles accept decimal exponents written without a point (`1e-5`), which
   YAML reads as text; they failed with "invalid hexadecimal floating-point
   string".

@@ -35,6 +35,7 @@ from vtk import (
     vtkSelectEnclosedPoints,
 )
 
+from vtk.util.numpy_support import vtk_to_numpy
 from vmtk.vtkvmtk import vtkvmtkPolyDataBoundaryExtractor
 from vmtk.vtkvmtk import vtkvmtkBoundaryReferenceSystems
 
@@ -175,20 +176,34 @@ class PolyDataGenerator(GeometryGenerator):
 
         # An iolet can only cut the vessel if the surface comes within its
         # radius of its centre. If not, that end of the vessel stays closed.
+        stl = profile.StlReader.GetOutput()
         distance = vtkImplicitPolyDataDistance()
-        distance.SetInput(profile.StlReader.GetOutput())
+        distance.SetInput(stl)
+        vertices = vtk_to_numpy(stl.GetPoints().GetData())
         for iolet in profile.Iolets:
-            nearest = abs(
-                distance.EvaluateFunction(
-                    iolet.Centre.x, iolet.Centre.y, iolet.Centre.z
-                )
-            )
+            centre = np.array([iolet.Centre.x, iolet.Centre.y, iolet.Centre.z])
+            nearest = abs(distance.EvaluateFunction(*centre))
             if nearest > iolet.Radius:
                 warnings.append(
                     "%s does not reach the surface: the nearest wall is %g from its "
                     "centre but its radius is %g (STL units), so it cuts nothing. "
                     "Check its centre, or make the radius larger than the vessel."
                     % (iolet.Name, nearest, iolet.Radius)
+                )
+                continue
+            # The iolet removes the surface behind its plane, within its
+            # radius. If every nearby vertex is on the fluid side, the iolet is
+            # beyond the end of the vessel and removes nothing.
+            normal = np.array([iolet.Normal.x, iolet.Normal.y, iolet.Normal.z])
+            normal = normal / np.linalg.norm(normal)
+            offsets = vertices - centre
+            near = np.linalg.norm(offsets, axis=1) <= iolet.Radius
+            if near.any() and (offsets[near] @ normal).min() > 1e-3 * iolet.Radius:
+                warnings.append(
+                    "%s lies outside the vessel: its plane is beyond the end of the "
+                    "surface, so it opens nothing and that end stays closed. Move "
+                    "its centre onto or just inside the vessel end, with the normal "
+                    "pointing into the fluid." % iolet.Name
                 )
 
         # The seed point picks which piece of the clipped surface is kept, so
