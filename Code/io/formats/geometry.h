@@ -7,6 +7,7 @@
 #define HEMELB_IO_FORMATS_GEOMETRY_H
 
 #include <array>
+#include <cstdint>
 
 #include "io/formats/formats.h"
 #include "util/Vector3D.h"

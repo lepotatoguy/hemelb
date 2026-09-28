@@ -5,7 +5,10 @@
 
 import string
 import struct
-import xdrlib
+try:
+    import xdrlib
+except ImportError:  # removed in Python 3.13; needs python-tools installed
+    from hlb.utils import pyxdr as xdrlib
 from typing import List
 
 # Here we generate a header that contains a class template test_data

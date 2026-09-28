@@ -88,6 +88,18 @@ namespace hemelb
       }
     }
 
+    TEST_CASE("XdrMemReader reports truncated input") {
+      std::vector<char> shortWord{0, 0, 0};
+      io::XdrMemReader shortReader(shortWord);
+      REQUIRE_THROWS_WITH(shortReader.read<std::uint32_t>(),
+                          Catch::Matchers::Contains("Truncated XDR data"));
+
+      std::vector<char> empty;
+      io::XdrMemReader emptyReader(empty);
+      REQUIRE(emptyReader.GetPosition() == 0);
+      REQUIRE_THROWS_WITH(emptyReader.read<std::uint32_t>(),
+                          Catch::Matchers::Contains("Truncated XDR data"));
+    }
+
   }
 }
-

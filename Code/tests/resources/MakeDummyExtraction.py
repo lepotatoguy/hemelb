@@ -3,7 +3,10 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-import xdrlib
+try:
+    import xdrlib
+except ImportError:  # removed in Python 3.13; needs python-tools installed
+    from hlb.utils import pyxdr as xdrlib
 import numpy as np
 
 # Set things up

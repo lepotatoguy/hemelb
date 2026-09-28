@@ -8,6 +8,8 @@
 #include "geometry/LookupTree.h"
 #include "net/mpi.h"
 
+#include <limits>
+
 namespace hemelb::geometry::decomposition
 {
 
@@ -19,17 +21,25 @@ namespace hemelb::geometry::decomposition
 
     // Figure out how to divide a range between two groups of ranks of almost equal size
     auto share_range(std::vector<U64>::const_iterator begin, std::vector<U64>::const_iterator end, int N) {
-        auto lo = *begin;
-        auto hi = *end;
-        auto delta = hi - lo;
+        const int n_lo = N / 2;
+        const auto first = begin + n_lo;
+        const auto last = end - (N - n_lo);
 
-        auto n_lo = N / 2;
-        auto mid = float(lo) + float(delta) * float(n_lo) / float(N);
-        auto middle = std::lower_bound(begin, end, mid);
-        if ((*middle - mid) / float(delta) > 0.5f)
-            --middle;
+        // Split by site count, while leaving at least one block for every rank.
+        // Divide first so multiplying by n_lo cannot overflow a 64-bit count.
+        const U64 delta = *end - *begin;
+        const U64 parts = static_cast<U64>(N);
+        const U64 target = *begin + (delta / parts) * n_lo +
+                           ((delta % parts) * n_lo + parts / 2) / parts;
+        auto upper = std::lower_bound(first, last + 1, target);
+        if (upper == last + 1)
+            return std::make_pair(n_lo, last);
+        if (upper == first)
+            return std::make_pair(n_lo, upper);
 
-        return std::make_pair(n_lo, middle);
+        const auto lower = upper - 1;
+        return std::make_pair(n_lo,
+                              target - *lower <= *upper - target ? lower : upper);
     }
 
     // Assign a group of processes of size N (i.e. ranks 0.. N-1) to the blocks with cumulative site counts.
@@ -64,11 +74,17 @@ namespace hemelb::geometry::decomposition
         auto const n_nonsolid = nonsolid_block_fluid_site_counts.size();
 
         if (n_nonsolid < comm_size)
-            throw (Exception() << "More MPI processes than blocks - ParMETIS will be unhappy.");
-        std::vector<U64> cumulative_fluid_sites(n_nonsolid + 1);
-        cumulative_fluid_sites[0] = 0;
-        std::inclusive_scan(nonsolid_block_fluid_site_counts.begin(), nonsolid_block_fluid_site_counts.end(),
-                            ++cumulative_fluid_sites.begin());
+            throw (Exception() << "The geometry has " << n_nonsolid << " block(s) containing fluid but HemeLB is"
+                   << " running on " << comm_size << " MPI processes. Each process needs at least one"
+                   << " such block: run with at most " << n_nonsolid << " processes (mpirun -n "
+                   << n_nonsolid << "), or regenerate the geometry with a smaller voxel size.");
+        std::vector<U64> cumulative_fluid_sites(n_nonsolid + 1, 0);
+        for (std::size_t i = 0; i < n_nonsolid; ++i) {
+            const U64 count = nonsolid_block_fluid_site_counts[i];
+            if (count > std::numeric_limits<U64>::max() - cumulative_fluid_sites[i])
+                throw (Exception() << "Fluid site count exceeds 64-bit range");
+            cumulative_fluid_sites[i + 1] = cumulative_fluid_sites[i] + count;
+        }
 
         if (cumulative_fluid_sites.back() != total_sites)
             throw (Exception() << "Octree is inconsistent");
