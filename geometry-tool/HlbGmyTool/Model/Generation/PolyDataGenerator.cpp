@@ -190,7 +190,8 @@ void PolyDataGenerator::CreateCGALPolygon(void) {
          << " halfedges " << ClippedCGALSurface->size_of_border_halfedges()
          << " border halfedges " << ClippedCGALSurface->size_of_vertices()
          << " vertices " << endl;
-    bool write_out = true;
+    // Debugging aid: set to true to dump the capped surface to the cwd.
+    bool write_out = false;
     if (write_out) {
       std::ofstream out;
       out.open("exportedsurface.off");

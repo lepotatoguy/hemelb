@@ -88,7 +88,9 @@ class PlacedIoletListController(ListController):
         ListController.__init__(
             self, delegate, SelectionControllerClass=PlacedIoletController
         )
-        self.translator = QuickTranslator(self.IoletToPlacedIolet, lambda x: x)
+        self.translator = QuickTranslator(
+            self.IoletToPlacedIolet, lambda x: x, forward_errors=(ValueError,)
+        )
         return
 
     def IoletToPlacedIolet(self, iolet):

@@ -3,6 +3,7 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
+import os
 from pathlib import Path
 import shutil
 import sys

@@ -10,6 +10,7 @@ import wx
 from .Layout import H, V, StretchSpacer, RectSpacer
 from .VectorCtrl import VectorCtrl, VectorCtrlMapper
 from .IoletListCtrl import IoletListCtrl
+from ..Controller.ProfileController import StartedFromTerminal
 
 from ..Bindings.WxMappers import (
     WxWidgetMapper,
@@ -75,6 +76,8 @@ class ControlPanel(wx.Panel):
 
         self.debugButton = wx.Button(self, label="DEBUG")
         controller.BindAction("Debug", WxActionBinding(self.debugButton, wx.EVT_BUTTON))
+        # Only useful when a terminal can drive the debugger (see Debug()).
+        self.debugButton.Show(StartedFromTerminal())
 
         self.openProfileButton = wx.Button(self, label="Open Profile")
         controller.BindAction(

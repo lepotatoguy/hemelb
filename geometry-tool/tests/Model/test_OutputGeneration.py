@@ -14,11 +14,31 @@ from HlbGmyTool.Model import OutputGeneration
 from HlbGmyTool.Model.Profile import Profile
 from HlbGmyTool.Model.Vector import Vector
 from HlbGmyTool.Model.Iolets import Iolet
+from vtk import vtkSphereSource, vtkTriangleFilter
 from hlb.parsers.geometry.simple import ConfigLoader
 from hlb.utils.xml_compare import XmlChecker
 import fixtures
 
 dataDir = os.path.join(os.path.split(__file__)[0], "data")
+
+
+def test_pipeline_walk_stops_at_source():
+    source = vtkSphereSource()
+    disconnected_filter = vtkTriangleFilter()
+    triangle_filter = vtkTriangleFilter()
+    triangle_filter.SetInputConnection(source.GetOutputPort())
+
+    assert OutputGeneration.getpipeline(disconnected_filter) == [disconnected_filter]
+    assert OutputGeneration.getpipeline(triangle_filter) == [source, triangle_filter]
+
+
+def test_pipeline_walk_reports_unexpected_failures():
+    class FailingAlgorithm:
+        def GetNumberOfInputPorts(self):
+            raise RuntimeError("pipeline failed")
+
+    with pytest.raises(RuntimeError, match="pipeline failed"):
+        OutputGeneration.getpipeline(FailingAlgorithm())
 
 
 class TestPolyDataGenerator:
@@ -43,6 +63,139 @@ class TestPolyDataGenerator:
         assert filecmp.cmp(outGmyFileName, os.path.join(dataDir, "test.gmy"))
         xmlChecker = XmlChecker.from_path(os.path.join(dataDir, "test.xml"))
         xmlChecker.check_path(outXmlFileName)
+
+    @staticmethod
+    def _test_profile(tmpdir):
+        p = Profile()
+        p.LoadFromFile(os.path.join(dataDir, "test.pr2"))
+        p.OutputGeometryFile = tmpdir.join("test.gmy").strpath
+        p.OutputXmlFile = tmpdir.join("test.xml").strpath
+        return p
+
+    @pytest.mark.parametrize("period, written", [(None, "1"), (0.8, "0.8")])
+    def test_cosine_period_written_to_xml(self, tmpdir, period, written):
+        p = self._test_profile(tmpdir)
+        if period is not None:
+            p.PulsePeriodSeconds = period
+        OutputGeneration.PolyDataGenerator(p).Execute()
+        import xml.etree.ElementTree as ET
+
+        periods = [e.get("value") for e in ET.parse(p.OutputXmlFile).iter("period")]
+        assert periods == [written, written]  # one inlet and one outlet
+
+    def test_valid_profile_has_no_warnings(self, tmpdir):
+        generator = OutputGeneration.PolyDataGenerator(self._test_profile(tmpdir))
+        assert generator.Warnings == []
+
+    def test_warns_when_an_iolet_cannot_reach_the_surface(self, tmpdir):
+        p = self._test_profile(tmpdir)
+        p.Iolets[0].Radius = 0.01
+        generator = OutputGeneration.PolyDataGenerator(p)
+        assert len(generator.Warnings) == 1
+        assert "Inlet1 does not reach the surface" in generator.Warnings[0]
+
+    def test_warns_when_the_seed_point_is_outside(self, tmpdir):
+        p = self._test_profile(tmpdir)
+        p.SeedPoint = Vector(50.0, 50.0, 50.0)
+        generator = OutputGeneration.PolyDataGenerator(p)
+        assert len(generator.Warnings) == 1
+        assert "seed point is not inside" in generator.Warnings[0]
+
+    @pytest.mark.parametrize("capped", [True, False])
+    @pytest.mark.parametrize("end_z, expect_warning", [(4.5, False), (5.5, True)])
+    def test_open_and_closed_tubes(self, tmpdir, capped, end_z, expect_warning):
+        # Closed ("can") and open ("pipe") surfaces behave the same: open ends
+        # are capped as wall, and iolets must lie on or inside the vessel end.
+        from vtk import (
+            vtkCylinderSource,
+            vtkSTLWriter,
+            vtkTransform,
+            vtkTransformPolyDataFilter,
+            vtkTriangleFilter,
+        )
+        from HlbGmyTool.Model.Iolets import Inlet, Outlet
+
+        source = vtkCylinderSource()
+        source.SetRadius(1.0)
+        source.SetHeight(10.0)
+        source.SetResolution(32)
+        source.SetCapping(capped)
+        rotate = vtkTransform()
+        rotate.RotateX(90)
+        transform = vtkTransformPolyDataFilter()
+        transform.SetTransform(rotate)
+        transform.SetInputConnection(source.GetOutputPort())
+        triangles = vtkTriangleFilter()
+        triangles.SetInputConnection(transform.GetOutputPort())
+        writer = vtkSTLWriter()
+        writer.SetFileName(tmpdir.join("tube.stl").strpath)
+        writer.SetInputConnection(triangles.GetOutputPort())
+        writer.Write()
+
+        p = Profile()
+        p.StlFile = tmpdir.join("tube.stl").strpath
+        p.VoxelSize = 0.2
+        p.SeedPoint = Vector(0.0, 0.0, 0.0)
+        p.Iolets.append(
+            Inlet(Centre=Vector(0, 0, -end_z), Normal=Vector(0, 0, 1), Radius=1.5)
+        )
+        p.Iolets.append(
+            Outlet(Centre=Vector(0, 0, end_z), Normal=Vector(0, 0, -1), Radius=1.5)
+        )
+        p.OutputGeometryFile = tmpdir.join("tube.gmy").strpath
+        p.OutputXmlFile = tmpdir.join("tube.xml").strpath
+
+        generator = OutputGeneration.PolyDataGenerator(p)
+        outside = [w for w in generator.Warnings if "lies outside the vessel" in w]
+        assert len(outside) == (2 if expect_warning else 0)
+
+    @pytest.mark.parametrize("radius, warns", [(1.02, True), (1.5, False)])
+    def test_warns_when_an_iolet_only_just_reaches_the_wall(
+        self, tmpdir, radius, warns
+    ):
+        # A radius barely larger than the vessel (radius 1) does not open it.
+        # The iolets are 2 from the tube ends, so the side wall is nearest.
+        from vtk import (
+            vtkCylinderSource,
+            vtkSTLWriter,
+            vtkTransform,
+            vtkTransformPolyDataFilter,
+            vtkTriangleFilter,
+        )
+        from HlbGmyTool.Model.Iolets import Inlet, Outlet
+
+        source = vtkCylinderSource()
+        source.SetRadius(1.0)
+        source.SetHeight(10.0)
+        source.SetResolution(32)
+        rotate = vtkTransform()
+        rotate.RotateX(90)
+        transform = vtkTransformPolyDataFilter()
+        transform.SetTransform(rotate)
+        transform.SetInputConnection(source.GetOutputPort())
+        triangles = vtkTriangleFilter()
+        triangles.SetInputConnection(transform.GetOutputPort())
+        writer = vtkSTLWriter()
+        writer.SetFileName(tmpdir.join("tube.stl").strpath)
+        writer.SetInputConnection(triangles.GetOutputPort())
+        writer.Write()
+
+        p = Profile()
+        p.StlFile = tmpdir.join("tube.stl").strpath
+        p.VoxelSize = 0.2
+        p.SeedPoint = Vector(0.0, 0.0, 0.0)
+        p.Iolets.append(
+            Inlet(Centre=Vector(0, 0, -3.0), Normal=Vector(0, 0, 1), Radius=radius)
+        )
+        p.Iolets.append(
+            Outlet(Centre=Vector(0, 0, 3.0), Normal=Vector(0, 0, -1), Radius=radius)
+        )
+        p.OutputGeometryFile = tmpdir.join("tube.gmy").strpath
+        p.OutputXmlFile = tmpdir.join("tube.xml").strpath
+
+        generator = OutputGeneration.PolyDataGenerator(p)
+        barely = [w for w in generator.Warnings if "only just reaches" in w]
+        assert len(barely) == (2 if warns else 0)
 
     def test_cube(self, tmpdir):
         """Generate a gmy from a simple cubic profile and check the output"""

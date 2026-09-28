@@ -5,6 +5,7 @@
 
 import numpy as np
 import os.path
+import sys
 
 from vtk import (
     vtkClipPolyData,
@@ -30,10 +31,22 @@ from vtk import (
     vtkSphere,
     vtkPolyDataNormals,
     vtkSTLWriter,
+    vtkImplicitPolyDataDistance,
+    vtkSelectEnclosedPoints,
 )
 
-from vmtk.vtkvmtk import vtkvmtkPolyDataBoundaryExtractor
-from vmtk.vtkvmtk import vtkvmtkBoundaryReferenceSystems
+from vtk.util.numpy_support import vtk_to_numpy
+
+try:
+    from vmtk.vtkvmtk import vtkvmtkPolyDataBoundaryExtractor
+    from vmtk.vtkvmtk import vtkvmtkBoundaryReferenceSystems
+except ImportError as err:
+    raise ImportError(
+        "The geometry tool needs VMTK 1.5, which is only available from "
+        "conda-forge (not pip). Create the environment with "
+        "'conda env create -f geometry-tool/conda-environment.yml' and "
+        "activate it; see doc/user/geometry-tool.md."
+    ) from err
 
 # from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
 
@@ -157,7 +170,81 @@ class PolyDataGenerator(GeometryGenerator):
         self.generator.SetOriginWorking(*(float(x) for x in originWorking))
         self.generator.SetSiteCounts(*(int(x) for x in nSites))
         self.OriginMetres = Vector(originWorking * self.VoxelSizeMetres)
+
+        self.Warnings = self._FindSilentProblems()
+        for warning in self.Warnings:
+            print("Warning: " + warning, file=sys.stderr)
         return
+
+    def _FindSilentProblems(self):
+        """Return warnings for inputs that generate without error but give
+        the wrong fluid region. Generation itself is not changed.
+        """
+        warnings = []
+        profile = self._profile
+
+        # An iolet can only cut the vessel if the surface comes within its
+        # radius of its centre. If not, that end of the vessel stays closed.
+        stl = profile.StlReader.GetOutput()
+        distance = vtkImplicitPolyDataDistance()
+        distance.SetInput(stl)
+        vertices = vtk_to_numpy(stl.GetPoints().GetData())
+        for iolet in profile.Iolets:
+            centre = np.array([iolet.Centre.x, iolet.Centre.y, iolet.Centre.z])
+            nearest = abs(distance.EvaluateFunction(*centre))
+            if nearest > iolet.Radius:
+                warnings.append(
+                    "%s does not reach the surface: the nearest wall is %g from its "
+                    "centre but its radius is %g (STL units), so it cuts nothing. "
+                    "Check its centre, or make the radius larger than the vessel."
+                    % (iolet.Name, nearest, iolet.Radius)
+                )
+                continue
+            if nearest > 0.9 * iolet.Radius:
+                warnings.append(
+                    "%s only just reaches the surface: the nearest wall is %g from "
+                    "its centre and its radius is %g (STL units). It may not open "
+                    "the vessel; make the radius comfortably larger than the vessel."
+                    % (iolet.Name, nearest, iolet.Radius)
+                )
+            # The iolet removes the surface behind its plane, within its
+            # radius. If every nearby vertex is on the fluid side, the iolet is
+            # beyond the end of the vessel and removes nothing.
+            normal = np.array([iolet.Normal.x, iolet.Normal.y, iolet.Normal.z])
+            normal = normal / np.linalg.norm(normal)
+            offsets = vertices - centre
+            near = np.linalg.norm(offsets, axis=1) <= iolet.Radius
+            if near.any() and (offsets[near] @ normal).min() > 1e-3 * iolet.Radius:
+                warnings.append(
+                    "%s lies outside the vessel: its plane is beyond the end of the "
+                    "surface, so it opens nothing and that end stays closed. Move "
+                    "its centre onto or just inside the vessel end, with the normal "
+                    "pointing into the fluid." % iolet.Name
+                )
+
+        # The seed point picks which piece of the clipped surface is kept, so
+        # it must lie inside the fluid.
+        if not profile.HaveValidSeedPoint:
+            warnings.append("the seed point is not set.")
+            return warnings
+        seed = vtkPoints()
+        seed.InsertNextPoint(
+            profile.SeedPoint.x / profile.VoxelSize,
+            profile.SeedPoint.y / profile.VoxelSize,
+            profile.SeedPoint.z / profile.VoxelSize,
+        )
+        seedData = vtkPolyData()
+        seedData.SetPoints(seed)
+        enclosed = vtkSelectEnclosedPoints()
+        enclosed.SetInputData(seedData)
+        enclosed.SetSurfaceData(self.ClippedSurface)
+        enclosed.Update()
+        if not enclosed.IsInside(0):
+            warnings.append(
+                "the seed point is not inside the capped surface, so the wrong "
+                "part of the surface may have been kept. Place it inside the vessel."
+            )
+        return warnings
 
     def _ComputeOriginWorking(self):
         """
@@ -662,19 +749,24 @@ class PolyDataCloser(vtkProgrammableFilter):
 
 def getpreviousstage(algo):
     """Given a vtkAlgorithm, get the previous algorithm in its pipeline."""
-    return algo.GetInputConnection(0, 0).GetProducer()
+    if algo.GetNumberOfInputPorts() == 0:
+        return None
+    if algo.GetNumberOfInputConnections(0) == 0:
+        return None
+    connection = algo.GetInputConnection(0, 0)
+    if connection is None:
+        return None
+    return connection.GetProducer()
 
 
 def getpipeline(last):
     """Return a list of all the algorithms in a pipeline, given the last one."""
     pipe = [last]
     while True:
-        try:
-            prev = getpreviousstage(pipe[0])
-            pipe.insert(0, prev)
-        except:
+        prev = getpreviousstage(pipe[0])
+        if prev is None:
             break
-        continue
+        pipe.insert(0, prev)
 
     return pipe
 

@@ -281,3 +281,48 @@ def test_copy():
 
     with pytest.raises(IndexError):
         old[3]
+
+
+def test_list_changes_report_non_negative_indices():
+    # Views index their rows from 0, so a negative index in a change
+    # notification (as produced by pop() or del lst[-1]) breaks them.
+    lst = ObservableList([10, 20, 30])
+    seen = []
+    lst.AddObserver("@REMOVAL", lambda change: seen.append(("rem", change.index)))
+    lst.AddObserver("@REPLACEMENT", lambda change: seen.append(("rep", change.index)))
+    lst.AddObserver("@INSERTION", lambda change: seen.append(("ins", change.index)))
+
+    lst.pop()
+    lst[-1] = 25
+    del lst[-2]
+    lst.insert(-1, 5)
+
+    assert seen == [("rem", 2), ("rep", 1), ("rem", 0), ("ins", 0)]
+    assert list(lst) == [5, 25]
+
+
+def test_profile_reload_keeps_list_view_in_step():
+    # Reloading replaces every element; a view shadowing the list by index
+    # must end up with the same contents (the GUI iolet list does this).
+    lst = ObservableList(["a", "b"])
+    view = list(lst)
+
+    def on_change(change):
+        if change.key == "@REMOVAL":
+            if not 0 <= change.index < len(view):
+                raise IndexError("invalid item index %d" % change.index)
+            del view[change.index]
+        elif change.key == "@INSERTION":
+            view.insert(change.index, lst[change.index])
+
+    lst.AddObserver("@REMOVAL", on_change)
+    lst.AddObserver("@INSERTION", on_change)
+
+    # What Observable._Update does when a profile is loaded
+    while len(lst):
+        lst.pop()
+    for item in ["x", "y", "z"]:
+        lst.append(item)
+
+    assert list(lst) == ["x", "y", "z"]
+    assert view == ["x", "y", "z"]
