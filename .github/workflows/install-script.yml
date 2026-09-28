@@ -33,14 +33,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-14 runs on Apple Silicon with AppleClang
-        os: [ubuntu-24.04, macos-14]
+        # macos-14 runs on Apple Silicon with AppleClang (osx-64 geometry tool
+        # environment under Rosetta 2); macos-13 is Intel (native osx-64)
+        os: [ubuntu-24.04, macos-14, macos-13]
 
     steps:
       - uses: actions/checkout@v5
 
       - name: Rosetta 2 (for the osx-64 geometry tool environment)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
         run: sudo softwareupdate --install-rosetta --agree-to-license || true
 
       - name: Run the install script
