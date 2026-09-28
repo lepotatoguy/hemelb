@@ -157,25 +157,97 @@ check the file and the error instead of ignoring it.
 
 ## Run the command-line generator
 
-The installed command is `hlb-gmy-cli`. It takes a profile file and generates
-the geometry and XML files described by that profile:
+`hlb-gmy-cli` does what the GUI's "Generate" button does, without a window.
+It needs a profile, because inlets and outlets can only be defined there
+(create one in the GUI and use "Save Profile"). Every other setting can be
+overridden on the command line; `hlb-gmy-cli --help` lists them all.
 
 ```
-hlb-gmy-cli profile.pr2
+hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
+                    [--voxel METRES] [--timestep SECONDS] [--duration SECONDS]
+                    [--geometry PATH] [--xml PATH]
 ```
 
-Values can be overridden for one run without editing the profile:
+### What a run does
+
+1. **Load the profile** (`.pr2` YAML, or legacy `.pro`). Relative paths in it
+   are resolved from the profile's folder. Setting the STL computes its
+   average edge length, which becomes the voxel size if the profile has none.
+2. **Apply overrides** from the command line. The profile file itself is not
+   changed.
+3. **Check the inputs.** The STL must exist, the voxel size must be
+   positive, the seed point must be set, and the outputs must end in `.gmy`
+   and `.xml` in folders that exist. Problems are reported together and the
+   command exits with status 2.
+4. **Clip and cap the surface.** At each inlet and outlet the surface is cut
+   by the iolet's plane and a sphere of the iolet's radius, the opening is
+   capped and labelled with the iolet's id, and the surface piece closest
+   to the seed point is kept.
+5. **Voxelise.** The capped surface is scaled by the voxel size and every
+   lattice site is classified as fluid or solid, in blocks of 8x8x8 sites.
+   The domain leaves at least one solid site beyond the surface on each side.
+6. **Write the `.gmy`** and then the **`.xml`**, and print the setup time.
+
+### Options
+
+| Option | Profile field | Meaning |
+| --- | --- | --- |
+| `PROFILE` | | `.pr2` or `.pro` file to start from |
+| `--stl PATH` | `StlFile` | Surface to voxelise. A new STL resets the voxel size to its average edge length unless `--voxel` is also given. |
+| `--stl-units {m,mm,um}` | `StlFileUnitId` (0, 1, 2) | Units of the STL coordinates. The seed point and the profile's iolet centres and radii use the same units. |
+| `--seed X Y Z` | `SeedPoint` | A point inside the fluid, in STL units. Used only to pick which surface piece to keep after each iolet cut. |
+| `--voxel METRES` | `VoxelSize` (STL units) | Lattice spacing, given in metres. Halving it gives about 8 times the sites. |
+| `--timestep SECONDS` | `TimeStepSeconds` | Written to the XML. Not adjusted when the voxel size changes. |
+| `--duration SECONDS` | `DurationSeconds` | Number of steps in the XML is `round(duration / time step)`. |
+| `--geometry PATH` | `OutputGeometryFile` | Geometry output. Relative to the current folder, not the profile's. |
+| `--xml PATH` | `OutputXmlFile` | XML output. Relative to the current folder. It refers to the geometry by a path relative to itself. |
+
+### What the XML contains
+
+| Element | Source |
+| --- | --- |
+| `simulation/step_length`, `steps` | `TimeStepSeconds`, `round(DurationSeconds / TimeStepSeconds)` |
+| `simulation/voxel_size`, `origin` | Voxel size and domain origin, in metres |
+| `simulation/stresstype` | Always 1 |
+| `geometry/datafile` | Path of the `.gmy`, relative to the XML |
+| `inlets/inlet`, `outlets/outlet` | One per iolet: a `pressure`/`cosine` condition with `mean` = Pressure.x (mmHg), `amplitude` = Pressure.y (mmHg), `phase` = Pressure.z (rad), `period` fixed at 1 s; the iolet `normal`; its centre in metres as `position` |
+| `visualisation` | Fixed defaults |
+| `initialconditions` | Uniform pressure 0 mmHg |
+
+There is no `<properties>` section, so HemeLB writes no field output until
+you add one (see [XmlConfiguration.md](XmlConfiguration.md)). Inlet and
+outlet types other than cosine pressure also have to be edited by hand.
+
+### Checking the result
 
 ```
-hlb-gmy-cli profile.pr2 \
-  --geometry output.gmy \
-  --xml output.xml \
-  --voxel 5e-5
+hlb-gmy-countsites output.gmy        # number of fluid sites
+hlb-gmy-selfconsistent output.gmy    # checks the file's internal consistency
+mpirun -n 4 hemelb -in output.xml -out results
 ```
 
-The `--voxel` value is in metres. The `--geometry` and `--xml` options select
-the output files. Legacy `.pro` files are accepted for migration, but `.pr2`
-files are recommended for reproducible runs. Convert a legacy profile with:
+### Things to watch
+
+These were found by running the tool on the test profiles in the repository.
+
+- **Seed point.** It is not checked to be inside the vessel. A seed point
+  far outside the surface still gave the same result on a simple vessel,
+  because it only chooses among the pieces left after clipping. On branched
+  geometries a wrong seed point can keep the wrong piece.
+- **Iolet radius.** An iolet whose radius does not cover the vessel
+  cross-section does not cut it, and no error is raised. On the test vessel
+  a too-small inlet changed the fluid site count from 6,803 to 7,797.
+- **Voxel size and units.** `--voxel` is in metres whatever the STL units.
+  Reading a millimetre STL as metres (`--stl-units m`) with a fine voxel size
+  makes the grid a thousand times too large; the writer then stops with
+  "Geometry header is too large for the file writer".
+- **Time step.** Changing the voxel size does not change the time step.
+  Choose the time step for the new grid yourself.
+- **Output folders** must already exist.
+
+### Legacy `.pro` profiles
+
+Convert a legacy `.pro` profile to `.pr2` with:
 
 ```
 hlb-pro2pr2 old-profile.pro new-profile.pr2
@@ -200,8 +272,6 @@ Notes on legacy `.pro` files:
 - An example of the expected output is
   `Code/tests/pythontests/resources/poiseuille_flow_test.pr2`.
 
-Use `hlb-gmy-cli --help` for the complete option list and examples.
-
 
 ## Profile (.pr2) files
 
@@ -211,6 +281,18 @@ geometry file. Saving this is highly recommended for reproducibility!
 It's a YAML file which can be edited manually. Floating point values
 are stored by default in hexadecimal to avoid precision loss
 (https://docs.python.org/3/library/stdtypes.html#float.hex) but can be
-set in decimal if more convenient.
+set in decimal if more convenient. Integers (`3`), decimals (`0.5`,
+`1.0e-5`) and exponents without a decimal point (`1e-5`, which YAML reads
+as text) are all accepted.
+
+| Field | Meaning |
+| --- | --- |
+| `StlFile` | Input surface |
+| `StlFileUnitId` | Units of the STL: 0 = m, 1 = mm, 2 = µm |
+| `VoxelSize` | Lattice spacing, in STL units |
+| `SeedPoint` (`x`, `y`, `z`) | A point inside the fluid, in STL units |
+| `Iolets` | List of inlets and outlets, each with `Type` (`Inlet` or `Outlet`), `Name`, `Centre`, `Normal` (pointing into the fluid), `Radius` (STL units) and `Pressure` (`x` mean mmHg, `y` amplitude mmHg, `z` phase rad) |
+| `TimeStepSeconds`, `DurationSeconds` | Simulation time step and length |
+| `OutputGeometryFile`, `OutputXmlFile` | Outputs, relative to the profile |
 
 Paths in a profile are interpreted relative to that profile file's location.

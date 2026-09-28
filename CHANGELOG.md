@@ -20,6 +20,10 @@ this file records what changed and how it was checked at the time.
 - `Scripts/install_hemelb.sh` installs HemeLB, the geometry tool and the
   Python tools on macOS and Debian/Ubuntu ([guide](doc/user/install.md)).
 - `hlb-pro2pr2` can run as `python -m HlbGmyTool.scripts.pro_to_pr2`.
+- `hlb-gmy-cli` can override every profile setting except the iolets
+  (`--stl`, `--stl-units`, `--seed`, `--timestep`, `--duration`, plus the
+  existing `--voxel`, `--geometry`, `--xml`), and `--help` describes each
+  step of a run ([guide](doc/user/geometry-tool.md#run-the-command-line-generator)).
 
 ### Fixed
 
@@ -37,6 +41,13 @@ this file records what changed and how it was checked at the time.
 - Geometry tool: iolet intersection uses the squared radius and rejects
   hits outside the segment; error handling and the STL preview are fixed.
 - `hlb-dump-extracted-properties` exports vector fields as separate columns.
+- `hlb-gmy-cli` checks its inputs before generating: a missing STL used to
+  crash the generator (segmentation fault) and a zero voxel size ended in a
+  Python traceback. It also no longer leaves `exportedsurface.off` in the
+  current folder.
+- Profiles accept decimal exponents written without a point (`1e-5`), which
+  YAML reads as text; they failed with "invalid hexadecimal floating-point
+  string".
 
 ### Build
 

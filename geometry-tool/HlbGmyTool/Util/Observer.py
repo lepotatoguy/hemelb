@@ -388,9 +388,13 @@ class Observable(object):
             else:
                 if checker(source, attr):
                     newval = getter(source, attr)
-                    # Floats can (should) be stored as hex FP
+                    # Floats are stored as hex FP, but YAML also reads
+                    # decimals such as 1e-5 (no ".") as strings.
                     if isinstance(val, float) and isinstance(newval, str):
-                        newval = float.fromhex(newval)
+                        try:
+                            newval = float.fromhex(newval)
+                        except ValueError:
+                            newval = float(newval)
                     setattr(self, attr, newval)
                 pass
             continue
