@@ -16,10 +16,22 @@
 
 #include <algorithm>
 #include <climits>
+#include <cmath>
 #include <numeric>
 
 namespace hemelb::extraction {
   namespace fmt = hemelb::io::formats;
+
+  // The reader expects each checkpoint record to start with the 8-byte
+  // timestep, which LocalPropertyOutput writes from the I/O rank before its
+  // own sites. That puts it first only if the I/O rank is rank 0.
+  static_assert(net::IOCommunicator::IO_RANK == 0,
+                "Checkpoint records assume the I/O rank writes first");
+
+  void LocalDistributionInput::ExpectGeometry(PhysicalDistance voxelSize, PhysicalPosition const& origin) {
+    expectedVoxelSize = voxelSize;
+    expectedOrigin = origin;
+  }
 
   LocalDistributionInput::LocalDistributionInput(std::filesystem::path dataFilePath,
 						 std::optional<std::filesystem::path> maybeOffsetPath,
@@ -233,6 +245,21 @@ namespace hemelb::extraction {
 	  preambleReader.read(origin[0]);
 	  preambleReader.read(origin[1]);
 	  preambleReader.read(origin[2]);
+
+	  if (expectedVoxelSize) {
+	    // Written from the same double values, so equal up to rounding.
+	    auto const tol = 1e-9 * std::abs(*expectedVoxelSize);
+	    auto const close = [tol](double a, double b) { return std::abs(a - b) <= tol; };
+	    if (!close(voxelSize, *expectedVoxelSize))
+	      throw Exception() << "Checkpoint was written with voxel size " << voxelSize
+				<< " m but this run uses " << *expectedVoxelSize << " m";
+	    for (int i = 0; i < 3; ++i)
+	      if (!close(origin[i], expectedOrigin[i]))
+		throw Exception() << "Checkpoint was written with origin (" << origin[0] << ", "
+				  << origin[1] << ", " << origin[2] << ") m but this run uses ("
+				  << expectedOrigin[0] << ", " << expectedOrigin[1] << ", "
+				  << expectedOrigin[2] << ") m";
+	  }
 	}
 	// Obtain the total number of sites, fields & header len
 	uint64_t numberOfSites;

@@ -48,6 +48,12 @@ namespace hemelb
       //
       void LoadDistribution(geometry::FieldData* latDat, std::optional<LatticeTimeStep>& initalTime);
 
+      // Require the checkpoint to have been written with this voxel size and
+      // origin (metres). Without it, only the site count and coordinates are
+      // checked, so a checkpoint from a differently scaled or shifted run
+      // would load silently.
+      void ExpectGeometry(PhysicalDistance voxelSize, PhysicalPosition const& origin);
+
     private:
 
       void ReadExtractionHeaders(net::MpiFile&, const unsigned NUMVECTORS);
@@ -64,6 +70,8 @@ namespace hemelb
       uint64_t checkpointSiteCount;
       uint64_t timestep;
       uint64_t allCoresWriteLength;
+      std::optional<PhysicalDistance> expectedVoxelSize;
+      PhysicalPosition expectedOrigin;
     };
   }
 }

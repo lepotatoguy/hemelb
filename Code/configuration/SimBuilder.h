@@ -111,6 +111,13 @@ namespace hemelb::configuration {
         ) const;
     };
 
+    // Stop with a clear message if the geometry refers to more inlets or
+    // outlets than the configuration defines. Otherwise the boundary code
+    // indexes past the end of its iolet list and crashes.
+    void CheckIoletIds(geometry::Domain const& domain,
+                       std::size_t nInlets, std::size_t nOutlets,
+                       net::MpiCommunicator const& comm);
+
 
     template <typename T>
     void SimBuilder::operator()(T& control) const {
@@ -144,6 +151,7 @@ namespace hemelb::configuration {
         control.domainData = std::make_shared<geometry::Domain>(lat_info,
                                                                 readGeometryData,
                                                                 ioComms);
+        CheckIoletIds(*control.domainData, config.GetInlets().size(), config.GetOutlets().size(), ioComms);
         log::Logger::Log<log::Info, log::Singleton>("Initialising field data.");
         control.fieldData = std::make_shared<geometry::FieldData>(control.domainData);
         things_to_report.push_back(control.domainData.get());

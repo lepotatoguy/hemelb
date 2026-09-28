@@ -6,6 +6,8 @@
 """Exercise checkpoint restarts with a changed MPI process count."""
 
 import argparse
+import os
+import shlex
 from pathlib import Path
 import shutil
 import struct
@@ -17,10 +19,12 @@ import xml.etree.ElementTree as ET
 RESOURCE_DIR = Path(__file__).resolve().parent / "resources"
 
 
-def make_config(path, checkpoint=None, offsets=None):
+def make_config(path, checkpoint=None, offsets=None, changes=None):
     tree = ET.parse(RESOURCE_DIR / "large_cylinder.xml")
     root = tree.getroot()
     root.find("simulation/steps").set("value", "4")
+    for element, value in (changes or {}).items():
+        root.find(element).set("value", value)
     initial = root.find("initialconditions")
     if checkpoint is not None:
         initial.remove(initial.find("pressure"))
@@ -31,8 +35,12 @@ def make_config(path, checkpoint=None, offsets=None):
     tree.write(path, encoding="unicode", xml_declaration=True)
 
 
+# Extra launcher flags, e.g. MPIRUN_FLAGS=--oversubscribe on small CI machines.
+MPIRUN_FLAGS = shlex.split(os.environ.get("MPIRUN_FLAGS", ""))
+
+
 def run(launcher, executable, ranks, config, output):
-    command = [launcher, "-np", str(ranks), executable, "-in", str(config), "-out", str(output)]
+    command = [launcher, *MPIRUN_FLAGS, "-np", str(ranks), executable, "-in", str(config), "-out", str(output)]
     result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if result.returncode:
         raise RuntimeError(f"{' '.join(command)} failed:\n{result.stdout}")
@@ -69,6 +77,31 @@ def saved_sites(path):
     return sites
 
 
+def check_rejects_other_geometry(work, launcher, executable):
+    """A checkpoint must not load into a run with a different voxel size or origin."""
+    saved = work / "geometry-saved"
+    fresh = work / "geometry-fresh.xml"
+    make_config(fresh)
+    run(launcher, executable, 1, fresh, saved)
+    checkpoint = checkpoint_at(saved, 2)
+    offsets = saved / "Extracted/checkpoint_.off"
+    cases = {
+        "voxel size": {"simulation/voxel_size": "1.5e-06"},
+        "origin": {"simulation/origin": "(-1.0e-05,-1.05e-05,-2.45248049736e-05)"},
+    }
+    for label, changes in cases.items():
+        config = work / f"geometry-{label.replace(' ', '-')}.xml"
+        make_config(config, checkpoint, offsets, changes)
+        try:
+            run(launcher, executable, 1, config, work / f"geometry-{label.replace(' ', '-')}-out")
+        except RuntimeError as error:
+            if f"Checkpoint was written with {label}" not in str(error):
+                raise AssertionError(f"{label}: failed for another reason:\n{error}")
+            print(f"different {label}: rejected")
+        else:
+            raise AssertionError(f"different {label}: checkpoint was accepted")
+
+
 def check_direction(work, launcher, executable, writers, readers):
     label = f"{writers}-to-{readers}"
     fresh = work / f"{label}-fresh.xml"
@@ -101,6 +134,7 @@ def main():
         check_direction(work, args.mpirun, str(args.hemelb.resolve()), 1, 2)
         check_direction(work, args.mpirun, str(args.hemelb.resolve()), 2, 4)
         check_direction(work, args.mpirun, str(args.hemelb.resolve()), 1, 1)
+        check_rejects_other_geometry(work, args.mpirun, str(args.hemelb.resolve()))
 
 
 if __name__ == "__main__":

@@ -74,7 +74,10 @@ namespace hemelb::geometry::decomposition
         auto const n_nonsolid = nonsolid_block_fluid_site_counts.size();
 
         if (n_nonsolid < comm_size)
-            throw (Exception() << "More MPI processes than blocks - ParMETIS will be unhappy.");
+            throw (Exception() << "The geometry has " << n_nonsolid << " block(s) containing fluid but HemeLB is"
+                   << " running on " << comm_size << " MPI processes. Each process needs at least one"
+                   << " such block: run with at most " << n_nonsolid << " processes (mpirun -n "
+                   << n_nonsolid << "), or regenerate the geometry with a smaller voxel size.");
         std::vector<U64> cumulative_fluid_sites(n_nonsolid + 1, 0);
         for (std::size_t i = 0; i < n_nonsolid; ++i) {
             const U64 count = nonsolid_block_fluid_site_counts[i];

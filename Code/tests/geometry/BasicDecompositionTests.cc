@@ -51,6 +51,13 @@ namespace hemelb::tests {
             REQUIRE(std::count(owners.begin(), owners.end(), rank) >= 1);
     }
 
+    TEST_CASE("Basic decomposition explains too many processes for the blocks", "[geometry]") {
+        REQUIRE_THROWS_WITH(DecomposeCounts({5, 7}, 12, 3),
+                            Catch::Contains("2 block(s) containing fluid") &&
+                            Catch::Contains("running on 3 MPI processes") &&
+                            Catch::Contains("mpirun -n 2"));
+    }
+
     TEST_CASE("Basic decomposition rejects a site count overflow", "[geometry]") {
         REQUIRE_THROWS_AS(DecomposeCounts({std::numeric_limits<U64>::max(), 1}, 0, 2), Exception);
     }

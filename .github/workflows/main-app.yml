@@ -131,6 +131,11 @@ jobs:
         MPIRUN_FLAGS: --oversubscribe
       run: ./run.sh
 
+    - name: Restart checkpoints on different process counts
+      env:
+        MPIRUN_FLAGS: --oversubscribe
+      run: python3 Code/tests/checkpoint_restart_mpi.py --hemelb "$(command -v hemelb)"
+
     - name: Store results on error
       if: failure()
       uses: actions/upload-artifact@v6

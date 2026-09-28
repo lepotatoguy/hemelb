@@ -53,7 +53,11 @@ namespace hemelb::lb {
     };
     
     struct CheckpointInitialCondition : InitialConditionBase {
-      CheckpointInitialCondition(std::optional<LatticeTimeStep> t0, std::filesystem::path cp, std::optional<std::filesystem::path> maybeOff);
+      // voxelSize and origin (metres) describe the current run; if given,
+      // the checkpoint must have been written with the same values.
+      CheckpointInitialCondition(std::optional<LatticeTimeStep> t0, std::filesystem::path cp, std::optional<std::filesystem::path> maybeOff,
+                                 std::optional<PhysicalDistance> voxelSize = std::nullopt,
+                                 PhysicalPosition origin = PhysicalPosition::Zero());
       
       template<class LatticeType>
       void SetFs(geometry::FieldData* latDat, const net::IOCommunicator& ioComms) const;
@@ -61,6 +65,8 @@ namespace hemelb::lb {
     private:
       std::filesystem::path cpFile;
       std::optional<std::filesystem::path> maybeOffFile;
+      std::optional<PhysicalDistance> expectedVoxelSize;
+      PhysicalPosition expectedOrigin;
     };
 
     class InitialCondition : std::variant<EquilibriumInitialCondition, CheckpointInitialCondition> {
