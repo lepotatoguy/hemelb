@@ -4,7 +4,7 @@
 # license in the file LICENSE.
 
 import os.path
-import xdrlib
+from ..utils import pyxdr as xdrlib
 import numpy as np
 
 from . import HemeLbMagicNumber

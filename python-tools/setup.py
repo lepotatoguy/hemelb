@@ -11,12 +11,9 @@ import numpy as np
 ext_modules = [
     Extension(
         "hlb.utils.xdr",
-        [
-            "hlb/utils/xdr.pyx",
-            "hlb/utils/xdr.pxd",
-            "hlb/utils/cxdr.pxd",
-            "hlb/utils/XdrSerialisation.c",
-        ],
+        ["hlb/utils/xdr.pyx", "hlb/utils/XdrSerialisation.c"],
+        # .pxd files are found by cimport; Cython 3 rejects them as sources.
+        depends=["hlb/utils/xdr.pxd", "hlb/utils/cxdr.pxd"],
     ),
     Extension(
         "hlb.parsers.geometry.BaseSite",

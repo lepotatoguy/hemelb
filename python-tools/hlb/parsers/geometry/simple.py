@@ -3,7 +3,7 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-import xdrlib
+from ...utils import pyxdr as xdrlib
 import zlib
 import os.path
 from xml.etree import ElementTree

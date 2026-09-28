@@ -13,7 +13,8 @@ The file is binary data using the
 [XDR standard](http://tools.ietf.org/html/rfc4506). This is
 read/written using standard libraries, in both C, using
 [<rpc/xdr.h>](http://linux.die.net/man/3/xdr), and in Python, using
-[xdrlib](http://docs.python.org/library/xdrlib.html).
+`hlb.utils.pyxdr` in `python-tools` (a replacement for the standard
+library's `xdrlib`, which Python 3.13 removed).
 
 This file describes the problem domain as a series of blocks, each
 block being an identically sized cubic subsection of the problem

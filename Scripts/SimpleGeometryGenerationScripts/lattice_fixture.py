@@ -4,7 +4,10 @@
 # license in the file LICENSE.
 
 import zlib
-import xdrlib
+try:
+    import xdrlib
+except ImportError:  # removed in Python 3.13; needs python-tools installed
+    from hlb.utils import pyxdr as xdrlib
 from functools import reduce
 from Site import Site
 from link import Link

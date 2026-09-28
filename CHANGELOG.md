@@ -57,6 +57,15 @@ this file records what changed and how it was checked at the time.
   YAML reads as text; they failed with "invalid hexadecimal floating-point
   string".
 
+- Python tools work on Python 3.12 and 3.13. The standard library's
+  `xdrlib` (removed in 3.13) is replaced by `hlb.utils.pyxdr`, which is
+  tested against `xdrlib` for identical results, positions and errors. The
+  Cython extensions now build with Cython 3 as well as 0.29
+  (`language_level=2` is set explicitly, as 0.29 used by default). On Python
+  3.11 (Cython 0.29 and 3.3) and 3.13 (Cython 3.3), the extraction dump,
+  offset and geometry parsers, site counts and self-consistency check gave
+  byte-identical output to the previous version.
+
 ### Build
 
 - Builds with AppleClang (`SimBuilder.h` template call), GCC 13

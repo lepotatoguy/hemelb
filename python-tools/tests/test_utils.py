@@ -6,7 +6,7 @@
 import os
 import sys
 import unittest
-import xdrlib
+from hlb.utils import pyxdr as xdrlib
 
 import numpy as np
 
