@@ -65,6 +65,16 @@ jobs:
           python -c "import HlbGmyTool.Model.Generation, hlb.utils.xdr, vmtk"
           hlb-gmy-cli --help
 
+      - name: Poiseuille flow regression test (geometry tool + HemeLB + analysis)
+        env:
+          HEMELB_EXECUTABLE: ${{ runner.temp }}/hemelb/bin/hemelb
+          MPIRUN_FLAGS: --oversubscribe
+        run: |
+          if command -v conda >/dev/null; then base="$(conda info --base)"; else base="$HOME/miniforge3"; fi
+          source "$base/etc/profile.d/conda.sh"
+          conda activate gmy-tool
+          python Code/tests/pythontests/poiseuilleflowtest.py -v
+
       - name: Store build logs on error
         if: failure()
         uses: actions/upload-artifact@v6

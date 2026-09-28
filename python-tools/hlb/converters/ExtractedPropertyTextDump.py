@@ -3,6 +3,7 @@
 # the HemeLB team and/or their institutions, as detailed in the
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
+import argparse
 import sys
 import csv
 import os
@@ -69,10 +70,23 @@ def unpack(filename, stream=sys.stdout, out_csv=None):
     _write_dump(filename, stream)
 
 
-def main():
-    if len(sys.argv) == 2:
-        unpack(sys.argv[1])
-    elif len(sys.argv) == 3:
-        unpack(sys.argv[1], out_csv=sys.argv[2])
+def main(argv=None, stream=sys.stdout):
+    parser = argparse.ArgumentParser(
+        prog="hlb-dump-extracted-properties",
+        description="Write a HemeLB extraction file (.xtr) as text: a commented "
+        "header, then one comma-separated line per site and timestep. Vector "
+        "fields are split into one column per component.",
+    )
+    parser.add_argument("input", help="extraction file (.xtr) written by HemeLB")
+    parser.add_argument(
+        "output",
+        nargs="?",
+        help="file to write; if omitted, the text is printed (redirect with > file.csv)",
+    )
+    args = parser.parse_args(argv)
+    if not os.path.isfile(args.input):
+        parser.error("extraction file %r does not exist" % args.input)
+    if args.output is None:
+        unpack(args.input, stream=stream)
     else:
-        raise SystemExit("Usage: hlb-dump-extracted-properties input.xtr [output.csv]")
+        unpack(args.input, out_csv=args.output)

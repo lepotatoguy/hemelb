@@ -6,6 +6,8 @@
 from io import StringIO
 import os.path
 
+import pytest
+
 import numpy as np
 
 import hlb.converters.ExtractedPropertyTextDump as dump_module
@@ -76,3 +78,31 @@ def test_unpack_can_write_to_a_file(monkeypatch, tmp_path):
     output = tmp_path / "dump.csv"
     unpack("fake.xtr", out_csv=output)
     assert output.read_text().splitlines()[-1] == "# "
+
+
+def test_command_line_help_and_missing_file(capsys):
+    from hlb.converters.ExtractedPropertyTextDump import main
+
+    with pytest.raises(SystemExit) as help_exit:
+        main(["--help"])
+    assert help_exit.value.code == 0
+    assert "extraction file (.xtr)" in capsys.readouterr().out
+
+    with pytest.raises(SystemExit) as missing:
+        main(["no-such-file.xtr"])
+    assert missing.value.code == 2
+    assert "does not exist" in capsys.readouterr().err
+
+
+def test_command_line_writes_to_stdout_or_file(monkeypatch, tmp_path):
+    import hlb.converters.ExtractedPropertyTextDump as dump
+
+    source = tmp_path / "in.xtr"
+    source.write_bytes(b"")
+    calls = []
+    monkeypatch.setattr(
+        dump, "unpack", lambda f, stream=None, out_csv=None: calls.append((f, out_csv))
+    )
+    dump.main([str(source)])
+    dump.main([str(source), str(tmp_path / "out.csv")])
+    assert calls == [(str(source), None), (str(source), str(tmp_path / "out.csv"))]

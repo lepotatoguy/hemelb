@@ -191,6 +191,13 @@ class PolyDataGenerator(GeometryGenerator):
                     % (iolet.Name, nearest, iolet.Radius)
                 )
                 continue
+            if nearest > 0.9 * iolet.Radius:
+                warnings.append(
+                    "%s only just reaches the surface: the nearest wall is %g from "
+                    "its centre and its radius is %g (STL units). It may not open "
+                    "the vessel; make the radius comfortably larger than the vessel."
+                    % (iolet.Name, nearest, iolet.Radius)
+                )
             # The iolet removes the surface behind its plane, within its
             # radius. If every nearby vertex is on the fluid side, the iolet is
             # beyond the end of the vessel and removes nothing.

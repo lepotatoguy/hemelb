@@ -149,6 +149,54 @@ class TestPolyDataGenerator:
         outside = [w for w in generator.Warnings if "lies outside the vessel" in w]
         assert len(outside) == (2 if expect_warning else 0)
 
+    @pytest.mark.parametrize("radius, warns", [(1.02, True), (1.5, False)])
+    def test_warns_when_an_iolet_only_just_reaches_the_wall(
+        self, tmpdir, radius, warns
+    ):
+        # A radius barely larger than the vessel (radius 1) does not open it.
+        # The iolets are 2 from the tube ends, so the side wall is nearest.
+        from vtk import (
+            vtkCylinderSource,
+            vtkSTLWriter,
+            vtkTransform,
+            vtkTransformPolyDataFilter,
+            vtkTriangleFilter,
+        )
+        from HlbGmyTool.Model.Iolets import Inlet, Outlet
+
+        source = vtkCylinderSource()
+        source.SetRadius(1.0)
+        source.SetHeight(10.0)
+        source.SetResolution(32)
+        rotate = vtkTransform()
+        rotate.RotateX(90)
+        transform = vtkTransformPolyDataFilter()
+        transform.SetTransform(rotate)
+        transform.SetInputConnection(source.GetOutputPort())
+        triangles = vtkTriangleFilter()
+        triangles.SetInputConnection(transform.GetOutputPort())
+        writer = vtkSTLWriter()
+        writer.SetFileName(tmpdir.join("tube.stl").strpath)
+        writer.SetInputConnection(triangles.GetOutputPort())
+        writer.Write()
+
+        p = Profile()
+        p.StlFile = tmpdir.join("tube.stl").strpath
+        p.VoxelSize = 0.2
+        p.SeedPoint = Vector(0.0, 0.0, 0.0)
+        p.Iolets.append(
+            Inlet(Centre=Vector(0, 0, -3.0), Normal=Vector(0, 0, 1), Radius=radius)
+        )
+        p.Iolets.append(
+            Outlet(Centre=Vector(0, 0, 3.0), Normal=Vector(0, 0, -1), Radius=radius)
+        )
+        p.OutputGeometryFile = tmpdir.join("tube.gmy").strpath
+        p.OutputXmlFile = tmpdir.join("tube.xml").strpath
+
+        generator = OutputGeneration.PolyDataGenerator(p)
+        barely = [w for w in generator.Warnings if "only just reaches" in w]
+        assert len(barely) == (2 if warns else 0)
+
     def test_cube(self, tmpdir):
         """Generate a gmy from a simple cubic profile and check the output"""
         cube = fixtures.cube(tmpdir)
