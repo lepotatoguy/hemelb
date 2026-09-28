@@ -33,7 +33,7 @@ jobs:
 
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check copyright statements
         run: python Scripts/checkCopyright.py
@@ -51,7 +51,7 @@ jobs:
         compiler: [gnu-11, gnu-12, gnu-13]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - uses: ./.github/actions/setup-compilers
       with:
@@ -88,7 +88,7 @@ jobs:
 
     - name: Store build tree on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: fluid-only-failed-build-tree
         path: build
@@ -114,7 +114,7 @@ jobs:
 
     - name: Store results on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: fluid-only-failed-diffTest
         path: hemelb-tests/diffTest/results
@@ -127,7 +127,7 @@ jobs:
 
     - name: Store results on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: fluid-only-failed-checkpointTest
         path: hemelb-tests/fluid-checkpoint/results
@@ -142,7 +142,7 @@ jobs:
         compiler: [gnu-11, gnu-12, gnu-13]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - uses: ./.github/actions/setup-compilers
       with:
@@ -186,7 +186,7 @@ jobs:
 
     - name: Store build tree on error
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: rbc-failed-build-tree
         path: build

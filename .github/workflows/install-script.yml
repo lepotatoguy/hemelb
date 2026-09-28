@@ -37,7 +37,7 @@ jobs:
         os: [ubuntu-24.04, macos-14]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Rosetta 2 (for the osx-64 geometry tool environment)
         if: runner.os == 'macOS'
@@ -67,7 +67,7 @@ jobs:
 
       - name: Store build logs on error
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: install-${{ matrix.os }}-logs
           path: |

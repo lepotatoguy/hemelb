@@ -5,7 +5,12 @@
 
 from pathlib import Path
 
+import pytest
 from vtk import vtkRenderWindowInteractor
+
+# ProfileController is part of the GUI and imports wxPython, which is only
+# installed with the [gui] extra.
+pytest.importorskip("wx")
 
 from HlbGmyTool.Controller.PipelineController import PipelineController
 from HlbGmyTool.Controller.ProfileController import ProfileController
