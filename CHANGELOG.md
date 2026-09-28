@@ -24,6 +24,13 @@ this file records what changed and how it was checked at the time.
   (`--stl`, `--stl-units`, `--seed`, `--timestep`, `--duration`, plus the
   existing `--voxel`, `--geometry`, `--xml`), and `--help` describes each
   step of a run ([guide](doc/user/geometry-tool.md#run-the-command-line-generator)).
+- Profiles can set `PulsePeriodSeconds`, the period of the cosine pressure at
+  every inlet and outlet (`hlb-gmy-cli --period`). Profiles without it write
+  `value="1"` as before.
+- Documentation for new users: a start-here index with a glossary
+  ([doc/README.md](doc/README.md)), a first-run walkthrough
+  ([getting-started.md](doc/user/getting-started.md)), a GUI walkthrough, and
+  a guide to every test suite for developers ([doc/dev/README.md](doc/dev/README.md)).
 
 ### Fixed
 
@@ -60,6 +67,25 @@ this file records what changed and how it was checked at the time.
 - Profiles accept decimal exponents written without a point (`1e-5`), which
   YAML reads as text; they failed with "invalid hexadecimal floating-point
   string".
+- HemeLB stops with a clear message when the geometry uses more inlets or
+  outlets than the XML defines. It used to crash (segmentation fault).
+- A missing `.gmy` is reported by name, not as an MPI error in
+  `MpiFile.cc`.
+- Too many MPI processes for the geometry reports both counts and the
+  largest usable process count.
+- Checkpoint restarts reject a checkpoint written with a different voxel
+  size or origin.
+- The GUI labelled the iolet phase in degrees; HemeLB uses radians, as the
+  XML always said. The label now shows radians; the XML is unchanged.
+- The GUI's DEBUG button is only shown when the tool was started from a
+  terminal; otherwise the debugger froze the window.
+- The geometry tool warns when an iolet only just reaches the wall (nearest
+  wall beyond 0.9 of its radius). The repository's Poiseuille sample profile
+  (iolet radius 0.75 mm in a pipe of the same width) generated a pipe with
+  no inlet or outlet sites and therefore no flow.
+- `hlb-dump-extracted-properties` has `--help` and reports a missing file in
+  one line; output is unchanged.
+- `hlb-gmy-gui --help` typos; 5 broken documentation links.
 
 - Python tools work on Python 3.12 and 3.13. The standard library's
   `xdrlib` (removed in 3.13) is replaced by `hlb.utils.pyxdr`, which is
@@ -70,6 +96,17 @@ this file records what changed and how it was checked at the time.
   offset and geometry parsers, site counts and self-consistency check gave
   byte-identical output to the previous version.
 
+### Tests
+
+- `Code/tests/pythontests/poiseuilleflowtest.py` is Python 3. It generates
+  its inputs with `hlb-gmy-cli` and checks the velocity across a pipe against
+  the analytical Poiseuille profile; it runs in the install script CI job.
+- The checkpoint restart script also checks that mismatched geometries are
+  rejected, and runs under `ctest` and in the main CI workflow.
+- New unit tests: iolet id checks, the too-many-processes message, the
+  pulse period and phase label, the DEBUG button, the CLI and GUI help, the
+  dump tool arguments, and the 'only just reaches' warning.
+
 ### Build
 
 - Builds with AppleClang (`SimBuilder.h` template call), GCC 13
@@ -78,6 +115,10 @@ this file records what changed and how it was checked at the time.
 - The super build finds dependencies it builds itself in one CMake pass.
 - `geometry-tool/conda-environment.yml` uses Python 3.11 and lists the build
   requirements.
+- The geometry tool declares `python_requires=">=3.8,<3.12"`, matching the
+  VMTK 1.5 builds.
+- CI: the hemelb-tests branch lookup works (it always fell back to `main`)
+  and no longer expands pull request branch names inside a shell script.
 
 ### Verification record
 
@@ -92,3 +133,7 @@ added, so earlier numbers are lower.
 | 2026-09-27 | Checkpoint restart | macOS, AppleClang | `checkpoint_restart_mpi.py` passed for 2 to 1, 1 to 2, 2 to 4 and 1 to 1 processes (all distributions matched); 73 cases, 32,386 assertions passed |
 | 2026-09-27 | Install script, all changes merged | macOS 27 arm64, AppleClang 21, CMake 4.3.2 | Fresh clone: 87 cases, 32,443 assertions passed; geometry and Python tools installed and imported |
 | 2026-09-27 | Install script, all changes merged | Ubuntu 24.04 amd64 (Docker), GCC | Fresh clone: 87 cases, 32,443 assertions passed; `large_cylinder` 200 steps on 4 ranks finished; tools installed; `hlb-gmy-cli` ran |
+| 2026-09-28 | Error messages, checkpoint geometry check | macOS, AppleClang | 89 cases, 32,448 assertions passed; `ctest` (unit tests and restart script) passed; restarts 2 to 1, 1 to 2, 2 to 4, 1 to 1 matched exactly and mismatched voxel size and origin were rejected; SixBranch, `four_cube` and a missing `.gmy` gave the new messages |
+| 2026-09-28 | Geometry tool changes | macOS, Python 3.11 | 59 tests passed; without wxPython 53 passed and 1 module skipped; `test.gmy` byte-identical to the stored reference |
+| 2026-09-28 | Poiseuille flow test | macOS, 4 ranks | 3 tests passed; velocity within 1e-3 m/s of the analytical profile |
+| 2026-09-28 | Python tools | macOS, Python 3.11 | 31 tests passed; extraction dump byte-identical |
