@@ -1,107 +1,82 @@
-# HemeLB's CMake options
+# HemeLB build options
 
-## Superbuild vs code-only
-You can choose to use the top level "superbuild" which will
-automatically download and install any missing dependencies (of those
-marked with an asterisk above). If you have any of these installed on
-your machine (e.g. via a module system) then they can be used here
-also.
+Pass these to CMake with `-D`, for example
+`cmake -S . -B build -DHEMELB_LATTICE=D3Q19`. You can also browse and change
+them interactively with `ccmake build`. They are defined in
+`CMake/GlobalOptions.cmake` and `CMake/HemeLbOptions.cmake`.
 
-Alternatively, you can use the code-only build, where you must
-ensure that all the dependencies are availble.
+Most users only need the defaults. The model options (lattice, collision,
+boundaries) are fixed when HemeLB is compiled, so to try another model you
+build another executable (give it a different name with `HEMELB_EXECUTABLE`).
 
-## Installation locations
+## Where things are installed
 
-As well as the usual `CMAKE_INSTALL_PREFIX` variable, you can also set
-`HEMELB_DEPENDENCIES_INSTALL_PREFIX`, which will tell the superbuild
-where to install any dependencies that it compiles and give an extra
-search location to the code-only build.
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `CMAKE_INSTALL_PREFIX` | system default | Where HemeLB is installed |
+| `HEMELB_DEPENDENCIES_INSTALL_PREFIX` | same as above | Where the super build installs dependencies it builds, and an extra place to search for them |
+| `HEMELB_EXECUTABLE` | `hemelb` | Name of the program |
 
-## Dependency variables
+## What gets built
 
-You can tell either build where to look for dependencies if CMake
-cannot find them automatically.
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `HEMELB_BUILD_TESTS` | ON | Build `hemelb-tests` |
+| `HEMELB_BUILD_RBC` | OFF | Resolved red blood cells (immersed boundary method); needs HDF5 and VTK 9 |
+| `HEMELB_BUILD_MULTISCALE` | OFF | Multiscale coupling; needs MPWide |
+| `HEMELB_BUILD_COLLOIDS` | OFF | Colloid particles |
+| `HEMELB_BUILD_DEBUGGER` | ON | Built-in debugger, started with `hemelb -debug 1` |
 
-- Boost: `BOOST_ROOT` for the prefix or `BOOST_INCLUDEDIR` / `BOOST_LIBRARYDIR`
+## Lattice Boltzmann model
 
-- Catch2:
+| Option | Default | Choices |
+| --- | --- | --- |
+| `HEMELB_LATTICE` (velocity set) | D3Q15 (D3Q19 with RBC) | D3Q15, D3Q19, D3Q27, D3Q15i |
+| `HEMELB_KERNEL` (collision) | LBGK (GuoForcingLBGK with RBC) | LBGK, EntropicAnsumali, EntropicChik, MRT, TRT, NNCY, NNCYMOUSE, NNC, NNTPL, GuoForcingLBGK |
+| `HEMELB_WALL_BOUNDARY` | SIMPLEBOUNCEBACK | SIMPLEBOUNCEBACK, BFL, GZS, JUNKYANG |
+| `HEMELB_INLET_BOUNDARY` | NASHZEROTHORDERPRESSUREIOLET | NASHZEROTHORDERPRESSUREIOLET, LADDIOLET |
+| `HEMELB_OUTLET_BOUNDARY` | NASHZEROTHORDERPRESSUREIOLET | NASHZEROTHORDERPRESSUREIOLET, LADDIOLET |
+| `HEMELB_STENCIL` (RBC interpolation) | FourPoint | TwoPoint, ThreePoint, FourPoint, CosineApprox |
 
-- CTemplate: `CTEMPLATE_INCLUDE_DIR` / `CTEMPLATE_LIBRARIES`
+The inlet and outlet choice decides which conditions the XML may use:
+NASHZEROTHORDERPRESSUREIOLET needs **pressure** conditions (this is what the
+geometry tool writes), LADDIOLET needs **velocity** conditions. A mismatch
+stops HemeLB with "XML configuration for inlet ... not consistent with
+compile-time choice of boundary condition". See
+[XmlConfiguration.md](XmlConfiguration.md).
 
-- HDF5
+## Logging and checks
 
-- METIS (required by ParMETIS and sometimes installed independently):
-  `METIS_ROOT`/ `METIS_DIR` for prefix or `METIS_INCLUDE_DIR`/
-  `METIS_LIBRARY`
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `HEMELB_LOG_LEVEL` | Info | Critical, Error, Warning, Info, Debug or Trace |
+| `HEMELB_VALIDATE_GEOMETRY` | OFF | Extra consistency checks while reading the geometry |
+| `HEMELB_USE_ALL_WARNINGS_GNU` | ON | Compiler warnings for developers |
 
-- ParMETIS: as above but substitute `PARMETIS` for `METIS`
+## Performance
 
-- TinyXML: `TINYXML_INCLUDE_DIR` / `TINYXML_LIBRARIES`
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `HEMELB_SUBPROJECT_MAKE_JOBS` | 1 | Parallel jobs when the super build compiles HemeLB and its dependencies. On HPC login nodes a large number can hit process limits; use a small one (for example 4) if the build fails mysteriously |
+| `HEMELB_USE_SSE3` | ON on x86_64, OFF elsewhere | SSE3 vector instructions |
+| `HEMELB_COMPUTE_ARCHITECTURE` | AMDBULLDOZER | INTELSANDYBRIDGE, AMDBULLDOZER, NEUTRAL, ISBFILEVELOCITYINLET |
+| `HEMELB_POINTPOINT_IMPLEMENTATION` | Coalesce | MPI point-to-point method: Coalesce, Separated or Immediate |
+| `HEMELB_GATHERS_IMPLEMENTATION`, `HEMELB_ALLTOALL_IMPLEMENTATION` | Separated | Separated or ViaPointPoint |
+| `HEMELB_SEPARATE_CONCERNS` | OFF | Communicate for each concern separately |
 
-- VTK: `VTK_DIR`
+## How dependencies are found
 
-You can see these by using the CMake interactive CLI `ccmake`.
+The super build chooses per dependency with `DEPS_<NAME>`: `Auto` (default:
+use the system copy if found, otherwise build it), `System` or `Build`; for
+example `-DDEPS_PARMETIS=Build`.
 
-## Resolved red blood cells
+If CMake cannot find a library you have installed, tell it where:
 
-To include modelling of fully resolved red blood cells via the
-immersed boundary method, set `HEMELB_BUILD_RBC=ON`.
-
-
-## Lattice Boltzmann options
-The HemeLB-specific options and variables are all given and briefly
-documented in Code/cmake/options.cmake - please see that file for details.
-
-HemeLB supports multiple lattice Boltzmann velocity sets, collisions,
-boundary condition etc, but which is active is chosen at compile time
-by setting these options.
-
-- `HEMELB_EXECUTABLE` sets the name of the produced application. By
-  default this is `hemelb` but you might wish to add a suffix if you are
-  experimenting with multiple LB models etc.
-
-- The lattice or velocity set is chosen with `HEMELB_LATTICE` and can
-  be one of D3Q15 (default), D3Q19, D3Q27, D3Q15i
-
-- The collision kernel is chosen with `HEMELB_KERNEL` from LBGK
-  (default), EntropicAnsumali, EntropicChik, MRT, TRT, NNCY, NNCYMOUSE,
-  NNC, NNTPL
-
-- The no-slip solid wall boundary is selected with
-  `HEMELB_WALL_BOUNDARY` from BFL, GZS, SIMPLEBOUNCEBACK (default),
-  JUNKYANG
-
-- The inlet and outlet boundary conditions are chosen by
-  `HEMELB_INLET_BOUNDARY` and `HEMELB_OUTLET_BOUNDARY` respectively from
-  NASHZEROTHORDERPRESSUREIOLET (default), LADDIOLET. It is *very
-  important* that you also select `HEMELB_WALL_INLET_BOUNDARY` and
-  `HEMELB_WALL_INLET_BOUNDARY` to match the combination of your
-  selected wall and in/outlet boundaries. (Options are:
-  NASHZEROTHORDERPRESSURESBB, NASHZEROTHORDERPRESSUREBFL, LADDIOLETSBB,
-  LADDIOLETBFL)
-
-- `HEMELB_BUILD_MULTISCALE`: enable HemeLB's multiscale coupling mode.
-   Requires MPWIde.
-
-## Performance options
-
-- `HEMELB_SUBPROJECT_MAKE_JOBS`: enable parallel builds for the
-  superbuild. Set to approximately twice the number of cores available
-  for your use. (On some HPC login nodes you may hit limits on number
-  of allowed processes/filehandles/etc quite quickly so if your build
-  dies mysteriously, especially with internal compiler errors, set
-  this to a small number, e.g. 4)
-
-- `HEMELB_USE_SSE3`: this is on by default and enables use of SSE3
-  intrinsics. This may not work on your architecture (e.g. ARM)
-
-
-## Developer
-
-- HemeLB has an option to make small-scale parallel debugging with GDB
-  and LLDB easier (typically used on a developers workstation). Turn
-  this on with `HEMELB_BUILD_DEBUGGER` and supply the `-d 1` command
-  line option.
-
-- `HEMELB_VALIDATE_GEOMETRY`: the code can validate that a geometry file
-  is self-consistent on loading.
+| Library | Variables |
+| --- | --- |
+| Boost | `BOOST_ROOT`, or `BOOST_INCLUDEDIR` and `BOOST_LIBRARYDIR` |
+| CTemplate | `CTEMPLATE_INCLUDE_DIR`, `CTEMPLATE_LIBRARIES` |
+| METIS | `METIS_ROOT` or `METIS_DIR`, or `METIS_INCLUDE_DIR` and `METIS_LIBRARY` |
+| ParMETIS | `ParMETIS_INCLUDE_DIR`, `ParMETIS_LIBRARY` |
+| TinyXML | `TINYXML_INCLUDE_DIR`, `TINYXML_LIBRARIES` |
+| VTK | `VTK_DIR` |
