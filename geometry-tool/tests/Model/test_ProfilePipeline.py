@@ -70,3 +70,37 @@ def test_sample_profile_loads_after_preview_setup(capfd):
     assert len(profile.Iolets) == 2
     errors = capfd.readouterr().err
     assert "UpdateInformation invoked during another request" not in errors
+
+
+class _FakeStdin:
+    def __init__(self, tty):
+        self.tty = tty
+
+    def isatty(self):
+        return self.tty
+
+
+def test_debug_needs_a_terminal(monkeypatch):
+    import HlbGmyTool.Controller.ProfileController as pc
+
+    calls = []
+    monkeypatch.setattr(pc.pdb, "set_trace", lambda: calls.append("pdb"))
+    monkeypatch.setattr(pc, "ShowMessage", lambda text, icon: calls.append(text))
+    controller = ProfileController(Profile())
+
+    monkeypatch.setattr(pc.sys, "stdin", _FakeStdin(False))
+    assert not pc.StartedFromTerminal()
+    controller.Debug()
+    assert calls and "needs a terminal" in calls[-1]
+
+    monkeypatch.setattr(pc.sys, "stdin", _FakeStdin(True))
+    assert pc.StartedFromTerminal()
+    controller.Debug()
+    assert calls[-1] == "pdb"
+
+
+def test_started_from_terminal_without_stdin(monkeypatch):
+    import HlbGmyTool.Controller.ProfileController as pc
+
+    monkeypatch.setattr(pc.sys, "stdin", None)
+    assert not pc.StartedFromTerminal()

@@ -134,7 +134,8 @@ class SinusoidalPressureIolet(Iolet):
         avg = self.Pressure.x
         amp = self.Pressure.y
         phs = self.Pressure.z
-        return "p = %.2f + %.2f cos(wt + %.0f°)" % (avg, amp, phs)
+        # The phase is written to the XML, and used by HemeLB, in radians.
+        return "p = %.2f + %.2f cos(wt + %.2f rad)" % (avg, amp, phs)
 
     pass
 

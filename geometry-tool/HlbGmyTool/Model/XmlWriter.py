@@ -107,7 +107,11 @@ class XmlWriter(object):
             QuantityElement(condition, "mean", io.Pressure.x, "mmHg")
             QuantityElement(condition, "amplitude", io.Pressure.y, "mmHg")
             QuantityElement(condition, "phase", io.Pressure.z, "rad")
-            QuantityElement(condition, "period", 1, "s")
+            period = float(self.profile.PulsePeriodSeconds)
+            # Write whole numbers as before (value="1"), not as "1.0".
+            QuantityElement(
+                condition, "period", int(period) if period.is_integer() else period, "s"
+            )
 
             QuantityElement(iolet, "normal", io.Normal, "dimensionless")
 

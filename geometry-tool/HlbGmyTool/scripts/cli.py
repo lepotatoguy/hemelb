@@ -25,7 +25,9 @@ profile, without the GUI. This does what "Generate" does in hlb-gmy-gui:
   5. Voxelise the closed surface into 8x8x8-site blocks and write the .gmy.
   6. Write the .xml: time step, number of steps (duration / time step),
      voxel size and origin in metres, a cosine pressure condition for each
-     inlet and outlet, and default visualisation and initial conditions.
+     inlet and outlet (mean, amplitude and phase from the profile, phase in
+     radians, period from --period), and default visualisation and initial
+     conditions. Other boundary types need the XML to be edited.
 
 Inlets and outlets (centre, normal, radius, pressure) can only be set in the
 profile; create them with hlb-gmy-gui and "Save Profile".""",
@@ -40,6 +42,7 @@ Examples:
   hlb-gmy-cli profile.pr2 --voxel 5e-5              # finer grid, about 8x sites
   hlb-gmy-cli profile.pr2 --stl vessel.stl --stl-units mm --voxel 1e-4
   hlb-gmy-cli profile.pr2 --timestep 1e-5 --duration 2.0
+  hlb-gmy-cli profile.pr2 --period 0.857              # 70 beats per minute
 
 Check the result with hlb-gmy-countsites FILE.gmy and hlb-gmy-selfconsistent
 FILE.gmy, then run: mpirun -n N hemelb -in FILE.xml -out RESULTS_DIR
@@ -97,6 +100,15 @@ grid.add_argument(
     dest="TimeStepSeconds",
     help="Time step in seconds, written to the XML. It is not adjusted when "
     "the voxel size changes.",
+    metavar="SECONDS",
+)
+grid.add_argument(
+    "--period",
+    default=None,
+    type=float,
+    dest="PulsePeriodSeconds",
+    help="Period of the cosine pressure at every inlet and outlet, in seconds "
+    "(profile field PulsePeriodSeconds; 1 s if not set).",
     metavar="SECONDS",
 )
 grid.add_argument(

@@ -24,7 +24,7 @@ def test_cli_help_documents_profile_overrides(capsys):
     assert "profile.pr2" in help_text
     for option in ("--stl", "--stl-units", "--seed", "--voxel", "--timestep"):
         assert option in help_text
-    for option in ("--duration", "--geometry", "--xml"):
+    for option in ("--duration", "--period", "--geometry", "--xml"):
         assert option in help_text
     assert "override" in help_text
 
@@ -32,7 +32,16 @@ def test_cli_help_documents_profile_overrides(capsys):
 def test_cli_parses_every_override():
     args = parser.parse_args(
         ["p.pr2", "--stl", "s.stl", "--stl-units", "um", "--seed", "1", "2", "3"]
-        + ["--voxel", "1e-4", "--timestep", "1e-5", "--duration", "2"]
+        + [
+            "--voxel",
+            "1e-4",
+            "--timestep",
+            "1e-5",
+            "--duration",
+            "2",
+            "--period",
+            "0.8",
+        ]
         + ["--geometry", "g.gmy", "--xml", "x.xml"]
     )
     assert args.StlFile == "s.stl"
@@ -41,6 +50,7 @@ def test_cli_parses_every_override():
     assert args.VoxelSizeMetres == 1e-4
     assert args.TimeStepSeconds == 1e-5
     assert args.DurationSeconds == 2.0
+    assert args.PulsePeriodSeconds == 0.8
     assert args.OutputGeometryFile == "g.gmy"
     assert args.OutputXmlFile == "x.xml"
 
@@ -89,3 +99,14 @@ def test_profile_reads_decimal_exponent_written_without_a_point(profile_dir):
     path.write_text(yaml.safe_dump(state))
 
     assert load(path).TimeStepSeconds == 1e-5
+
+
+def test_gui_help_text(capsys):
+    # gui.py only imports wx inside main(), so its parser can be checked here.
+    from HlbGmyTool.scripts.gui import parser as gui_parser
+
+    with pytest.raises(SystemExit):
+        gui_parser.parse_args(["--help"])
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "STL file into suitable input for HemeLB" in help_text
+    assert "override those in the profile file" in help_text

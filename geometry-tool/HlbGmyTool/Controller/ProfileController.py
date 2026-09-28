@@ -13,6 +13,7 @@ from .IoletListController import HasIoletListKeys
 from .VectorController import HasVectorKeys
 
 import pdb
+import sys
 
 
 class ProfileController(
@@ -42,7 +43,15 @@ class ProfileController(
         return
 
     def Debug(self, ignored=None):
-        """Drop into the debugger."""
+        """Drop into the debugger in the terminal the tool was started from."""
+        if not StartedFromTerminal():
+            # pdb would wait for input nobody can type, freezing the GUI.
+            ShowMessage(
+                "The debugger needs a terminal. Start hlb-gmy-gui from a terminal "
+                "to use the DEBUG button.",
+                wx.ICON_INFORMATION,
+            )
+            return
         pdb.set_trace()
         return
 
@@ -143,6 +152,11 @@ class ProfileController(
         return
 
     pass
+
+
+def StartedFromTerminal():
+    """True if standard input is a terminal, so pdb can read commands."""
+    return sys.stdin is not None and sys.stdin.isatty()
 
 
 def ShowMessage(text, icon):

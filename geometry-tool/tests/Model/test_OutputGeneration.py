@@ -72,6 +72,17 @@ class TestPolyDataGenerator:
         p.OutputXmlFile = tmpdir.join("test.xml").strpath
         return p
 
+    @pytest.mark.parametrize("period, written", [(None, "1"), (0.8, "0.8")])
+    def test_cosine_period_written_to_xml(self, tmpdir, period, written):
+        p = self._test_profile(tmpdir)
+        if period is not None:
+            p.PulsePeriodSeconds = period
+        OutputGeneration.PolyDataGenerator(p).Execute()
+        import xml.etree.ElementTree as ET
+
+        periods = [e.get("value") for e in ET.parse(p.OutputXmlFile).iter("period")]
+        assert periods == [written, written]  # one inlet and one outlet
+
     def test_valid_profile_has_no_warnings(self, tmpdir):
         generator = OutputGeneration.PolyDataGenerator(self._test_profile(tmpdir))
         assert generator.Warnings == []

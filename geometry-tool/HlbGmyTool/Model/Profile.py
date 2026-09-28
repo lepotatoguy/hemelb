@@ -104,6 +104,9 @@ class Profile(Observable):
         "VoxelSize": 0.0,
         "TimeStepSeconds": 1e-4,
         "DurationSeconds": 5.0,
+        # Period of the cosine pressure at every inlet and outlet. Profiles
+        # without it use 1 s, the value that was always written before.
+        "PulsePeriodSeconds": 1.0,
         "SeedPoint": Vector(),
         "OutputGeometryFile": None,
         "OutputXmlFile": None,

@@ -42,7 +42,8 @@ setup(
             "hlb-gmy-gui=HlbGmyTool.scripts.gui:main[gui]",
         ],
     },
-    python_requires=">=3.6",
+    # VMTK 1.5, which the tool needs, is published for Python 3.8 to 3.11.
+    python_requires=">=3.8,<3.12",
     install_requires=[
         "pyyaml",
         # Numpy >= 1.20 requires python 3.7; VMTK conda binaries are 3.6 only

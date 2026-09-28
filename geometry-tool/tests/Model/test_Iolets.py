@@ -12,7 +12,15 @@ from HlbGmyTool.Model.Vector import Vector
 
 def test_pressure_equation_formats_valid_values():
     inlet = Inlet()
-    assert inlet.PressureEquation == "p = 0.00 + 0.00 cos(wt + 0°)"
+    assert inlet.PressureEquation == "p = 0.00 + 0.00 cos(wt + 0.00 rad)"
+
+
+def test_pressure_equation_shows_phase_in_radians():
+    # HemeLB uses the phase in radians (XmlWriter writes units="rad"), so the
+    # GUI must not label it in degrees.
+    inlet = Inlet()
+    inlet.Pressure.x, inlet.Pressure.y, inlet.Pressure.z = 80.0, 5.0, 1.5708
+    assert inlet.PressureEquation == "p = 80.00 + 5.00 cos(wt + 1.57 rad)"
 
 
 def test_pressure_equation_reports_invalid_values():

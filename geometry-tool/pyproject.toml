@@ -1,5 +1,4 @@
 [build-system]
-requires-python = ">=3.6"
 requires = [
     "setuptools",
     "wheel",

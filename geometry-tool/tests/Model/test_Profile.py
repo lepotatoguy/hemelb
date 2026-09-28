@@ -113,7 +113,8 @@ def test_pro_to_pr2_output_matches_sample_pr2_schema(tmp_path):
         converted = yaml.safe_load(converted_stream)
         sample = yaml.safe_load(sample_stream)
 
-    assert set(converted) == set(sample)
+    # PulsePeriodSeconds is newer than the sample and optional.
+    assert set(converted) - {"PulsePeriodSeconds"} == set(sample)
     assert set(converted["Iolets"][0]) == set(sample["Iolets"][0])
 
 
