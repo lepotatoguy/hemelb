@@ -14,7 +14,7 @@ around.
 import argparse
 from pathlib import Path
 import shutil
-import xdrlib
+from ..utils import pyxdr as xdrlib
 from xml.etree import ElementTree as ET
 
 from ..parsers.geometry import HemeLbMagicNumber, GeometryMagicNumber

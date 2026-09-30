@@ -1,6 +1,36 @@
+# Environment for the geometry tool (hlb-gmy-gui, hlb-gmy-cli) and the
+# HemeLB Python tools. VMTK 1.5 is published for linux-64 and osx-64 only,
+# so on Apple Silicon create it with CONDA_SUBDIR=osx-64 (runs under
+# Rosetta 2). Scripts/install_hemelb.sh does this automatically.
+#
+# Every package is pinned to an exact version so the environment does not
+# change under you. conda-lock/<platform>.txt pins the whole dependency tree
+# (the installer uses those); this file is for other platforms and for
+# regenerating the locks (see doc/dev/README.md). CGAL must stay below 6,
+# which removed a header the tool uses.
 name: gmy-tool
 channels:
   - conda-forge
 dependencies:
+  - python=3.11.8
   - vmtk=1.5.0
-  - wxpython=4.0.6
+  - numpy=1.26.4
+  - pyyaml=6.0.3
+  - wxpython=4.2.1
+  - pip=26.2.1
+  - pytest=9.1.1
+  # VTK's CMake files reference this library, so it must be present to build
+  - vtk-io-ffmpeg=9.2.6
+  - vtk-base=9.2.6
+  # Build requirements for the C++ extension and python-tools. The system
+  # C/C++ compiler is used (Xcode Command Line Tools or build-essential).
+  - cmake=3.28.3
+  - ninja=1.13.2
+  - scikit-build=0.19.0
+  - pybind11=3.1.0
+  - cython=0.29.37
+  - setuptools=84.0.0
+  - wheel=0.48.0
+  - cgal-cpp=5.6.1
+  - libboost-headers=1.82.0
+  - zlib=1.3.2

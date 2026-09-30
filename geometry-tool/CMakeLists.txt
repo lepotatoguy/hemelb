@@ -15,6 +15,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(GNUInstallDirs)
 
+# In a conda environment, use its CGAL, Boost, VTK and zlib before any
+# system or Homebrew copies (Homebrew's CGAL 6 does not work with this code).
+# This makes a plain `pip install .` behave like Scripts/install_hemelb.sh.
+if(DEFINED ENV{CONDA_PREFIX})
+  list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
+endif()
+
 find_package(ZLIB REQUIRED)
 find_package(Boost REQUIRED COMPONENTS headers)
 find_package(VTK 9 REQUIRED COMPONENTS
@@ -103,6 +110,25 @@ endfunction()
 copy_picness(Generation uhlb)
 
 target_include_directories(Generation PRIVATE ${generation_dir})
+
+# CGAL 5.6's graph iterators compare base() against nullptr in a way that
+# current Clang rejects. The comparisons are only used by operator bool, so
+# build against a copy of that one header with them replaced, found before
+# the installed CGAL. The installed CGAL is not modified.
+find_file(CGAL_GRAPH_ITERATOR_H CGAL/boost/graph/iterator.h
+  HINTS ${CGAL_INCLUDE_DIRS} NO_CACHE)
+if(CGAL_GRAPH_ITERATOR_H)
+  file(READ "${CGAL_GRAPH_ITERATOR_H}" _cgal_iter)
+  string(FIND "${_cgal_iter}" "base() == nullptr" _cgal_bug)
+  if(_cgal_bug GREATER -1)
+    string(REPLACE "this->base_reference() == nullptr" "false" _cgal_iter "${_cgal_iter}")
+    string(REPLACE "this->base() == nullptr" "false" _cgal_iter "${_cgal_iter}")
+    set(_cgal_fix_dir "${CMAKE_CURRENT_BINARY_DIR}/cgal-fix")
+    file(WRITE "${_cgal_fix_dir}/CGAL/boost/graph/iterator.h" "${_cgal_iter}")
+    target_include_directories(Generation BEFORE PRIVATE "${_cgal_fix_dir}")
+    message(STATUS "Using a fixed copy of ${CGAL_GRAPH_ITERATOR_H}")
+  endif()
+endif()
 target_link_libraries(Generation PRIVATE
   uhlb
   Boost::headers

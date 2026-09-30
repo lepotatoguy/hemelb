@@ -1,4 +1,3 @@
-syntax: glob
 *.pyc
 *.o
 *.d
@@ -8,12 +7,10 @@ build*/
 Code/build/*
 Code/build_clang/*
 install/*
-results/*
 dependencies/build/*
 deploy/.jobscripts
 deploy/machines_user.json
 deploy/machines_user.yml
-personal/*
 CMakeFiles/*
 CMakeCache.txt
 Code/client/displayClient
@@ -31,14 +28,20 @@ dependencies/cppunit-prefix
 dependencies/tinyxml-prefix
 revision_info.txt
 hemelb-prefix/src/hemelb-stamp/hemelb-urlinfo.txt
-.*.sw[p, o, n]
+.*.sw[pon]
 tags
 i
 .astyle
-.clang-format
 Tools/GenerateStl
 *-slack-token
 *.egg-info
 _skbuild
 dist
 .vagrant
+
+hemelb-experiments/*
+results/*
+personal/*
+hemelb-scripts/*
+papers/*
+outputs/*

@@ -13,7 +13,8 @@ The file is binary data using the
 [XDR standard](http://tools.ietf.org/html/rfc4506). This is
 read/written using standard libraries, in both C, using
 [<rpc/xdr.h>](http://linux.die.net/man/3/xdr), and in Python, using
-[xdrlib](http://docs.python.org/library/xdrlib.html).
+`hlb.utils.pyxdr` in `python-tools` (a replacement for the standard
+library's `xdrlib`, which Python 3.13 removed).
 
 This file describes the problem domain as a series of blocks, each
 block being an identically sized cubic subsection of the problem
@@ -118,14 +119,14 @@ For each site the following is given, in order:
 
 	- 2 - INLET
      * an unsigned integer giving the an index to the inlet array
-	   specified in the [XML Config File](../../XMLConfiguration.md).
+	   specified in the [XML Config File](../../user/XmlConfiguration.md).
      * a single precision floating point number giving the distance to
 	   the boundary, as a fraction of the lattice vector, _not_ as a
 	   distance in lattice units.
 
     - 3 - OUTLET
      * an unsigned integer giving the an index to the outlet array
-	   specified in the [XML Config File](../../XMLConfiguration.md).
+	   specified in the [XML Config File](../../user/XmlConfiguration.md).
 
 	 * a single precision floating point number giving the distance to
 	   the boundary, as a fraction of the lattice vector, _not_ as a

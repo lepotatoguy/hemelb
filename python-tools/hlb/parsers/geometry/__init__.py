@@ -23,7 +23,7 @@
  - sl : Index of a site in the block (site local)
  
 """
-import xdrlib
+from ...utils import pyxdr as xdrlib
 import numpy as np
 from .. import HemeLbMagicNumber
 

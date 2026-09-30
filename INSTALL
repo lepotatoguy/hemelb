@@ -1,64 +1,138 @@
-
 # This file is part of HemeLB and is Copyright (C)
 # the HemeLB team and/or their institutions, as detailed in the
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-Instructions to configure, build, and install HemeLB.
+Installing HemeLB
+=================
 
-HemeLB uses CMake (http://cmake.org/cmake/help/cmake-2-8-docs.html)
-CMake works best with 'out of source' builds, these are recommended for HemeLB.
-To build and install from any CMake file (CMakeLists.txt) do:
-     > mkdir build
-     > cd build
-     > cmake <path to directory containing CMakeLists.txt> <options>
-     > make
-     > make install (optional, will copy executables into path.)
-Common options include -DCMAKE_INSTALL_PREFIX to set the path to install to, if you do not have root.
-CMake options can be configured with a GUI on many systems by using ccmake instead of cmake above.
-     * When the ccmake gui appears:
-     * press c to generate options, press e to move on from any messages displayed by cmake. 
-     * edit any options displayed, 
-     * press c to see if there are any new options resulting from the previous round of choices
-     * repeat until you are happy with the options
-     * press g to generate the build
-     * move on to the make step as usual.
+Quick install (macOS or Debian/Ubuntu Linux)
+--------------------------------------------
 
-HemeLB provides three entry points to the CMake system. 
-     * When building for use, the "Master build file" is easiest to use
-     * When building for development, the individual "Code" and "dependencies" entry points provide the most control.
-# Master build file
-     * Resides at the top level of the HemeLB checkout
-     * Optionally builds all HemeLB components
-          (NOTE - only builds hemelb and unittests)
-     * Will download and build HemeLB dependencies as necessary
-     * (Invokes Code and Dependencies builds.)
-# Code build file
-     * Resides in Code/ directory
-     * Assumes all HemeLB dependencies are installed and accessible
-     * Builds HemeLB and optionally the unit-tests
-# Dependencies build file
-     * Resides in dependencies/ directory
-     * Builds dependencies for HemeLB and places them where the Code/ build will find them
-     * Attempts to download from the internet
-     * Will look for pre-downloaded tarballs of dependencies in dependencies/distributions (or choose where with ccmake)
+    git clone https://github.com/lepotatoguy/hemelb.git
+    cd hemelb
+    Scripts/install_hemelb.sh
 
---- Useful CMAKE options. --
+This builds HemeLB into ~/.local/hemelb (programs hemelb, hemelb-confcheck
+and hemelb-tests) and installs the geometry tool (hlb-gmy-gui, hlb-gmy-cli)
+and the Python tools into a conda environment called gmy-tool. Run
+"Scripts/install_hemelb.sh --help" for the options. Full guide:
+doc/user/install.md. First run: doc/user/getting-started.md.
 
-These can be set with -D<OPTION>=<VALUE> or using CCMAKE
-Global options:
-	CMAKE_BUILD_TYPE: Can be None, Debug or Release. Release compiles with optimisation. Debug compiles with -g.
-	TIXML_USE_STL: Should TinyXML use the C++ Standard template library?
-Options for Code, or master build:
-	CMAKE_INSTALL_PREFIX: Location where make install will install to.
-	(CPPUNIT;PARMETIS;TINYXML)-(LIBRARY;INCLUDE): Locations where dependent libraries will be obtained
-	USE_HEMELB_DEBUGGER: When HemeLB runs, should automatically start and attach to a system-appropriate debugger.
-	USE_MULTIMACHINE: Use support for multi-level parallelism.
-	HEMELB_BUILD_UNITTESTS: Should the unit-tests be built?
-	HEMELB_LOG_LEVEL: Log level, can be debug, info, or warning.
-	
-Options for dependencies, or master build:
-	CPPUNIT_TARBALL, TINYXML_TARBALL, PARMETIS_TARBALL: URL to download or path to find dependency tarchive.
-	(If cmake detects a local install of these, the TARBALL options will not be enabled.)
-	
- 
+
+Building by hand
+----------------
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=$HOME/.local/hemelb
+    cmake --build build -j 4
+
+The top-level CMakeLists.txt is the "super build": it builds any missing
+dependency, then HemeLB, and installs everything into CMAKE_INSTALL_PREFIX.
+One configure pass is enough. Choose per dependency with
+-DDEPS_<NAME>=Auto|System|Build (Auto: use the system copy if found,
+otherwise build it).
+
+Other entry points:
+  Code/          HemeLB only; every dependency must already be installed.
+  dependencies/  Only the dependencies, for repeated development builds.
+
+Build options (lattice, collision kernel, boundary conditions, logging):
+doc/user/CMakeOptions.md. Build and run details: doc/user/main-application.md.
+
+The geometry tool on its own, with exactly the tested environment:
+
+    conda create -n gmy-tool --file geometry-tool/conda-lock/osx-64.txt
+          (linux-64.txt on Linux; on Apple Silicon first run
+           export CONDA_SUBDIR=osx-64)
+    conda activate gmy-tool
+    pip install --no-deps --no-build-isolation ./python-tools
+    pip install './geometry-tool[gui]'
+
+See doc/user/geometry-tool.md.
+
+
+Versions
+--------
+
+Pinned: fixed exactly in this repository, so they cannot drift.
+Tested: the exact versions this branch was built and tested with.
+
+1. Libraries the super build downloads when missing (pinned by URL in
+   dependencies/<Name>/build.cmake):
+
+     Boost 1.77.0 (headers)   ParMETIS 4.0.2    TinyXML 2.6.2
+     CTemplate 2.4            zlib 1.2.6        Catch2 2.13.9 (tests)
+     HDF5 1.8.15 (RBC only)   VTK 9.1.0 (RBC only)
+     MPWide 1.1 (multiscale only)
+
+   The minimum versions accepted from your system are Boost 1.77, HDF5 1.8
+   and VTK 9.0; ParMETIS 4, TinyXML 2 and Catch2 2 (catch2/catch.hpp) are
+   the major versions the code is written for. To use exactly the versions
+   above rather than your system's, configure with -DDEPS_<NAME>=Build, for
+   example -DDEPS_BOOST=Build -DDEPS_PARMETIS=Build -DDEPS_TINYXML=Build.
+
+2. Compiler, CMake and MPI come from your system (Homebrew or apt). These
+   cannot be pinned by the repository; the exact versions tested were:
+
+   macOS 27, Apple Silicon (local, 2026-09-27/28)
+     AppleClang 21.0.0, CMake 4.3.2, Open MPI 5.0.9, Boost 1.90.0,
+     CTemplate 2.4, METIS 5.1.0 (Homebrew); bundled ParMETIS 4.0.2 and
+     TinyXML 2.6.2 in a separate manual build
+   macOS 15.7, Intel x86_64 (CI, install script)
+     AppleClang 17.0.0, Open MPI 5.0.10, Boost 1.92.0, CTemplate 2.4,
+     METIS 5.1.0 (Homebrew)
+   macOS 14, Apple Silicon (CI, install script)
+     AppleClang 15.0.0, Open MPI 5.0.10, Boost 1.92.0, CTemplate 2.4,
+     METIS 5.1.0 (Homebrew)
+   Ubuntu 24.04 x86_64 (CI and Docker, install script)
+     GCC 13.3.0, CMake 3.28.3, Open MPI 4.1.6, Boost 1.83.0,
+     ParMETIS 4.0.3, METIS 5.1.0, TinyXML 2.6.2, CTemplate 2.4 (apt)
+   Ubuntu 22.04 x86_64 (CI, main application builds)
+     GCC 11.4.0, 12.3.0 and 13.4.0; Open MPI 4.1.2, ParMETIS 4.0.3,
+     METIS 5.1.0, TinyXML 2.6.2, CTemplate 2.4, HDF5 1.10.7 (apt);
+     Boost 1.77.0, VTK and Catch2 from the bundled builds
+
+   Requirements: a C++20 compiler (GCC 11 or newer, or AppleClang), CMake
+   3.13 or newer, MPI 3.0 or newer (the code uses MPI-3 calls).
+
+3. Geometry tool and Python tools: the conda environment.
+
+   geometry-tool/conda-lock/osx-64.txt and linux-64.txt pin every package
+   (220 and 266 packages) to an exact build; the install script uses them.
+   geometry-tool/conda-environment.yml pins the main packages exactly:
+
+     Python 3.11.8        VMTK 1.5.0          VTK 9.2.6
+     CGAL 5.6.1           Boost headers 1.82.0  NumPy 1.26.4
+     Cython 0.29.37       wxPython 4.2.1      python.app 1.4 (macOS)
+     pybind11 3.1.0       scikit-build 0.19.0 CMake 3.28.3
+     Ninja 1.13.2         setuptools 84.0.0   wheel 0.48.0
+     PyYAML 6.0.3         pytest 9.1.1        zlib 1.3.2   pip 26.2.1
+
+   geometry-tool/pyproject.toml pins what pip uses to build the tool:
+   setuptools 75.3.0, wheel 0.45.1, scikit-build 0.19.0, pybind11 2.13.6,
+   cmake 3.28.3 (these support Python 3.8 to 3.11).
+
+   The geometry tool supports Python 3.8 to 3.11 only, because VMTK 1.5 is
+   only built for those. VMTK is only on conda-forge, not PyPI. CGAL must be
+   5.x: CGAL 6 removed a header the tool uses.
+
+   The Python tools (python-tools/) are tested on Python 3.8 to 3.13 with
+   Cython 0.29 and 3.x, so their build requirements are ranges, not pins;
+   in the conda environment they build against the pinned versions above.
+
+
+Platforms
+---------
+
+Tested with the install script: macOS 14 on Apple Silicon (CI), macOS 15 on
+Intel (CI), macOS 27 on Apple Silicon (locally), and Ubuntu 24.04 x86_64 (CI
+and Docker). Apple
+Silicon Macs run the geometry tool environment under Rosetta 2, because
+VMTK 1.5 exists only for x86_64; the script sets this up.
+
+Not tested: Debian itself,
+the install script on Ubuntu releases before 24.04 (their default compilers
+may be too old for C++20; the main application itself is tested on 22.04), Linux on ARM (no VMTK build exists, so the geometry tool cannot be
+installed there), and distributions without apt (install the packages above
+yourself, then run the script with --no-system-deps).

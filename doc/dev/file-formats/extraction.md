@@ -1,8 +1,17 @@
 # Extracted property files
 
-These files use XDR to encode data. A file will be created for each property requested.
+HemeLB writes the results requested in the `<properties>` section of the
+configuration ([XmlConfiguration.md](../../user/XmlConfiguration.md)) to
+these files, one file per `<propertyoutput>`, under `results/Extracted`.
+Checkpoints use the same format. The extension is `.xtr`.
 
-We suggest the extension .xtr for these.
+To read them, use the Python tools: `hlb-dump-extracted-properties` prints
+them as text, and `hlb.parsers.extraction.ExtractedProperty` loads them in
+Python ([python-tools.md](../../user/python-tools.md)).
+
+All numbers are big-endian XDR (4-byte integers and floats, 8-byte doubles
+and 64-bit integers; strings are a length followed by the bytes, padded to a
+multiple of 4).
 
 ## Main header
 The file begins with a main header (length = 60 bytes)
@@ -15,8 +24,8 @@ The file begins with a main header (length = 60 bytes)
 * uint32 - Field count
 * uint32 - Length of the field header that follows
   
-The ExtractionMagicNumber = 0x78747204
-The version number is currently 5
+HemeLbMagicNumber = 0x686c6221 ("hlb!"), ExtractionMagicNumber =
+0x78747204 ("xtr" + 4). The version number is currently 5.
 
 ## Field header
 This header has fieldCount entries and in each one:
@@ -43,7 +52,8 @@ The body of the file contains a number of entries, one per timestep recorded.
 Each record consists of:
  * uint64 - timestep number
  * for each output site (as many as the total number given in the main header)
-  * 3x uint32 for grid position
+  * 3x uint32 for grid position (lattice coordinates; multiply by the
+    voxel size and add the origin to get metres)
   * for each field
     * the number of values specified in the corresponding field
       header, saved as the type indicated, with any offset being

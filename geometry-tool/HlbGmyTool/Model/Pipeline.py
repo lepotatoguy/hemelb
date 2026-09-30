@@ -61,6 +61,15 @@ class Pipeline(Observable):
     def ResetView(self):
         """Reset the view on the current scene."""
         self.Renderer.ResetCamera()
+        self.Render()
+        return
+
+    def Render(self):
+        """Redraw the scene when an interactor is available."""
+        if hasattr(self, "Interactor"):
+            render_window = self.Interactor.GetRenderWindow()
+            if render_window is not None:
+                render_window.Render()
         return
 
     def SetViewX(self):

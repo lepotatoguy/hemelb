@@ -184,13 +184,14 @@ void PolyDataGenerator::CreateCGALPolygon(void) {
     throw GenerationErrorMessage(
         "Created surface is not valid, cannot voxelize.");
   } else {
-    cout << "Succesfully created closed polygon from input" << endl;
+    cout << "Successfully created closed polygon from input" << endl;
     cout << "The polyhedron has " << ClippedCGALSurface->size_of_facets()
          << " facets " << ClippedCGALSurface->size_of_halfedges()
          << " halfedges " << ClippedCGALSurface->size_of_border_halfedges()
          << " border halfedges " << ClippedCGALSurface->size_of_vertices()
          << " vertices " << endl;
-    bool write_out = true;
+    // Debugging aid: set to true to dump the capped surface to the cwd.
+    bool write_out = false;
     if (write_out) {
       std::ofstream out;
       out.open("exportedsurface.off");

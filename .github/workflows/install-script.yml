@@ -1,0 +1,86 @@
+name: Install script
+on:
+  push:
+    branches:
+      - main
+      - 'fix/**'
+      - 'feature/**'
+    paths:
+      - '.github/workflows/install-script.yml'
+      - 'Scripts/install_hemelb.sh'
+      - 'CMake/**'
+      - 'CMakeLists.txt'
+      - 'Code/**'
+      - 'dependencies/**'
+      - 'geometry-tool/**'
+      - 'python-tools/**'
+
+  pull_request:
+
+  schedule:
+    # Run every Monday 0700 UTC
+    - cron: '0 7 * * 1'
+
+  workflow_dispatch:
+    # Run on demand
+
+jobs:
+  install:
+    name: Install on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14 runs on Apple Silicon with AppleClang (osx-64 geometry tool
+        # environment under Rosetta 2); macos-15-intel is Intel (native osx-64).
+        os: [ubuntu-24.04, macos-14, macos-15-intel]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rosetta 2 (for the osx-64 geometry tool environment)
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
+        run: sudo softwareupdate --install-rosetta --agree-to-license || true
+
+      - name: Run the install script
+        run: Scripts/install_hemelb.sh --jobs 3 --prefix "$RUNNER_TEMP/hemelb"
+
+      - name: Run a short simulation
+        run: |
+          mkdir -p "$RUNNER_TEMP/run"
+          cd "$RUNNER_TEMP/run"
+          cp "$GITHUB_WORKSPACE/Code/tests/resources/large_cylinder.gmy" .
+          sed 's/value="50000"/value="200"/' \
+            "$GITHUB_WORKSPACE/Code/tests/resources/large_cylinder.xml" > lc.xml
+          mpirun --oversubscribe -n 2 "$RUNNER_TEMP/hemelb/bin/hemelb" -in lc.xml -out out
+          test -f out/report.txt
+
+      - name: Check the geometry and Python tools
+        run: |
+          if command -v conda >/dev/null; then base="$(conda info --base)"; else base="$HOME/miniforge3"; fi
+          source "$base/etc/profile.d/conda.sh"
+          conda activate gmy-tool
+          cd "$RUNNER_TEMP"
+          python -c "import HlbGmyTool.Model.Generation, hlb.utils.xdr, vmtk"
+          hlb-gmy-cli --help
+
+      - name: Poiseuille flow regression test (geometry tool + HemeLB + analysis)
+        env:
+          HEMELB_EXECUTABLE: ${{ runner.temp }}/hemelb/bin/hemelb
+          MPIRUN_FLAGS: --oversubscribe
+        run: |
+          if command -v conda >/dev/null; then base="$(conda info --base)"; else base="$HOME/miniforge3"; fi
+          source "$base/etc/profile.d/conda.sh"
+          conda activate gmy-tool
+          python Code/tests/pythontests/poiseuilleflowtest.py -v
+
+      - name: Store build logs on error
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: install-${{ matrix.os }}-logs
+          path: |
+            build/CMakeFiles/*.yaml
+            build/**/*-stamp/*.log

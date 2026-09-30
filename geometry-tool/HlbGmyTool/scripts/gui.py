@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 
 # Parse command line arguments
 parser = ArgumentParser(
-    description="Process an input STL file into" "suitable input for HemeLB."
+    description="Process an input STL file into suitable input for HemeLB."
 )
 
 parser.add_argument(
@@ -15,7 +15,7 @@ parser.add_argument(
     default=None,
     help="Load the profile "
     "to use from an existing file. Other options given "
-    "override those inthe profile file.",
+    "override those in the profile file.",
     metavar="PATH",
 )
 parser.add_argument(

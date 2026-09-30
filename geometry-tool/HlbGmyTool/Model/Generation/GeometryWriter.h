@@ -33,14 +33,14 @@ class GeometryWriter {
   int BlockSize;
   Index BlockCounts;
 
-  int headerStart;
-  XdrWriter* headerEncoder;
-  unsigned int headerBufferLength;
-  char* headerBuffer;
+  int headerStart = 0;
+  XdrWriter* headerEncoder = nullptr;
+  unsigned int headerBufferLength = 0;
+  char* headerBuffer = nullptr;
 
-  int bodyStart;
-  FILE* bodyFile;
-  BufferPool* BlockBufferPool;
+  int bodyStart = 0;
+  FILE* bodyFile = nullptr;
+  BufferPool* BlockBufferPool = nullptr;
   friend class BlockWriter;
 };
 

@@ -15,7 +15,60 @@ from vtk import vtkSTLReader
 from ..Util.Observer import Observable
 from .SideLengthCalculator import AverageSideLengthCalculator
 from .Vector import Vector
-from .Iolets import ObservableListOfIolets, IoletLoader
+from .Iolets import ObservableListOfIolets, IoletLoader, Inlet, Outlet
+
+import types
+
+
+_LEGACY_MODULE = "HemeLbSetupTool"
+# Legacy profiles store timing as cycles of a 70 beats per minute pulse.
+LEGACY_CARDIAC_PERIOD_S = 60.0 / 70.0
+
+
+class FakeUnpickler(pickle.Unpickler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._HST = types.ModuleType("HemeLbSetupTool")
+        self._classes = {}
+
+    def _get_or_make_mod(self, moduleName):
+        parts = moduleName.split(".")
+        hst = parts.pop(0)
+        if hst != _LEGACY_MODULE:
+            raise pickle.UnpicklingError("not a legacy profile module: %s" % moduleName)
+        full = hst
+        cur = self._HST
+        while parts:
+            name = parts.pop(0)
+            if not hasattr(cur, name):
+                mod = types.ModuleType(f"{full}.{name}")
+                mod.__package__ = full
+                full = mod.__name__
+                setattr(cur, name, mod)
+            cur = getattr(cur, name)
+        return cur
+
+    def _get_or_make_class(self, mod, className):
+        try:
+            return getattr(mod, className)
+        except AttributeError:
+
+            def __up__(this):
+                return this  # no-op upgrade
+
+            fake = type(
+                className, (object,), {"__module__": mod.__name__, "__up__": __up__}
+            )
+            setattr(mod, className, fake)
+            return fake
+
+    def find_class(self, moduleName, className):
+        if moduleName == _LEGACY_MODULE or moduleName.startswith(_LEGACY_MODULE + "."):
+            mod = self._get_or_make_mod(moduleName)
+            return self._get_or_make_class(mod, className)
+        raise pickle.UnpicklingError(
+            "global '%s.%s' is not allowed in legacy profiles" % (moduleName, className)
+        )
 
 
 class LengthUnit(Observable):
@@ -51,6 +104,9 @@ class Profile(Observable):
         "VoxelSize": 0.0,
         "TimeStepSeconds": 1e-4,
         "DurationSeconds": 5.0,
+        # Period of the cosine pressure at every inlet and outlet. Profiles
+        # without it use 1 s, the value that was always written before.
+        "PulsePeriodSeconds": 1.0,
         "SeedPoint": Vector(),
         "OutputGeometryFile": None,
         "OutputXmlFile": None,
@@ -66,10 +122,11 @@ class Profile(Observable):
             continue
         # Raise an error on a kwarg we don't understand
         for k in kwargs:
-            raise TypeError("__init__() got an unexpected keyword argument '%'" % k)
+            raise TypeError("__init__() got an unexpected keyword argument '%s'" % k)
 
         # We need a reader to get the polydata
         self.StlReader = vtkSTLReader()
+        self.HasLoadedStlFile = False
 
         # And a way to estimate the voxel size
         self.SideLengthCalculator = AverageSideLengthCalculator()
@@ -92,8 +149,7 @@ class Profile(Observable):
         self.BoundingBoxSize = 0.0
         self.AddDependency("DefaultIoletRadius", "BoundingBoxSize")
 
-        # When the STL changes, we should reset the voxel size and
-        # update the vtkSTLReader.
+        # Load a valid STL and update the mesh measurements when it changes.
         self.AddObserver("StlFile", self.OnStlFileChanged)
         return
 
@@ -117,9 +173,14 @@ class Profile(Observable):
                 setattr(self, k, val)
 
     def OnStlFileChanged(self, change):
+        self.HasLoadedStlFile = False
+        if not self.HaveValidStlFile:
+            self.BoundingBoxSize = 0.0
+            return
+
         self.StlReader.SetFileName(self.StlFile)
-        self.VoxelSize = self.SideLengthCalculator.GetOutputValue()
         self.StlReader.Update()
+        self.VoxelSize = self.SideLengthCalculator.GetOutputValue()
         surf = self.StlReader.GetOutput()
         surf.ComputeBounds()
         bounds = surf.GetBounds()
@@ -130,6 +191,7 @@ class Profile(Observable):
             + (bounds[3] - bounds[2]) ** 2
             + (bounds[5] - bounds[4]) ** 2
         )
+        self.HasLoadedStlFile = True
         return
 
     @property
@@ -198,17 +260,85 @@ class Profile(Observable):
 
     def LoadProfileV2(self, filename):
         with open(filename) as f:
-            state = yaml.load(f, yaml.SafeLoader)
+            state = yaml.safe_load(f)
+        if not isinstance(state, dict):
+            raise ValueError("Profile file must contain a mapping")
         self._ResetPathsV2(state, filename)
         self.LoadFrom(state)
         return
 
     def LoadProfileV1(self, filename):
         with open(filename, "rb") as f:
-            restored = pickle.Unpickler(f, fix_imports=True).load()
-        restored._ResetPaths(filename)
-        self.CloneFrom(restored)
+            restored_fake = FakeUnpickler(f).load()
+            halfway = restored_fake.__up__()
+
+        has_steps = hasattr(halfway, "Steps")
+        has_cycles = hasattr(halfway, "Cycles")
+        if has_steps != has_cycles:
+            raise ValueError("Profile has only one of Cycles and Steps")
+        if has_steps and has_cycles:
+            if hasattr(halfway, "TimeStepSeconds") or hasattr(
+                halfway, "DurationSeconds"
+            ):
+                raise ValueError("Legacy profile mixes old and new timing fields")
+            if halfway.Steps <= 0 or halfway.Cycles <= 0:
+                raise ValueError("Profile Steps and Cycles must be positive")
+            halfway.TimeStepSeconds = LEGACY_CARDIAC_PERIOD_S / halfway.Steps
+            halfway.DurationSeconds = LEGACY_CARDIAC_PERIOD_S * halfway.Cycles
+
+        base_path = os.path.dirname(os.path.abspath(filename))
+        values = {}
+        for attr in Profile._Args:
+            val = getattr(halfway, attr, None)
+            if attr == "SeedPoint" and val is not None:
+                val = Vector(val.x, val.y, val.z)
+            elif attr == "Iolets" and val is not None:
+                val = self._ConvertLegacyIolets(val)
+            elif attr in ("StlFile", "OutputGeometryFile", "OutputXmlFile"):
+                if val is not None:
+                    if not isinstance(val, str):
+                        raise ValueError(
+                            "Legacy profile path %s is not a string" % attr
+                        )
+                    val = os.path.abspath(os.path.join(base_path, val))
+            if val is not None:
+                values[attr] = val
+
+        for attr in self._CloneOrder:
+            if attr in values:
+                setattr(self, attr, values.pop(attr))
+        for attr, val in values.items():
+            setattr(self, attr, val)
         return
+
+    @staticmethod
+    def _ConvertLegacyIolets(iolets):
+        real_iolets = ObservableListOfIolets()
+        for io in iolets:
+            class_name = type(io).__name__
+            if class_name == "Inlet":
+                iolet = Inlet()
+            elif class_name == "Outlet":
+                iolet = Outlet()
+            else:
+                name = getattr(io, "Name", "")
+                if name.startswith("Inlet"):
+                    iolet = Inlet()
+                elif name.startswith("Outlet"):
+                    iolet = Outlet()
+                else:
+                    raise ValueError("Unknown legacy iolet type: %s" % class_name)
+
+            for attr in ("Name", "Radius"):
+                value = getattr(io, attr, None)
+                if value is not None:
+                    setattr(iolet, attr, value)
+            for attr in ("Centre", "Normal", "Pressure"):
+                value = getattr(io, attr, None)
+                if value is not None:
+                    setattr(iolet, attr, Vector(value.x, value.y, value.z))
+            real_iolets.append(iolet)
+        return real_iolets
 
     def _ResetPaths(self, filename):
         # Now adjust the paths of filenames relative to the Profile file.
@@ -217,35 +347,35 @@ class Profile(Observable):
         # absolute path. (Of course, this will only work if that path is
         # correct!)
         basePath = os.path.dirname(os.path.abspath(filename))
-        self.StlFile = os.path.abspath(os.path.join(basePath, self.StlFile))
-        self.OutputGeometryFile = os.path.abspath(
-            os.path.join(basePath, self.OutputGeometryFile)
-        )
-        self.OutputXmlFile = os.path.abspath(os.path.join(basePath, self.OutputXmlFile))
+        for attr in ("StlFile", "OutputGeometryFile", "OutputXmlFile"):
+            value = getattr(self, attr, None)
+            if value is not None:
+                setattr(self, attr, os.path.abspath(os.path.join(basePath, value)))
         return
 
     def _ResetPathsV2(self, state, filename):
         # Now adjust the paths of filenames relative to the Profile file.
         basePath = os.path.dirname(os.path.abspath(filename))
-        state["StlFile"] = os.path.abspath(os.path.join(basePath, state["StlFile"]))
-        state["OutputGeometryFile"] = os.path.abspath(
-            os.path.join(basePath, state["OutputGeometryFile"])
-        )
-        state["OutputXmlFile"] = os.path.abspath(
-            os.path.join(basePath, state["OutputXmlFile"])
-        )
+        for attr in ("StlFile", "OutputGeometryFile", "OutputXmlFile"):
+            value = state.get(attr)
+            if value is not None:
+                if not isinstance(value, str):
+                    raise ValueError("Profile path %s is not a string" % attr)
+                state[attr] = os.path.abspath(os.path.join(basePath, value))
         return
 
     def Save(self, filename):
         basePath = str(os.path.dirname(filename))
         state = self.Yamlify()
-        state["StlFile"] = os.path.relpath(state["StlFile"], basePath)
-        state["OutputXmlFile"] = os.path.relpath(state["OutputXmlFile"], basePath)
-        state["OutputGeometryFile"] = os.path.relpath(
-            state["OutputGeometryFile"], basePath
-        )
+        for attr in ("StlFile", "OutputXmlFile", "OutputGeometryFile"):
+            value = state[attr]
+            if value is not None:
+                if not isinstance(value, str):
+                    raise ValueError("Profile path %s is not a string" % attr)
+                value = value if os.path.isabs(value) else os.path.abspath(value)
+                state[attr] = os.path.relpath(value, basePath)
         with open(filename, "w") as outfile:
-            yaml.dump(state, stream=outfile)
+            yaml.safe_dump(state, stream=outfile)
 
         return
 
@@ -254,7 +384,7 @@ class Profile(Observable):
 
         generator = PolyDataGenerator(self)
         generator.Execute()
-        return
+        return generator.Warnings
 
     def ResetVoxelSize(self, ignored=None):
         """Action to reset the voxel size to its default value."""

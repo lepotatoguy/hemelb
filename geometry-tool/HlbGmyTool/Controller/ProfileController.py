@@ -13,6 +13,7 @@ from .IoletListController import HasIoletListKeys
 from .VectorController import HasVectorKeys
 
 import pdb
+import sys
 
 
 class ProfileController(
@@ -42,19 +43,45 @@ class ProfileController(
         return
 
     def Debug(self, ignored=None):
-        """Drop into the debugger."""
+        """Drop into the debugger in the terminal the tool was started from."""
+        if not StartedFromTerminal():
+            # pdb would wait for input nobody can type, freezing the GUI.
+            ShowMessage(
+                "The debugger needs a terminal. Start hlb-gmy-gui from a terminal "
+                "to use the DEBUG button.",
+                wx.ICON_INFORMATION,
+            )
+            return
         pdb.set_trace()
         return
 
     def Generate(self, ignored=None):
+        from ..scripts.cli import check_profile
+
+        problems = check_profile(self.delegate)
+        if problems:
+            ShowMessage("Cannot generate:\n\n" + "\n".join(problems), wx.ICON_ERROR)
+            return
+
         # Pop up the dialog
         dialog = wx.ProgressDialog(
             "Geometry generating",
             "Generating geometry, please wait for this window to close.",
         )
         dialog.Pulse()
-        self.delegate.Generate()
-        dialog.Destroy()
+        try:
+            warnings = self.delegate.Generate()
+        except Exception as err:
+            ShowMessage("Generation failed:\n\n%s" % err, wx.ICON_ERROR)
+            return
+        finally:
+            dialog.Destroy()
+        if warnings:
+            ShowMessage(
+                "The geometry was generated, but check these inputs:\n\n"
+                + "\n\n".join(warnings),
+                wx.ICON_WARNING,
+            )
         return
 
     def ChooseStl(self, ignored=None):
@@ -115,10 +142,24 @@ class ProfileController(
         dialog = wx.FileDialog(None, style=wx.FD_OPEN, wildcard="*.pro|*.pr2")
 
         if dialog.ShowModal() == wx.ID_OK:
-            self.delegate.LoadFromFile(dialog.GetPath())
+            try:
+                self.delegate.LoadFromFile(dialog.GetPath())
+            except Exception as err:
+                ShowMessage("Cannot open profile:\n\n%s" % err, wx.ICON_ERROR)
             pass
 
         dialog.Destroy()
         return
 
     pass
+
+
+def StartedFromTerminal():
+    """True if standard input is a terminal, so pdb can read commands."""
+    return sys.stdin is not None and sys.stdin.isatty()
+
+
+def ShowMessage(text, icon):
+    dialog = wx.MessageDialog(None, text, "HemeLB Setup Tool", style=wx.OK | icon)
+    dialog.ShowModal()
+    dialog.Destroy()

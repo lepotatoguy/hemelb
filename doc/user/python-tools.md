@@ -6,7 +6,7 @@ files into other formats.
 
 Dependencies:
 
-- Python >= 3.6
+- Python 3.8 to 3.13 (tested in CI)
 - setuptools
 - Cython
 - Numpy
@@ -24,7 +24,8 @@ pip install .
 
 ## Use
 
-For now, please run the script with the `-h` option for help.
+Each command prints help with `-h`. The install script installs these tools
+into the `gmy-tool` conda environment.
 
 Available command line tools:
 
@@ -32,11 +33,20 @@ Available command line tools:
 
 - `hlb-gmy-compress`: compress an uncompressed geometry file.
 
-- `hlb-dump-extracted-properties`: convert an extraction file to CSV.
+- `hlb-dump-extracted-properties`: convert an extraction file (`.xtr`) to
+  text: `hlb-dump-extracted-properties results/Extracted/whole.xtr whole.csv`
+  (without the second name it prints to the terminal). See
+  [Getting started](getting-started.md) for what the columns mean.
+  HemeXtract, which older guides mention, was written for a fork of HemeLB
+  and cannot read these files; use this tool instead.
 
 - `hlb-gmy-selfconsistent`: check if a geometry file is self-consistent.
 
 - `hlb-gmy-countsites`: print some basic information about how many sites in a geometry file
+
+- `hlb-gmy-3to4 config.xml`: upgrade an XML file and the version 3 geometry
+  file it names to version 4; the results go in a new `converted` folder
+  next to the XML.
 
 
 Runnable modules (run with `python -m`):
