@@ -1,0 +1,43 @@
+StlFile: first-run.stl
+StlFileUnitId: 1
+VoxelSize: 0.1
+SeedPoint:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+TimeStepSeconds: 0.0001
+DurationSeconds: 0.02
+PulsePeriodSeconds: 1.0
+OutputGeometryFile: first-run.gmy
+OutputXmlFile: generated.xml
+Iolets:
+- Type: Inlet
+  Name: Inlet1
+  Centre:
+    x: 0.0
+    y: 0.0
+    z: -1.5
+  Normal:
+    x: 0.0
+    y: 0.0
+    z: 1.0
+  Radius: 0.8
+  Pressure:
+    x: 0.01
+    y: 0.0
+    z: 0.0
+- Type: Outlet
+  Name: Outlet1
+  Centre:
+    x: 0.0
+    y: 0.0
+    z: 1.5
+  Normal:
+    x: 0.0
+    y: 0.0
+    z: -1.0
+  Radius: 0.8
+  Pressure:
+    x: 0.0
+    y: 0.0
+    z: 0.0

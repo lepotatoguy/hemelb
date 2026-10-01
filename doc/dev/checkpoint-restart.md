@@ -2,7 +2,9 @@
 
 A fluid checkpoint can be restarted with a different number of MPI
 processes from the run that saved it. The checkpoint file format is
-unchanged.
+unchanged: version 5, one double-precision distributions field, no field offsets.
+The [user workflow](../user/checkpoints.md) explains saving files and configuring
+a restart.
 
 ## How the reader works
 
@@ -36,7 +38,7 @@ keeps this true.
   number of distributions per site. Both are checked.
 - The voxel size and origin in the checkpoint header must match the current
   geometry (to within 1e-9 of a voxel). `SimBuilder` passes them to
-  `CheckpointInitialCondition`, and a mismatch stops the run on every rank,
+  `CheckpointInitialCondition`, and a mismatch is an error,
   so a checkpoint cannot be loaded into a different geometry that happens to
   have the same site coordinates.
 - A checkpoint and its offset file must come from the same run.
@@ -47,7 +49,7 @@ keeps this true.
 case for four timesteps, restarts from timestep 2 with a different process
 count, and compares the distributions at timestep 4 by grid position. It
 also checks that a checkpoint is rejected by a run with a different voxel
-size or origin:
+size or origin (these rejection cases run on one rank):
 
 ```sh
 python3 Code/tests/checkpoint_restart_mpi.py --hemelb /path/to/hemelb

@@ -2,7 +2,7 @@
 
 This note describes how the main application reads a `.gmy` file, what
 it rejects, and how it makes the initial domain decomposition. The file
-layout itself is described in [file-formats](file-formats).
+layout itself is described in [geometry format](file-formats/geometry.md).
 
 ## Validation when reading
 
@@ -32,8 +32,10 @@ Limit: each compressed block must fit the 64 MiB streaming buffer
 (`MAX_GMY_BUFFER_SIZE`). Larger blocks are rejected with an error; reading
 them would need a change to the buffering strategy.
 
-The block lookup tree (`LookupTree.cc`) sizes itself with a 32-bit counter,
-so any domain addressable by the 16-bit block coordinates is supported.
+The block lookup tree (`LookupTree.cc`) uses a 32-bit node counter and 16-bit
+block coordinates. These type widths are not a guarantee that every such domain
+can be loaded: dense block storage, header limits, and available memory also
+bound this branch's reader.
 
 ## Writing (geometry tool)
 

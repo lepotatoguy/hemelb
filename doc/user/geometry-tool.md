@@ -35,50 +35,57 @@ main packages and their versions are also in
 need a C++20 compiler (Xcode Command Line Tools on macOS, `build-essential`
 on Ubuntu).
 
+Run from the repository root and choose one platform lock. On Apple Silicon,
+install Rosetta 2 first if it is unavailable, and create the Intel environment
+with `CONDA_SUBDIR=osx-64`:
+
 ```sh
-# On Apple Silicon only: use an Intel environment (runs under Rosetta 2)
-export CONDA_SUBDIR=osx-64
-
 # macOS (Intel or Apple Silicon)
-conda create -n gmy-tool --file geometry-tool/conda-lock/osx-64.txt
-# Linux x86_64
-conda create -n gmy-tool --file geometry-tool/conda-lock/linux-64.txt
-
+CONDA_SUBDIR=osx-64 conda create -n gmy-tool --file geometry-tool/conda-lock/osx-64.txt
 conda activate gmy-tool
-conda config --env --set subdir osx-64      # Apple Silicon only
-
-pip install --no-deps --no-build-isolation ./python-tools
-pip install './geometry-tool[gui]'
+conda config --env --set subdir osx-64
 ```
 
-The geometry tool install needs no special flags: its `setup.py` sees that
-VMTK came from conda (VMTK is not on PyPI) and its CMake uses the
-environment's CGAL, Boost and VTK before any Homebrew or system copies. For
-the Python tools, `--no-build-isolation` builds against the environment's
-NumPy and Cython so the compiled modules match, and `--no-deps` keeps pip
-from replacing conda packages. The install script uses both flags for both
-packages. pip builds the tool with the exact build tools pinned in
+On Linux x86_64 instead:
+
+```sh
+conda create -n gmy-tool --file geometry-tool/conda-lock/linux-64.txt
+conda activate gmy-tool
+```
+
+Then install both packages against that environment's locked dependencies:
+
+```sh
+export CMAKE_PREFIX_PATH="$CONDA_PREFIX"
+python -m pip install --no-deps --no-build-isolation ./python-tools
+python -m pip install --no-deps --no-build-isolation ./geometry-tool
+```
+
+`--no-deps` keeps pip from replacing conda packages. `--no-build-isolation`
+builds against the environment's NumPy, Cython, and build tools. This matches
+the install script. An isolated pip build instead uses the pins in
 `geometry-tool/pyproject.toml`.
 
-On other platforms, `conda env create -f geometry-tool/conda-environment.yml`
-creates the environment from the pinned main packages instead. It includes
-`vtk-io-ffmpeg` because VTK's CMake files expect it. CGAL 5.6 has one header
-(`CGAL/boost/graph/iterator.h`) that current Clang rejects; the tool's build
-uses a corrected copy automatically.
+The tool's `setup.py` recognizes VMTK installed by conda. Its CMake searches
+the environment for CGAL, Boost, and VTK before system copies. The CGAL 5.6
+header workaround is applied to a build-local copy, leaving the installed
+header unchanged. Explicit locks are platform-specific; another platform needs
+its own available packages and validation rather than either existing lock.
 
 **macOS GUI.** On macOS a GUI program must run with a "framework" build of
 Python, otherwise `hlb-gmy-gui` stops with "This program needs access to the
 screen". Fix the launcher once after installing:
 
 ```sh
-conda install -c conda-forge python.app
+# python.app is already included in the macOS lock
 python geometry-tool/macos-fix-gui-launcher.py
 ```
 
-**Without conda.** The hemelb-codes organisation has a project that builds
-VMTK for Ubuntu (https://github.com/hemelb-codes/vmtk-build/); with VMTK
-installed, `pip install ./python-tools ./geometry-tool` works in the same
-way.
+**Without conda.** The geometry-tool CI installs VMTK through
+[hemelb-codes/vmtk-build](https://github.com/hemelb-codes/vmtk-build). See the
+[workflow](../../.github/workflows/gmy-tool.yml) for that separate setup.
+Do not combine native solver dependencies with an Intel geometry environment
+on Apple Silicon.
 
 ## Test
 
@@ -96,24 +103,19 @@ tests are skipped if wxPython is not installed. The
 
 ## Run GUI
 
-Ensure your environment is activated then run `hlb-gmy-gui`. There is
-basic command line help available:
+Activate the environment, then run `hlb-gmy-gui`. Use `--help` to list startup
+options. A saved profile can be reopened directly:
 
+```sh
+hlb-gmy-gui --profile vessel.pr2
 ```
-$ hlb-gmy-gui --help
-usage: hlb-gmy-gui [-h] [--profile PATH] [--stl PATH] [--geometry PATH]
-                   [--xml PATH]
 
-Process an input STL file into suitable input for HemeLB.
-
-options:
-  -h, --help       show this help message and exit
-  --profile PATH   Load the profile to use from an existing file. Other
-                   options given override those in the profile file.
-  --stl PATH       The STL file to use as input
-  --geometry PATH  Config output file
-  --xml PATH       XML output file
-```
+| Option | Purpose |
+| :--- | :--- |
+| `--profile PATH` | Load a saved profile |
+| `--stl PATH` | Select the input surface |
+| `--geometry PATH` | Set the GMY output path |
+| `--xml PATH` | Set the XML output path |
 
 A typical session:
 
@@ -327,7 +329,7 @@ profile. Saving one is highly recommended, so you can repeat the run later
 
 It is a YAML file which can be edited manually. Floating point values
 are stored by default in hexadecimal to avoid precision loss
-(https://docs.python.org/3/library/stdtypes.html#float.hex) but can be
+(using `float.hex()` notation) but can be
 set in decimal if more convenient. Integers (`3`), decimals (`0.5`,
 `1.0e-5`) and exponents without a decimal point (`1e-5`, which YAML reads
 as text) are all accepted.
@@ -344,3 +346,5 @@ as text) are all accepted.
 | `OutputGeometryFile`, `OutputXmlFile` | Outputs, relative to the profile |
 
 Paths in a profile are interpreted relative to that profile file's location.
+
+For installation or import failures, see [troubleshooting](troubleshooting.md).

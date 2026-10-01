@@ -1,0 +1,53 @@
+<?xml version='1.0' encoding='utf-8'?>
+<hemelbsettings version="5">
+  <simulation>
+    <step_length value="0.0001" units="s" />
+    <steps value="200" units="lattice" />
+    <stresstype value="1" />
+    <voxel_size value="0.0001" units="m" />
+    <origin value="(-0.00055,-0.00055,-0.0015500000000000002)" units="m" />
+  </simulation>
+  <geometry>
+    <datafile path="first-run.gmy" />
+  </geometry>
+  <inlets>
+    <inlet>
+      <condition type="pressure" subtype="cosine">
+        <mean value="0.01" units="mmHg" />
+        <amplitude value="0.0" units="mmHg" />
+        <phase value="0.0" units="rad" />
+        <period value="1" units="s" />
+      </condition>
+      <normal value="(0.0,0.0,1.0)" units="dimensionless" />
+      <position value="(0.0,0.0,-0.0015)" units="m" />
+    </inlet>
+  </inlets>
+  <outlets>
+    <outlet>
+      <condition type="pressure" subtype="cosine">
+        <mean value="0.0" units="mmHg" />
+        <amplitude value="0.0" units="mmHg" />
+        <phase value="0.0" units="rad" />
+        <period value="1" units="s" />
+      </condition>
+      <normal value="(0.0,0.0,-1.0)" units="dimensionless" />
+      <position value="(0.0,0.0,0.0015)" units="m" />
+    </outlet>
+  </outlets>
+  <initialconditions>
+    <pressure>
+      <uniform value="0.0" units="mmHg" />
+    </pressure>
+  </initialconditions>
+  <monitoring>
+    <incompressibility />
+  </monitoring>
+  <properties>
+    <propertyoutput file="whole.xtr" period="100">
+      <geometry type="whole" />
+      <field type="velocity" />
+      <field type="pressure" />
+    </propertyoutput>
+    <checkpoint file="checkpoint_%d.xtr" period="100" />
+  </properties>
+</hemelbsettings>

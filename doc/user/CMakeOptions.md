@@ -5,6 +5,10 @@ Pass these to CMake with `-D`, for example
 them interactively with `ccmake build`. They are defined in
 `CMake/GlobalOptions.cmake` and `CMake/HemeLbOptions.cmake`.
 
+This table covers frequently used options on `fix/hemelb-improvements`.
+See the linked CMake files for the complete list. For build-folder and generator
+choices, follow [build and run](main-application.md).
+
 Most users only need the defaults. The model options (lattice, collision,
 boundaries) are fixed when HemeLB is compiled, so to try another model you
 build another executable (give it a different name with `HEMELB_EXECUTABLE`).
@@ -46,6 +50,13 @@ stops HemeLB with "XML configuration for inlet ... not consistent with
 compile-time choice of boundary condition". See
 [XmlConfiguration.md](XmlConfiguration.md).
 
+### Example: velocity inlet, pressure outlet
+
+Configure a separate build with `-DHEMELB_INLET_BOUNDARY=LADDIOLET` and
+`-DHEMELB_OUTLET_BOUNDARY=NASHZEROTHORDERPRESSUREIOLET`. Change the XML inlet
+condition to a velocity subtype and keep pressure outlets. Rebuild after
+changing either option. Renaming the executable alone does not select a model.
+
 ## Logging and checks
 
 | Option | Default | Meaning |
@@ -81,3 +92,8 @@ If CMake cannot find a library you have installed, tell it where:
 | ParMETIS | `ParMETIS_INCLUDE_DIR`, `ParMETIS_LIBRARY` |
 | TinyXML | `TINYXML_INCLUDE_DIR`, `TINYXML_LIBRARIES` |
 | VTK | `VTK_DIR` |
+
+For code-only builds, pass dependency hints to that configure command. In a
+super build, some hints must also be passed to the inner configure; the forwarded
+variables are listed in `CMake/HemeLbOptions.cmake`. A dependency prefix via
+`HEMELB_DEPENDENCIES_INSTALL_PREFIX` is usually easier to keep consistent.

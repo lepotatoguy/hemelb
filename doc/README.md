@@ -1,55 +1,63 @@
 # HemeLB documentation
 
-HemeLB simulates blood flow (or any fluid flow) through complex 3D shapes
-such as vessel networks, using the lattice Boltzmann method. It runs in
-parallel with MPI.
+These guides describe `fix/hemelb-improvements`. The solver reads XML version 5,
+uses mmHg for pressure, and writes extraction/checkpoint version 5. The Python
+reader accepts extraction versions 4 and 5. Check the branch before following a
+guide: other branches may use different versions and units.
 
-## New to HemeLB? Start here
+## Start here
 
-1. **Install** HemeLB, the geometry tool and the Python tools with one
-   script: [Installing HemeLB](user/install.md).
-2. **Do a first run** from a surface to results with the sample files in the
-   repository: [Getting started](user/getting-started.md).
-3. **Use your own geometry:** [Geometry tool](user/geometry-tool.md) explains
-   how to turn an STL surface into a HemeLB geometry, with the GUI
-   (`hlb-gmy-gui`) or on the command line (`hlb-gmy-cli`), and how to place
-   inlets, outlets and the seed point.
-4. **Configure a simulation** (time step, boundary conditions, outputs):
-   [XML configuration](user/XmlConfiguration.md).
-5. **Analyse results:** [Python tools](user/python-tools.md).
+1. [Install HemeLB and all related tools](user/install.md).
+2. [Run the example](user/getting-started.md) and inspect its output.
+3. [Generate a geometry](user/geometry-tool.md) from your own STL surface.
+4. [Configure the simulation](user/XmlConfiguration.md), including field output.
+5. [Run the simulation](https://github.com/lepotatoguy/hemelb/blob/fix/hemelb-improvements/doc/user/main-application.md#run).
+6. [Analyse the results](user/python-tools.md).
+7. (Optional) [Resume from a saved checkpoint](user/checkpoints.md) if the simulation stops before it finishes.
 
-Every HemeLB run follows the same four steps:
+| Task | Reference |
+| :--- | :--- |
+| Manual installation or cluster build | [Build and run](user/main-application.md) |
+| Change lattice, collision model, or boundary implementation | [CMake options](user/CMakeOptions.md) |
+| Use a per-site velocity profile | [Non-cylindrical velocity inlets](user/non-cylindrical-velocity-inlets.md) |
+| Try a complete STL/profile/GMY/XML case | [Example files](examples/README.md) |
+| Diagnose installation or simulation errors | [Troubleshooting](user/troubleshooting.md) |
+| Develop and test the code | [Developer guide](dev/README.md) |
+| Inspect binary file layouts | [Geometry](dev/file-formats/geometry.md), [extraction](dev/file-formats/extraction.md), [offsets](dev/file-formats/offset.md) |
+| Understand changes in this fork | [Changelog](../CHANGELOG.md) |
 
-| Step | What happens | Guide |
-| --- | --- | --- |
-| 1. Geometry | An STL surface and a profile become a `.gmy` geometry and a `.xml` configuration | [geometry-tool.md](user/geometry-tool.md) |
-| 2. Configuration | Edit the `.xml`: time step, run length, boundary conditions, which results to save | [XmlConfiguration.md](user/XmlConfiguration.md) |
-| 3. Simulation | `mpirun -n N hemelb -in config.xml -out results` | [main-application.md](user/main-application.md) |
-| 4. Analysis | Convert the saved `.xtr` files to text or other formats | [python-tools.md](user/python-tools.md) |
+## Files and units
 
-## For developers
+| File | Purpose | Units and interpretation |
+| :--- | :--- | :--- |
+| `.stl` | Triangulated vessel surface | Coordinates use the units selected in the geometry profile |
+| `.pr2` | YAML geometry profile | Centres, radii, seed point, and voxel size use STL units; time settings use seconds |
+| `.gmy` | Voxelised geometry and boundary links | Integer lattice coordinates; physical origin and voxel size come from the XML |
+| `.xml` | Simulation configuration | Version 5: positions in metres, times in seconds, pressures in mmHg |
+| `.xtr` | Extracted fields or checkpoint distributions | Version 5 output; velocity in m/s, pressure in mmHg; grid coordinates are integer lattice positions |
+| `.off` | Companion extraction offsets | Byte offsets for the MPI ranks that wrote the data; required for checkpoint loading |
 
-- [Building HemeLB by hand](user/main-application.md) and
-  [CMake options](user/CMakeOptions.md) (the install script does this for
-  you).
-- [Developer notes](dev/README.md): how the code reads geometry, restarts
-  checkpoints and lays out its files, and **how to run every test suite**.
-- [CHANGELOG.md](../CHANGELOG.md): changes in this fork and how each was
-  checked.
-- Machine-specific build notes: [user/machine-specific-build-notes](user/machine-specific-build-notes).
+A normal run creates `report.txt`, `report.xml`, and an `Extracted/` directory
+inside the folder passed to `-out`. Field files are created only when the XML
+requests them. See [build and run](user/main-application.md#run).
 
 ## Glossary
 
 | Term | Meaning |
-| --- | --- |
-| STL | A file describing a surface as triangles; the shape of your vessel |
-| Profile (`.pr2`) | The geometry tool's settings: STL, units, voxel size, inlets, outlets, seed point, time step. Plain text (YAML) |
-| Voxel, lattice site | The simulation divides space into small cubes of one size (the voxel size); each fluid cube is a site |
-| Block | A group of 8×8×8 sites; the unit HemeLB shares out between processes |
-| Geometry (`.gmy`) | The voxelised vessel: which sites are fluid and where the walls, inlets and outlets cut them |
-| Configuration (`.xml`) | The simulation settings HemeLB reads |
-| Inlet, outlet, iolet | Where fluid enters or leaves; "iolet" means either. Each is a disc with a centre, a normal pointing into the fluid and a radius |
-| Seed point | Any point inside the fluid; the geometry tool keeps the part of the surface closest to it |
-| Extraction file (`.xtr`) | Results saved during a run (for example velocity and pressure) |
-| MPI process (rank) | One of the parallel copies of HemeLB started by `mpirun -n N` |
-| Checkpoint | A saved state that a later run can restart from |
+| :--- | :--- |
+| Lattice site | A point in the regular simulation grid; fluid sites hold the simulated fluid |
+| Voxel size | Distance between neighbouring lattice sites |
+| Block | A group of sites distributed between MPI ranks; the geometry tool writes blocks of 8×8×8 sites |
+| Iolet | An inlet or outlet, defined by its position, normal, and boundary condition |
+| Seed point | A point inside the desired fluid region, used to keep the closest surface piece during geometry preparation |
+| MPI rank | One process in the parallel solver run |
+| Extraction | Fields sampled from the simulation at selected sites and timesteps |
+| Checkpoint | Saved fluid distributions used to resume a run; keep the matching `.off` file |
+
+## For developers
+
+The [developer guide](dev/README.md) explains build folders, test suites, and
+CI triggers. Implementation notes cover [geometry reading](dev/geometry-reading.md),
+[checkpoint loading](dev/checkpoint-restart.md), and
+[legacy components](dev/legacy-code.md). Historical machine notes are in
+[machine-specific build notes](user/machine-specific-build-notes/archer2.md).

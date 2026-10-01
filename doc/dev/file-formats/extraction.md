@@ -25,7 +25,10 @@ The file begins with a main header (length = 60 bytes)
 * uint32 - Length of the field header that follows
   
 HemeLbMagicNumber = 0x686c6221 ("hlb!"), ExtractionMagicNumber =
-0x78747204 ("xtr" + 4). The version number is currently 5.
+0x78747204 ("xtr" + 4). This branch writes version 5. Its Python reader accepts versions 4 and 5;
+the native checkpoint reader expects version 5 with a single double-precision
+`distributions` field and no field offsets. See the
+[checkpoint workflow](../../user/checkpoints.md).
 
 ## Field header
 This header has fieldCount entries and in each one:
@@ -59,6 +62,15 @@ Each record consists of:
       header, saved as the type indicated, with any offset being
       subtracted (scalars being broadcast, vectors being element wise
       subtracted)
+
+## Physical units
+
+Grid positions are lattice coordinates. Physical position in metres is
+`origin + voxel_size * grid`. This branch writes velocity in m/s and pressure in
+mmHg. Pressure data subtracts the configured reference pressure before writing;
+the Python reader restores that offset from the field header. The format does
+not encode a unit string for each field, so readers also need the writer's
+conventions.
 
 ## Offset files
 The offset files are a companion to this file - see

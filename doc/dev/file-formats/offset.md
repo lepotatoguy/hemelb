@@ -23,5 +23,8 @@ gives the offset (in number of bytes) into the extraction file of the
 start of that rank's chunk. The final value holds the
 just-past-the-end value.
 
-The length of a single timestep of pure data in an extraction file is
-given by `data[n_ranks] - data[0]`.
+The byte length of a complete timestep record, including its 8-byte timestep
+number, is `data[n_ranks] - data[0]`. These offsets describe the first record;
+subsequent records use the same stride. For single-timestep file patterns,
+HemeLB removes `%d` before choosing the shared offset filename, so
+`checkpoint_%d.xtr` uses `checkpoint_.off`.

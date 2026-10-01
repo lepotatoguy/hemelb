@@ -1,113 +1,131 @@
-# Getting started: from a surface to results
+# First run: a cylinder with field output
 
-This walkthrough takes you through one complete HemeLB run using files that
-come with the repository. It assumes HemeLB and the geometry tool are
-installed ([Installing HemeLB](install.md)) and that you have a terminal open.
-Replace `/path/to/hemelb` with the folder you cloned.
+This walkthrough uses the bundled cylinder geometry and a configuration with
+velocity, pressure, and checkpoint output already enabled. It checks that the
+solver and analysis tools work together. A short run does not establish steady
+flow or physical accuracy.
 
-```sh
-export PATH="$HOME/.local/hemelb/bin:$PATH"   # where install_hemelb.sh puts hemelb
-conda activate gmy-tool                        # geometry tool and Python tools
-```
+## Prepare the environment
 
-## The four steps
-
-| Step | Tool | You give it | You get |
-| --- | --- | --- | --- |
-| 1. Make a geometry | `hlb-gmy-cli` or `hlb-gmy-gui` | a surface (`.stl`) and a profile (`.pr2`) with inlets, outlets and a voxel size | `.gmy` (the voxelised vessel) and `.xml` (the simulation settings) |
-| 2. Choose outputs | a text editor | the `.xml` | the `.xml` with a `<properties>` section |
-| 3. Simulate | `mpirun ... hemelb` | the `.xml` and `.gmy` | a results folder with extraction files (`.xtr`) |
-| 4. Look at the results | `hlb-dump-extracted-properties` | an `.xtr` file | text or CSV you can open in a spreadsheet, Python or ParaView |
-
-## 1. Make a geometry
-
-The repository has a small sample: a surface and a profile describing one
-inlet and one outlet.
+Install HemeLB using the [installation guide](install.md). Run the following
+from the repository root; replace the solver prefix if you chose another one.
+The default executable uses pressure inlets and outlets, matching this example.
 
 ```sh
-mkdir -p ~/hemelb-first-run && cd ~/hemelb-first-run
-cp /path/to/hemelb/geometry-tool/tests/Model/data/test.pr2 .
-cp /path/to/hemelb/geometry-tool/tests/Model/data/test.stl .
-hlb-gmy-cli test.pr2
+export PATH="$HOME/.local/hemelb/bin:$PATH"
+conda activate gmy-tool
+
+mkdir -p "$HOME/hemelb-first-run"
+cp doc/examples/first-run.* "$HOME/hemelb-first-run/"
+cd "$HOME/hemelb-first-run"
 ```
 
-This writes `test.gmy` and `test.xml` next to the profile. Check the result:
+If that folder already contains a `results` directory, use a new run folder or
+a new output name. HemeLB refuses to overwrite an existing output directory.
+
+The example is [first-run.xml](../examples/first-run.xml). It keeps the
+geometry's voxel size, origin, and pressure boundaries, runs for 200 timesteps,
+and requests field output and fluid checkpoints every 100 timesteps. Paths in
+the configuration are resolved relative to the XML file, so keep the copied
+`first-run.gmy` beside it. The [examples folder](../examples/README.md) also
+contains the matching STL and profile, so the same case can be regenerated.
+
+## Run
+
+Optionally check the XML before starting:
 
 ```sh
-hlb-gmy-countsites test.gmy        # prints 6803 for this sample
-hlb-gmy-selfconsistent test.gmy    # checks the file is internally consistent
+hemelb-confcheck first-run.xml
 ```
 
-If the tool prints a `Warning:` about an inlet, outlet or the seed point,
-read it: the geometry may have no way for fluid to enter or leave. See
-"Preparing the surface" in [geometry-tool.md](geometry-tool.md). To make your
-own profile, open your STL in `hlb-gmy-gui`, place the inlets, outlets and
-seed point, and use "Save Profile".
+`hemelb-confcheck` checks XML parsing, units, and compatibility with the compiled
+boundary types. It does not load the GMY or verify the geometry's inlet IDs.
+The simulation performs those checks during setup.
 
-## 2. Choose outputs
-
-A generated `.xml` has no `<properties>` section, so HemeLB would run but
-write no results. Add one before the closing `</hemelbsettings>` line. This
-example writes velocity and pressure everywhere every 100 time steps:
-
-```xml
-<properties>
-  <propertyoutput file="whole.xtr" period="100">
-    <geometry type="whole" />
-    <field type="velocity" />
-    <field type="pressure" />
-  </propertyoutput>
-</properties>
-```
-
-Other output shapes (planes, lines, points, the wall surface) are described
-in [XmlConfiguration.md](XmlConfiguration.md).
-
-## 3. Simulate
-
-The sample above has the same pressure at its inlet and outlet, so nothing
-flows. For a run where fluid moves, use the cylinder that the tests use:
+Start the simulation:
 
 ```sh
-cp /path/to/hemelb/Code/tests/resources/large_cylinder.gmy .
-cp /path/to/hemelb/Code/tests/resources/large_cylinder.xml .
+mpirun -n 2 hemelb -in first-run.xml -out results
 ```
 
-Add the `<properties>` block from step 2 to `large_cylinder.xml`, and to keep
-this first run short change `<steps units="lattice" value="50000" />` to
-`value="200"`. Then run on 4 processes:
+A successful run writes these files:
 
-```sh
-mpirun -n 4 hemelb -in large_cylinder.xml -out results
-```
+| File | Purpose |
+| :--- | :--- |
+| `results/report.txt`, `results/report.xml` | Run configuration and timings |
+| `results/Extracted/whole.xtr` | Velocity and pressure samples |
+| `results/Extracted/whole.off` | Companion offsets for the field output |
+| `results/Extracted/checkpoint_100.xtr` | Fluid distributions at timestep 100 |
+| `results/Extracted/checkpoint_200.xtr` | Fluid distributions at timestep 200 |
+| `results/Extracted/checkpoint_.off` | Offsets shared by the checkpoint series |
 
-The run ends with `Finish running simulation.` and the results are in
-`results/Extracted/whole.xtr`. The output folder must not exist yet; choose a
-new name for each run.
-
-## 4. Look at the results
+## Read the output
 
 ```sh
 hlb-dump-extracted-properties results/Extracted/whole.xtr whole.csv
 ```
 
-`whole.csv` starts with comment lines (`#`) that give the number of sites,
-the fields, the geometry origin and the voxel size in metres. Then, for each
-saved time step, there is one line per site with its grid position
-(`grid_0` to `grid_2`), velocity (`velocity_0` to `velocity_2`, in m/s) and
-pressure (mmHg). A site's position in metres is
-origin + voxel size × grid position.
+The file contains comment headers followed by comma-separated rows, one per
+site and saved timestep. Headers identify the timestep and columns. Grid
+coordinates are `grid_0` to `grid_2`; velocity components are in m/s and
+pressure is in mmHg on this branch. Physical position is
+`origin + voxel_size * grid`.
 
-## When something goes wrong
+Each timestep has its own block of rows. For analysis that needs the timestep
+as a separate array, use the [Python reader](python-tools.md#read-fields-in-python).
+For ParaView, export a collection with the installed command:
 
-| Message | What to do |
-| --- | --- |
-| `Geometry file ... does not exist` | The `<datafile path="...">` in the XML is wrong; relative paths are relative to the XML file |
-| `The geometry file uses N outlet(s) but the configuration defines M` | Add the missing inlets or outlets to the XML, in the same order as in the profile |
-| `The geometry has N block(s) containing fluid but HemeLB is running on P MPI processes` | Run with fewer processes, as the message says |
-| `Output directory ... already exists.` | Use a new `-out` folder |
-| A `Warning:` from `hlb-gmy-cli` or the GUI | See "Things to watch" in [geometry-tool.md](geometry-tool.md) |
+```sh
+hlb-extracted-to-vtk results/Extracted/whole.xtr whole --step-length 0.0001
+```
 
-## Words used in these guides
+Open `whole.pvd` in ParaView. The [VTK export guide](python-tools.md#export-for-paraview)
+explains field selection, physical coordinates, and output options.
+To resume at timestep 100 with another rank count, follow the
+[checkpoint guide](checkpoints.md).
 
-See the glossary in the [documentation index](../README.md#glossary).
+## Regenerate the case from STL
+
+The copied `first-run.stl` contains a cylinder in millimetres. Its matching
+`first-run.pr2` sets the voxel size, seed point, inlet/outlet clipping planes,
+and pressure conditions. With `gmy-tool` active, run in the first-run folder:
+
+```sh
+hlb-gmy-cli first-run.pr2 --geometry regenerated.gmy --xml generated.xml
+hlb-gmy-countsites regenerated.gmy
+hlb-gmy-selfconsistent regenerated.gmy
+```
+
+Keep the supplied GMY/XML pair unchanged. Regeneration writes a separate pair,
+including the geometry's newly computed origin. Generated XML has no field
+output; copy the ready example's output requests into it:
+
+```sh
+python - <<'PYCODE'
+import copy
+import xml.etree.ElementTree as ET
+
+tree = ET.parse("generated.xml")
+outputs = ET.parse("first-run.xml").getroot().find("properties")
+tree.getroot().append(copy.deepcopy(outputs))
+tree.write("generated.xml", encoding="utf-8", xml_declaration=True)
+PYCODE
+```
+
+Optionally check the generated XML with `hemelb-confcheck generated.xml`, then
+start the simulation and convert its output:
+
+```sh
+mpirun -n 2 hemelb -in generated.xml -out generated-results
+hlb-dump-extracted-properties generated-results/Extracted/whole.xtr generated-whole.csv
+```
+
+This completes STL/profile to GMY/XML to simulation to field output. Use
+`generated.xml` for the regenerated run, especially after changing voxel size
+or iolet settings. Re-run the geometry generator before adding `<properties>`
+again, so the section is not duplicated.
+
+Use `hlb-gmy-gui` to create a profile from your own STL. The
+[geometry guide](geometry-tool.md) explains surface preparation, units, seed
+points, and iolet placement. If a command fails, consult
+[troubleshooting](troubleshooting.md).

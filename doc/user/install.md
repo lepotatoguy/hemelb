@@ -13,8 +13,8 @@ Scripts/install_hemelb.sh
 The script is on the `fix/hemelb-improvements` branch; the `-b` option
 selects it. You need `git` and an internet connection. On macOS, running
 `git` for the first time offers to install the Xcode Command Line Tools,
-which the build also needs. On GitHub's CI runners the whole install takes
-about 5 minutes on Linux and 8 minutes on macOS; a laptop may take longer.
+which the build also needs. The script builds from the checkout you run it in.
+Confirm the branch with `git branch --show-current` before installing.
 
 The script does not ask questions. By default it:
 
@@ -27,19 +27,36 @@ The script does not ask questions. By default it:
    geometry tool and the Python tools into it. If conda is not installed, Miniforge is
    installed into `~/miniforge3`.
 
-Useful options (see `--help` for all of them):
+The solver and geometry tool use separate environments. On Apple Silicon the
+solver is built natively, while the geometry environment uses the repository's
+`osx-64` lock under Rosetta. Do not use that conda environment to configure a
+native solver build.
+
+## Installation options
+
+Run `Scripts/install_hemelb.sh --help` for the complete option list.
 
 | Option | Effect |
 | --- | --- |
 | `--prefix DIR` | Install HemeLB into `DIR` instead of `~/.local/hemelb` |
 | `--jobs N` | Number of parallel build jobs |
 | `--env-name NAME` | Name of the conda environment |
+| `--env-prefix DIR` | Create the conda environment at a chosen path instead of by name |
+| `--no-gui` | Skip macOS GUI launcher setup; it does not remove GUI dependencies |
 | `--no-gmy-tool` | Build HemeLB only |
 | `--no-system-deps` | Skip Homebrew or apt, if you installed the packages yourself |
-| `--no-tests` | Skip `hemelb-tests` |
+| `--no-tests` | Skip running `hemelb-tests`; tests are still built |
 
-The script stops if the conda environment already exists. Remove it with
-`conda env remove -n gmy-tool` or pick another name.
+Choose a new environment name if `gmy-tool` already exists:
+
+```sh
+Scripts/install_hemelb.sh --env-name hemelb-tools --jobs 4
+conda activate hemelb-tools
+```
+
+For an environment created with `--env-prefix`, activate its path instead of a
+name. `--no-gmy-tool` skips both Python packages and the conda setup, so it is
+suitable when you already have prepared `.gmy` and `.xml` inputs.
 
 After installing:
 
@@ -88,15 +105,39 @@ can repeat them.
   picked up by mistake.
 - **Exact versions.** The conda environment is created from
   `geometry-tool/conda-lock/<platform>.txt`, which fixes every package to an
-  exact build, so a later install gets the same environment that was tested.
-  The versions of everything, including the compiler, CMake and MPI that
-  come from Homebrew or apt, are listed in the `INSTALL` file.
+  exact build, so another installation reuses those locked packages.
+  The pin sources and fallback library versions are listed in
+  [INSTALL](../../INSTALL). Compiler, CMake, MPI, and other system packages
+  are selected by Homebrew or apt at installation time and are not locked by
+  this repository.
 - **macOS GUI.** `hlb-gmy-gui` needs a framework build of Python to open
   windows. The script installs `python.app` and runs
   `geometry-tool/macos-fix-gui-launcher.py` so `hlb-gmy-gui` can be run
   directly.
 
+## Verify the installation
+
+```sh
+command -v hemelb
+hemelb-tests
+conda activate gmy-tool
+hlb-gmy-cli --help
+hlb-dump-extracted-properties --help
+```
+
+Optional: `command -v hemelb-confcheck` confirms that the XML-checking tool is available.
+
+Substitute your environment name if customized. The installer runs the C++ unit
+executable; to run the MPI restart test too, use the CTest command in
+[build and run](main-application.md#test). Continue with
+[getting started](getting-started.md), or consult
+[troubleshooting](troubleshooting.md) if installation fails.
+
 ## Uninstalling
+
+The commands below remove the default solver prefix and tool environment.
+Replace them with your chosen paths and names; saved runs outside those
+locations are separate.
 
 ```sh
 rm -rf ~/.local/hemelb

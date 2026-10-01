@@ -1,32 +1,69 @@
-# HemeLB: Haemodynamic simulation with lattice Boltzmann
+# HemeLB: haemodynamic simulation with lattice Boltzmann
 
-![Main code status](https://github.com/hemelb-codes/hemelb/actions/workflows/main-app.yml/badge.svg)
-![Python tools status](https://github.com/hemelb-codes/hemelb/actions/workflows/py-hemetools.yml/badge.svg) 
-![Geometry tool status](https://github.com/hemelb-codes/hemelb/actions/workflows/gmy-tool.yml/badge.svg)
+[![Main application](https://github.com/lepotatoguy/hemelb/actions/workflows/main-app.yml/badge.svg?branch=fix%2Fhemelb-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/main-app.yml)
+[![Python tools](https://github.com/lepotatoguy/hemelb/actions/workflows/py-hemetools.yml/badge.svg?branch=fix%2Fhemelb-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/py-hemetools.yml)
+[![Geometry tool](https://github.com/lepotatoguy/hemelb/actions/workflows/gmy-tool.yml/badge.svg?branch=fix%2Fhemelb-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/gmy-tool.yml)
 
-HemeLB uses the lattice Boltzmann method to simulate fluid flow in
-complex geometries, such as a blood vessel network.
+HemeLB simulates fluid flow through complex geometries, including vessel
+networks, using the lattice Boltzmann method and MPI. The geometry tool turns
+an STL surface into solver inputs; the Python tools read and convert results.
 
-This software was started at University College London and has since
-been developed by a large number of people (see AUTHORS). It is open
-source under the LGPL license (see LICENSE).
+This fork's `fix/hemelb-improvements` branch includes installation, geometry
+validation, and checkpoint restart improvements. Its solver reads XML version
+5 and uses mmHg for pressure. See the [changelog](CHANGELOG.md) for changes and
+the [format reference](doc/dev/file-formats/extraction.md) for output details.
+Use the documentation from the branch you build: configuration and file-format
+versions can differ between branches.
 
 ## Install
 
-On macOS (Apple Silicon or Intel) or Debian/Ubuntu Linux:
+On macOS or Debian/Ubuntu Linux, from a terminal:
 
 ```sh
-git clone -b fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
+git clone --branch fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
 cd hemelb
 Scripts/install_hemelb.sh
 ```
 
-This builds HemeLB into `~/.local/hemelb` and installs the geometry tool
-and Python tools into a conda environment called `gmy-tool`. See
-[doc/user/install.md](doc/user/install.md) for options and details, and
-[doc/README.md](doc/README.md) for the full workflow.
+The script builds the solver into `~/.local/hemelb` and installs the geometry
+and Python tools into a conda environment named `gmy-tool`. It installs system
+packages unless `--no-system-deps` is given. For a solver-only installation,
+add `--no-gmy-tool`.
 
-Key publications:
+```sh
+export PATH="$HOME/.local/hemelb/bin:$PATH"
+conda activate gmy-tool
+```
+
+Follow the [first-run walkthrough](doc/user/getting-started.md) to run a bundled
+cylinder case and inspect its results. It includes a ready-to-use configuration.
+
+## Documentation
+
+| Task | Guide |
+| :--- | :--- |
+| Install, customize paths, or resolve setup problems | [Installation](doc/user/install.md) |
+| Run your first simulation | [Getting started](doc/user/getting-started.md) |
+| Prepare your own STL and inlet/outlet profile | [Geometry tool](doc/user/geometry-tool.md) |
+| Choose units, boundaries, and outputs | [XML configuration](doc/user/XmlConfiguration.md) |
+| Build manually or on a cluster | [Build and run](doc/user/main-application.md), [CMake options](doc/user/CMakeOptions.md) |
+| Restart from saved fluid distributions | [Checkpoint workflow](doc/user/checkpoints.md) |
+| Read results in Python or export them for ParaView | [Python tools](doc/user/python-tools.md) |
+| Run tests or understand the implementation | [Developer guide](doc/dev/README.md) |
+
+The [documentation index](doc/README.md) lists the guides and defines common
+terms. In-repository guides describe this branch; the older HemeLB Made Easy
+[tutorial](https://docs.google.com/document/d/1_3WR3MR7mFyE9LxzcSeXy--G3qgnA3TBxO8aDqUDW2Q/edit?usp=sharing)
+may use different installation steps or formats.
+
+## Project and license
+
+HemeLB began at University College London. Contributors and institutions are
+listed in [AUTHORS](AUTHORS); the code is licensed under the
+[LGPL](LICENSE). The upstream repository is
+[hemelb-codes/hemelb](https://github.com/hemelb-codes/hemelb).
+
+## Publications
 
 - M.D. Mazzeo & P.V. Coveney, "HemeLB: A high performance parallel
   lattice-Boltzmann code for large scale fluid flow in complex
@@ -43,7 +80,3 @@ Key publications:
   lattice-Boltzmann simulation of moderate-Reynolds-number flow in
   complex domains", Phys. Rev. E (2014).
   https://doi.org/10.1103/PhysRevE.89.023303
-
-Documentation available at the [doc](/doc/) folder and [here](https://docs.google.com/document/d/1_3WR3MR7mFyE9LxzcSeXy--G3qgnA3TBxO8aDqUDW2Q/edit?usp=sharing)
-(the HemeLB Made Easy tutorial). Where the two differ, for example the old
-workarounds for installing VMTK with pip, the `doc` folder is current.

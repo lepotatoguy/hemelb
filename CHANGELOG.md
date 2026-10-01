@@ -13,8 +13,35 @@ this file records what changed and how it was checked at the time.
   which put spaces in file names. Scripts that expect the old names must be
   updated.
 
+### Documentation
+
+- Bundled matching cylinder STL, geometry-tool profile, GMY, and version 5 XML
+  in [doc/examples](doc/examples/README.md), with a walkthrough from surface
+  generation to simulation and CSV output. Regeneration reproduced the supplied
+  GMY; two-rank runs and a four-rank restart matched final distributions exactly.
+- Optional [Scripts/gmy-to-stl.py](Scripts/gmy-to-stl.py) exports GMY voxel boundaries as STL for visual inspection.
+- Reorganised the branch's installation, first-run, XML, analysis, and developer
+  guides around a runnable cylinder example. Added fluid checkpoint and
+  troubleshooting guides, clarified version 5/mmHg conventions and CI path
+  filters, and corrected the branch selected by `INSTALL`.
+- Local `research/` files are ignored and excluded from distributed documentation.
+- Verified the new example with a two-rank run and four-rank restart, matching
+  final distributions exactly. CSV and ASCII VTU exports were exercised; VTU
+  pressure and velocity values round-tripped by grid coordinate. Both local
+  CTest targets passed; local Markdown links and code-block syntax were checked.
+  The ParaView GUI was not exercised. The ASCII recipe avoids a local VTK 9.1
+  appended-data read failure.
+
 ### Added
 
+- `hlb-extracted-to-vtk` exports extraction files directly to ASCII VTU frames
+  and a ParaView PVD collection ([guide](doc/user/python-tools.md#export-for-paraview)).
+  It uses physical coordinates and cell fields without requiring GMY/XML,
+  supports optional collection times in seconds, and refuses existing outputs.
+  Eleven tests passed, covering extraction versions 4/5, reordered site rows,
+  field offsets, tensors, integer precision, and output handling. Installed CLI
+  and module exports round-tripped the bundled run's coordinates, velocity, and
+  pressure through VTK; the ParaView GUI was not exercised.
 - Checkpoints can be restarted with a different number of MPI processes
   ([design note](doc/dev/checkpoint-restart.md)).
 - `Scripts/install_hemelb.sh` installs HemeLB, the geometry tool and the

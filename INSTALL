@@ -6,133 +6,86 @@
 Installing HemeLB
 =================
 
-Quick install (macOS or Debian/Ubuntu Linux)
---------------------------------------------
+This file describes fix/hemelb-improvements. Use the guides in the branch
+being built: solver XML versions and pressure units differ between branches.
+The complete installation guide is doc/user/install.md.
 
-    git clone https://github.com/lepotatoguy/hemelb.git
+Quick install: macOS or Debian/Ubuntu Linux
+==========================================
+
+    git clone --branch fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
     cd hemelb
     Scripts/install_hemelb.sh
 
-This builds HemeLB into ~/.local/hemelb (programs hemelb, hemelb-confcheck
-and hemelb-tests) and installs the geometry tool (hlb-gmy-gui, hlb-gmy-cli)
-and the Python tools into a conda environment called gmy-tool. Run
-"Scripts/install_hemelb.sh --help" for the options. Full guide:
-doc/user/install.md. First run: doc/user/getting-started.md.
+Defaults:
+  Solver prefix: ~/.local/hemelb
+  Tool environment: conda environment gmy-tool
+  System packages: installed through Homebrew or apt unless skipped
+  Tests: hemelb-tests is built and run
 
+Useful options:
+  --prefix DIR        Choose the solver installation prefix
+  --env-name NAME     Choose a fresh conda environment name
+  --env-prefix DIR    Choose the conda environment by path instead
+  --jobs N            Control parallel build jobs
+  --no-system-deps    Use system packages already installed
+  --no-gmy-tool       Install only the solver, skipping both Python tools
+  --no-tests          Skip executing unit tests; they are still built
+  --no-gui            Skip macOS GUI launcher setup
 
-Building by hand
-----------------
+After installation:
 
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=$HOME/.local/hemelb
+    export PATH="$HOME/.local/hemelb/bin:$PATH"
+    conda activate gmy-tool
+
+The first-run guide is doc/user/getting-started.md. It uses the bundled
+cylinder geometry and doc/examples/first-run.xml, including field output
+and checkpoints. A full geometry-tool installation is not needed to run
+prepared XML/GMY inputs.
+
+Manual builds
+=============
+
+    cmake -S . -B build -G "Unix Makefiles" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX="$HOME/.local/hemelb" \
+          -DHEMELB_SUBPROJECT_MAKE_JOBS=4
     cmake --build build -j 4
 
-The top-level CMakeLists.txt is the "super build": it builds any missing
-dependency, then HemeLB, and installs everything into CMAKE_INSTALL_PREFIX.
-One configure pass is enough. Choose per dependency with
--DDEPS_<NAME>=Auto|System|Build (Auto: use the system copy if found,
-otherwise build it).
+The top-level super build finds or builds dependencies, then builds and
+installs the solver. It invokes make for the solver subproject. Use Code/
+as the source for a code-only build with existing dependencies; use
+dependencies/ for dependency preparation. See doc/user/main-application.md
+and doc/user/CMakeOptions.md for layouts, library hints, and model options.
 
-Other entry points:
-  Code/          HemeLB only; every dependency must already be installed.
-  dependencies/  Only the dependencies, for repeated development builds.
+Requirements and version sources
+================================
 
-Build options (lattice, collision kernel, boundary conditions, logging):
-doc/user/CMakeOptions.md. Build and run details: doc/user/main-application.md.
+The solver requires a C++20 compiler, CMake >= 3.13, MPI >= 3.0, Boost
+headers >= 1.77, ParMETIS 4.x, METIS, TinyXML 2.x, CTemplate, and zlib.
+TinyXML2 is a different library and is not used by this branch. Tests use
+Catch2 2.x. RBC builds additionally need HDF5 and VTK; multiscale builds
+need MPWide.
 
-The geometry tool on its own, with exactly the tested environment:
+The fallback versions are specified by dependency build files:
+  dependencies/<Name>/build.cmake
+  Boost 1.77.0; ParMETIS 4.0.2; TinyXML 2.6.2; CTemplate 2.4;
+  zlib 1.2.6; Catch2 2.13.9; HDF5 1.8.15; VTK 9.1.0; MPWide 1.1.
 
-    conda create -n gmy-tool --file geometry-tool/conda-lock/osx-64.txt
-          (linux-64.txt on Linux; on Apple Silicon first run
-           export CONDA_SUBDIR=osx-64)
-    conda activate gmy-tool
-    pip install --no-deps --no-build-isolation ./python-tools
-    pip install './geometry-tool[gui]'
+The geometry tool and Python tools have their own dependency environment:
+  geometry-tool/conda-environment.yml: main package pins
+  geometry-tool/conda-lock/osx-64.txt: exact Intel macOS package URLs
+  geometry-tool/conda-lock/linux-64.txt: exact Linux x86_64 package URLs
+  geometry-tool/pyproject.toml: pip build-isolation pins
 
-See doc/user/geometry-tool.md.
+The install script uses the platform lock and installs both packages with
+--no-deps --no-build-isolation. The geometry tool environment supports
+Python 3.8 through 3.11; the Python-tools CI matrix covers 3.8 through 3.13.
+On Apple Silicon the solver is native, while the geometry-tool environment
+uses osx-64 under Rosetta. Keep those build environments separate.
 
-
-Versions
---------
-
-Pinned: fixed exactly in this repository, so they cannot drift.
-Tested: the exact versions this branch was built and tested with.
-
-1. Libraries the super build downloads when missing (pinned by URL in
-   dependencies/<Name>/build.cmake):
-
-     Boost 1.77.0 (headers)   ParMETIS 4.0.2    TinyXML 2.6.2
-     CTemplate 2.4            zlib 1.2.6        Catch2 2.13.9 (tests)
-     HDF5 1.8.15 (RBC only)   VTK 9.1.0 (RBC only)
-     MPWide 1.1 (multiscale only)
-
-   The minimum versions accepted from your system are Boost 1.77, HDF5 1.8
-   and VTK 9.0; ParMETIS 4, TinyXML 2 and Catch2 2 (catch2/catch.hpp) are
-   the major versions the code is written for. To use exactly the versions
-   above rather than your system's, configure with -DDEPS_<NAME>=Build, for
-   example -DDEPS_BOOST=Build -DDEPS_PARMETIS=Build -DDEPS_TINYXML=Build.
-
-2. Compiler, CMake and MPI come from your system (Homebrew or apt). These
-   cannot be pinned by the repository; the exact versions tested were:
-
-   macOS 27, Apple Silicon (local, 2026-09-27/28)
-     AppleClang 21.0.0, CMake 4.3.2, Open MPI 5.0.9, Boost 1.90.0,
-     CTemplate 2.4, METIS 5.1.0 (Homebrew); bundled ParMETIS 4.0.2 and
-     TinyXML 2.6.2 in a separate manual build
-   macOS 15.7, Intel x86_64 (CI, install script)
-     AppleClang 17.0.0, Open MPI 5.0.10, Boost 1.92.0, CTemplate 2.4,
-     METIS 5.1.0 (Homebrew)
-   macOS 14, Apple Silicon (CI, install script)
-     AppleClang 15.0.0, Open MPI 5.0.10, Boost 1.92.0, CTemplate 2.4,
-     METIS 5.1.0 (Homebrew)
-   Ubuntu 24.04 x86_64 (CI and Docker, install script)
-     GCC 13.3.0, CMake 3.28.3, Open MPI 4.1.6, Boost 1.83.0,
-     ParMETIS 4.0.3, METIS 5.1.0, TinyXML 2.6.2, CTemplate 2.4 (apt)
-   Ubuntu 22.04 x86_64 (CI, main application builds)
-     GCC 11.4.0, 12.3.0 and 13.4.0; Open MPI 4.1.2, ParMETIS 4.0.3,
-     METIS 5.1.0, TinyXML 2.6.2, CTemplate 2.4, HDF5 1.10.7 (apt);
-     Boost 1.77.0, VTK and Catch2 from the bundled builds
-
-   Requirements: a C++20 compiler (GCC 11 or newer, or AppleClang), CMake
-   3.13 or newer, MPI 3.0 or newer (the code uses MPI-3 calls).
-
-3. Geometry tool and Python tools: the conda environment.
-
-   geometry-tool/conda-lock/osx-64.txt and linux-64.txt pin every package
-   (220 and 266 packages) to an exact build; the install script uses them.
-   geometry-tool/conda-environment.yml pins the main packages exactly:
-
-     Python 3.11.8        VMTK 1.5.0          VTK 9.2.6
-     CGAL 5.6.1           Boost headers 1.82.0  NumPy 1.26.4
-     Cython 0.29.37       wxPython 4.2.1      python.app 1.4 (macOS)
-     pybind11 3.1.0       scikit-build 0.19.0 CMake 3.28.3
-     Ninja 1.13.2         setuptools 84.0.0   wheel 0.48.0
-     PyYAML 6.0.3         pytest 9.1.1        zlib 1.3.2   pip 26.2.1
-
-   geometry-tool/pyproject.toml pins what pip uses to build the tool:
-   setuptools 75.3.0, wheel 0.45.1, scikit-build 0.19.0, pybind11 2.13.6,
-   cmake 3.28.3 (these support Python 3.8 to 3.11).
-
-   The geometry tool supports Python 3.8 to 3.11 only, because VMTK 1.5 is
-   only built for those. VMTK is only on conda-forge, not PyPI. CGAL must be
-   5.x: CGAL 6 removed a header the tool uses.
-
-   The Python tools (python-tools/) are tested on Python 3.8 to 3.13 with
-   Cython 0.29 and 3.x, so their build requirements are ranges, not pins;
-   in the conda environment they build against the pinned versions above.
-
-
-Platforms
----------
-
-Tested with the install script: macOS 14 on Apple Silicon (CI), macOS 15 on
-Intel (CI), macOS 27 on Apple Silicon (locally), and Ubuntu 24.04 x86_64 (CI
-and Docker). Apple
-Silicon Macs run the geometry tool environment under Rosetta 2, because
-VMTK 1.5 exists only for x86_64; the script sets this up.
-
-Not tested: Debian itself,
-the install script on Ubuntu releases before 24.04 (their default compilers
-may be too old for C++20; the main application itself is tested on 22.04), Linux on ARM (no VMTK build exists, so the geometry tool cannot be
-installed there), and distributions without apt (install the packages above
-yourself, then run the script with --no-system-deps).
+System compiler, MPI, CMake, and package-manager versions are not pinned
+by this repository. CI configuration lives in .github/workflows/; its
+matrix describes intended coverage, not the outcome of a particular run.
+Recorded earlier validation is in CHANGELOG.md. See doc/dev/README.md for
+local tests and doc/user/troubleshooting.md for common failures.
