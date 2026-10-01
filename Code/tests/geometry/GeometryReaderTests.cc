@@ -15,6 +15,7 @@
 
 #include "configuration/SimConfig.h"
 #include "geometry/Domain.h"
+#include "geometry/LookupTree.h"
 #include "geometry/GeometryReader.h"
 #include "lb/lattices/D3Q15.h"
 #include "reporting/Timers.h"
@@ -25,10 +26,8 @@
 #include "tests/helpers/LaddFail.h"
 #include "tests/helpers/EqualitySiteData.h"
 
-namespace hemelb
+namespace hemelb::tests
 {
-  namespace tests
-  {
     namespace {
       void WriteXdrUInt(std::fstream& file, std::streamoff offset, std::uint32_t value) {
         const char bytes[] = {
@@ -51,8 +50,9 @@ namespace hemelb
       REQUIRE(small.GetSitesPerBlock() == 512);
       REQUIRE_THROWS_WITH(geometry::GmyReadResult({0, 1, 1}, 8),
                           Catch::Matchers::Contains("dimensions must be positive"));
-      REQUIRE_THROWS_WITH(geometry::GmyReadResult({65535, 65535, 1}, 8),
-                          Catch::Matchers::Contains("header exceeds the supported read size"));
+      geometry::GmyReadResult large({65535, 65535, 1}, 8);
+      REQUIRE(large.GetBlockCount() == U64(65535) * 65535);
+      REQUIRE(large.Blocks.empty());
     }
 
     TEST_CASE_METHOD(helpers::FolderTestFixture,
@@ -65,10 +65,10 @@ namespace hemelb
       WriteXdrUInt(geometryFile, 16, 65535);
       geometryFile.close();
 
-      auto timings = std::make_unique<reporting::Timers>(Comms());
+      auto timings = std::make_unique<reporting::Timers>();
       geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
       REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
-                          Catch::Matchers::Contains("header exceeds the supported read size"));
+                          Catch::Matchers::Contains("shorter than its block header"));
     }
 
     TEST_CASE_METHOD(helpers::FolderTestFixture,
@@ -80,7 +80,7 @@ namespace hemelb
       WriteXdrUInt(geometryFile, 40, std::numeric_limits<std::uint32_t>::max());
       geometryFile.close();
 
-      auto timings = std::make_unique<reporting::Timers>(Comms());
+      auto timings = std::make_unique<reporting::Timers>();
       geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
       REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
                           Catch::Matchers::Contains("declares too much uncompressed data"));
@@ -93,7 +93,7 @@ namespace hemelb
       const auto size = std::filesystem::file_size("large_cylinder.gmy");
       std::filesystem::resize_file("large_cylinder.gmy", size - 1);
 
-      auto timings = std::make_unique<reporting::Timers>(Comms());
+      auto timings = std::make_unique<reporting::Timers>();
       geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
       REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
                           Catch::Matchers::Contains("shorter than its declared block data"));
@@ -111,7 +111,7 @@ namespace hemelb
       REQUIRE(geometryFile.good());
       geometryFile.close();
 
-      auto timings = std::make_unique<reporting::Timers>(Comms());
+      auto timings = std::make_unique<reporting::Timers>();
       geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
       REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
                           Catch::Matchers::Contains("Decompression error for geometry block 0"));
@@ -146,7 +146,7 @@ namespace hemelb
       REQUIRE(output.good());
       output.close();
 
-      auto timings = std::make_unique<reporting::Timers>(Comms());
+      auto timings = std::make_unique<reporting::Timers>();
       geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
       REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
                           Catch::Matchers::Contains("Malformed geometry block 0 site 0: Truncated XDR data"));
@@ -166,14 +166,14 @@ namespace hemelb
       REQUIRE(geometryFile.good());
       geometryFile.close();
 
-      auto timings = std::make_unique<reporting::Timers>(Comms());
+      auto timings = std::make_unique<reporting::Timers>();
       geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
       REQUIRE_THROWS_WITH(reader.LoadAndDecompose("large_cylinder.gmy"),
                           Catch::Matchers::Contains("exceeds the 64 MiB read buffer"));
     }
 
     TEST_CASE_METHOD(helpers::FolderTestFixture, "GeometryReaderTests") {
-      auto timings = std::make_unique<reporting::Timers>(Comms());
+      auto timings = std::make_unique<reporting::Timers>();
       
       auto reader = std::make_unique<geometry::GeometryReader>(lb::D3Q15::GetLatticeInfo(),
 							       *timings,
@@ -184,13 +184,13 @@ namespace hemelb
 
       SECTION("TestRead") {
 	LADD_FAIL();
-	reader->LoadAndDecompose(simConfig->GetDataFilePath());
+	reader->LoadAndDecompose(simConfig.GetDataFilePath());
       }
 
       SECTION("TestSameAsFourCube") {
 	LADD_FAIL();
 	auto fourCube = std::unique_ptr<FourCubeLatticeData>{FourCubeLatticeData::Create(Comms())};
-	auto readResult = reader->LoadAndDecompose(simConfig->GetDataFilePath());
+	auto readResult = reader->LoadAndDecompose(simConfig.GetDataFilePath());
     auto&& dom = fourCube->GetDomain();
 
 	for (site_t i = 1; i < 5; i++) {
@@ -225,5 +225,55 @@ namespace hemelb
       }
 
     }
-  }
+    TEST_CASE("Sparse octree builds only active leaves in a large box", "[geometry]") {
+        const Vec16 dims{65535, 65535, 1};
+        std::map<U64, site_t> counts{{0, 1}, {U64(65535) * 65535 - 1, 2}};
+        auto tree = geometry::octree::build_block_tree(dims, counts);
+        REQUIRE(tree.levels.back().node_ids.size() == 2);
+        REQUIRE(tree.levels[0].sites_per_node[0] == 3);
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture, "Geometry reader ignores gmy+ weights", "[geometry]") {
+        CopyResourceToTempdir("large_cylinder.gmy");
+        MoveToTempdir();
+        std::ifstream input("large_cylinder.gmy", std::ios::binary);
+        std::vector<char> original(std::istreambuf_iterator<char>{input}, {});
+        std::ofstream output("weighted.gmy+", std::ios::binary);
+        output.write(original.data(), 32);
+        const char weight[]{0, 0, 0, 17};
+        for (int block = 0; block < 20; ++block) {
+            output.write(original.data() + 32 + 12 * block, 4);
+            output.write(weight, 4);
+            output.write(original.data() + 36 + 12 * block, 8);
+        }
+        output.write(original.data() + 272, original.size() - 272);
+        output.close();
+        reporting::Timers times, weightedTimes;
+        geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), times, Comms(), false);
+        geometry::GeometryReader weightedReader(lb::D3Q15::GetLatticeInfo(), weightedTimes, Comms(), false);
+        auto plain = reader.LoadAndDecompose("large_cylinder.gmy");
+        auto weighted = weightedReader.LoadAndDecompose("weighted.gmy+");
+        REQUIRE(plain.Blocks.size() == weighted.Blocks.size());
+        for (auto const& [id, block]: plain.Blocks) {
+            auto const& other = weighted.Blocks.at(id);
+            REQUIRE(block.Sites.size() == other.Sites.size());
+            for (std::size_t i = 0; i < block.Sites.size(); ++i) {
+                auto const& a = block.Sites[i]; auto const& b = other.Sites[i];
+                REQUIRE(a.isFluid == b.isFluid);
+                REQUIRE(a.targetProcessor == b.targetProcessor);
+                if (!a.isFluid) continue;
+                REQUIRE(a.targetProcessor == 0);
+                REQUIRE(a.wallNormalAvailable == b.wallNormalAvailable);
+                if (a.wallNormalAvailable) REQUIRE(a.wallNormal == b.wallNormal);
+                REQUIRE(a.links.size() == b.links.size());
+                for (std::size_t j = 0; j < a.links.size(); ++j) {
+                    REQUIRE(a.links[j].type == b.links[j].type);
+                    REQUIRE(a.links[j].ioletId == b.links[j].ioletId);
+                    REQUIRE(a.links[j].distanceToIntersection == b.links[j].distanceToIntersection);
+                }
+            }
+        }
+        REQUIRE(times.parmetis().Get() == 0);
+    }
+
 }

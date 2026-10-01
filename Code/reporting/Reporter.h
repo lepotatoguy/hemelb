@@ -53,6 +53,7 @@ namespace hemelb::reporting
           WriteXML();
           WriteTxt();
         }
+        inline Dict& GetDictionary() { return dictionary; }
         inline const Dict& GetDictionary() const
         {
           return dictionary;

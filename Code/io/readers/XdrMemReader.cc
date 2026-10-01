@@ -8,12 +8,12 @@
 namespace hemelb::io
 {
   // Constructor to create an Xdr object based on a memory buffer
-  XdrMemReader::XdrMemReader(const char* buf, unsigned int dataLength)
+  XdrMemReader::XdrMemReader(const std::byte* buf, unsigned int dataLength)
     : start(buf), len(dataLength)
   {
   }
 
-  XdrMemReader::XdrMemReader(const std::vector<char>& dataVec)
+  XdrMemReader::XdrMemReader(const std::vector<std::byte>& dataVec)
     : start(dataVec.data()), len(dataVec.size())
   {
   }
@@ -22,12 +22,12 @@ namespace hemelb::io
     return position;
   }
 
-  const char* XdrMemReader::get_bytes(size_t n) {
+  const std::byte* XdrMemReader::get_bytes(size_t n) {
     if (n > len - position)
       throw Exception() << "Truncated XDR data at byte " << position
                         << ": need " << n << " more bytes, " << len - position << " available";
     if (n == 0)
-      return start ? start : "";
+      return start;
     if (!start)
       throw Exception() << "XDR data buffer is null";
     auto ans = start + position;

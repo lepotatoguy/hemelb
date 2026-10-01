@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <cmath>
 
 #include "lb/iolets/InOutLetFile.h"
 #include "log/Logger.h"
@@ -38,27 +39,43 @@ namespace hemelb::lb
             log::Logger::Log<log::Debug, log::OnePerCore>("Reading iolet values from file: %s", pressureFilePath.c_str());
 
 
-            while (datafile.good())
+            file_data_lat.clear();
+            double t_s, p_input;
+            while (datafile >> std::ws && datafile.peek() != std::char_traits<char>::eof())
             {
-                double t_s, p_mmHg;
-                datafile >> t_s >> p_mmHg;
-                log::Logger::Log<log::Trace, log::OnePerCore>("Time: %f s. Value: %f mmHg.", t_s, p_mmHg);
+                if (!(datafile >> t_s >> p_input))
+                    throw (Exception() << "Invalid pressure profile record in " << pressureFilePath);
+                const double p_Pa = p_input * pressureScale;
+                if (!std::isfinite(t_s) || !std::isfinite(p_Pa))
+                    throw (Exception() << "Non-finite pressure profile value in " << pressureFilePath);
+                log::Logger::Log<log::Trace, log::OnePerCore>("Time: %f s. Value: %f Pa.", t_s, p_Pa);
                 auto t_lat = unitConverter->ConvertTimeToLatticeUnits(t_s);
-                auto rho_lat = unitConverter->ConvertPressureToLatticeUnits(p_mmHg) / Cs2;
-                auto it = std::lower_bound(file_data_lat.begin(), file_data_lat.end(), DataPair{t_lat, rho_lat}, less_time);
-                if (it->first == t_lat) {
-                    *it = {t_lat, rho_lat};
+                auto rho_lat = unitConverter->ConvertPressureToLatticeUnits(p_Pa) / Cs2;
+                if (file_data_lat.empty()) {
+                    file_data_lat.emplace_back(t_lat, rho_lat);
                 } else {
-                    file_data_lat.insert(it, std::make_pair(t_lat, rho_lat));
+                    auto it = std::lower_bound(file_data_lat.begin(), file_data_lat.end(), DataPair{t_lat, rho_lat},
+                                               less_time);
+                    if (it == file_data_lat.end()) {
+                        file_data_lat.emplace_back(t_lat, rho_lat);
+                    } else if (it->first == t_lat) {
+                        *it = {t_lat, rho_lat};
+                    } else {
+                        file_data_lat.insert(it, std::make_pair(t_lat, rho_lat));
+                    }
                 }
             }
+            if (!datafile.eof())
+                throw (Exception() << "Invalid pressure profile record in " << pressureFilePath);
+            if (file_data_lat.size() < 2)
+                throw (Exception() << "Pressure profile needs at least two distinct times in " << pressureFilePath);
             datafile.close();
 
             auto less_density = [](DataPair const& l, DataPair const& r) {
                 return l.second < r.second;
             };
             densityMin = std::min_element(file_data_lat.begin(), file_data_lat.end(), less_density)->second;
-            densityMax = std::min_element(file_data_lat.begin(), file_data_lat.end(), less_density)->second;
+            densityMax = std::max_element(file_data_lat.begin(), file_data_lat.end(), less_density)->second;
 
             // Check if last point's value matches the first
             if (file_data_lat.back().second != file_data_lat.front().second)
@@ -72,7 +89,7 @@ namespace hemelb::lb
         // point of a new cycle for a continuous trace.
         void InOutLetFile::Reset(SimulationState &state)
         {
-            auto totalTimeSteps = state.GetTotalTimeSteps();
+            auto totalTimeSteps = state.GetEndTimeStep();
             // If the time values in the input file end BEFORE the planned
             // end of the simulation, then loop the profile afterwards
             // (using %TimeStepsInInletPressureProfile).
@@ -83,6 +100,10 @@ namespace hemelb::lb
             // the table is valid in the end-state, where the zero indexed
             // time step is equal to the limit.
             densityTable.resize(totalTimeSteps + 1);
+            if (totalTimeSteps == 0) {
+                densityTable[0] = file_data_lat.front().second;
+                return;
+            }
             // Now convert these vectors into arrays using linear
             // interpolation
 
@@ -99,7 +120,11 @@ namespace hemelb::lb
             for (unsigned int timeStep = 0; timeStep <= totalTimeSteps; timeStep++)
             {
                 LatticeTime x = std::lerp(t_0, t_1, LatticeTime(timeStep) / LatticeTime(totalTimeSteps));
-                // First element strictly greater than t_0
+                if (x >= t_1) {
+                    densityTable[timeStep] = file_data_lat.back().second;
+                    continue;
+                }
+                // First element strictly greater than x
                 upper = std::find_if(upper, file_data_lat.end(), [&](DataPair const& p) {
                     return p.first > x;
                 });

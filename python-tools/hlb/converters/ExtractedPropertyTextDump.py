@@ -14,7 +14,7 @@ from ..parsers.extraction import ExtractedProperty
 
 def _columns(field_spec):
     columns = []
-    for name, xdrType, memType, length, offset in field_spec:
+    for name, xdrType, memType, length, offset, *_ in field_spec:
         width = length[0] if isinstance(length, tuple) and length else 1
         if width == 1:
             columns.append(name)
@@ -29,7 +29,7 @@ def _write_dump(filename, stream):
     print('# Dump of file "{}"'.format(filename), file=stream)
     print("# File has {} sites.".format(propFile.siteCount), file=stream)
     print("# File has {} fields:".format(propFile.fieldCount), file=stream)
-    for name, xdrType, memType, length, offset in propFile._fieldSpec:
+    for name, xdrType, memType, length, offset, *_ in propFile._fieldSpec:
         print('#     "{0}", length {1}'.format(name, length), file=stream)
     print("# Geometry origin = {} m".format(propFile.originMetres), file=stream)
     print("# Voxel size = {} m".format(propFile.voxelSizeMetres), file=stream)
@@ -51,7 +51,7 @@ def _write_rows(fields, field_spec, stream):
     so the output is unchanged (tests/test_dumpextracted.py checks this).
     """
     columns = []
-    for name, xdrType, memType, length, offset in field_spec:
+    for name, xdrType, memType, length, offset, *_ in field_spec:
         values = np.asarray(fields[name])
         values = values.reshape(values.shape[0], -1)
         columns.extend(values[:, i].astype(str) for i in range(values.shape[1]))

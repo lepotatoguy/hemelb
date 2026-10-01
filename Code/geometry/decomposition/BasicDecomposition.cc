@@ -6,6 +6,7 @@
 #include "geometry/decomposition/BasicDecomposition.h"
 #include "geometry/GmyReadResult.h"
 #include "geometry/LookupTree.h"
+#include "log/Logger.h"
 #include "net/mpi.h"
 
 #include <limits>
@@ -63,8 +64,7 @@ namespace hemelb::geometry::decomposition
             *rank_middle += n_lo;
     }
 
-    std::vector<int> BasicDecomposition::Decompose(octree::LookupTree const& tree,
-                                                   std::vector<proc_t>& procAssignedToEachBlock) const
+    std::vector<int> BasicDecomposition::Decompose(octree::LookupTree const& tree) const
     {
         // Root node of tree holds total fluid sites
         auto total_sites = tree.levels[0].sites_per_node[0];
@@ -94,6 +94,13 @@ namespace hemelb::geometry::decomposition
         assign_range(cumulative_fluid_sites.begin(), --cumulative_fluid_sites.end(),
                      rank_for_block.begin(), rank_for_block.end(), comm_size);
 
+        return rank_for_block;
+    }
+
+    std::vector<int> BasicDecomposition::Decompose(octree::LookupTree const& tree,
+                                                   std::vector<proc_t>& procAssignedToEachBlock) const {
+        auto rank_for_block = Decompose(tree);
+        auto const n_nonsolid = rank_for_block.size();
         // We need to return data organised in GMY file order
         // Initialise output to SOLID, we will overwrite the non-solid below
         std::fill(procAssignedToEachBlock.begin(), procAssignedToEachBlock.end(), SITE_OR_BLOCK_SOLID);
@@ -118,7 +125,7 @@ namespace hemelb::geometry::decomposition
         std::vector<proc_t> procForEachBlockRecv = communicator.AllReduce(procAssignedToEachBlock,
                                                                           MPI_MAX);
 
-        for (site_t block = 0; block < geometry.GetBlockCount(); ++block)
+        for (site_t block = 0; block < static_cast<site_t>(procAssignedToEachBlock.size()); ++block)
         {
             if (procAssignedToEachBlock[block] != procForEachBlockRecv[block])
             {

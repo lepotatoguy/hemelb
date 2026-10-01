@@ -17,6 +17,7 @@
 #include "extraction/WholeGeometrySelector.h"
 #include "extraction/GeometrySurfaceSelector.h"
 #include "extraction/SurfacePointSelector.h"
+#include "extraction/IoletGeometrySelector.h"
 
 #include "tests/helpers/FourCubeLatticeData.h"
 #include "tests/helpers/HasCommsTestFixture.h"
@@ -74,6 +75,24 @@ namespace hemelb::tests
 	REQUIRE(!geometrySelector.Include(dataSourceIterator, invalidLocation));
       };
 
+
+      SECTION("IoletGeometrySelector") {
+          extraction::IoletGeometrySelector inlet(true), outlet(false);
+          TestOutOfGeometrySites(inlet);
+          TestOutOfGeometrySites(outlet);
+          std::size_t inletCount = 0, outletCount = 0;
+          dataSourceIterator.Reset();
+          while (dataSourceIterator.ReadNext()) {
+              auto location = dataSourceIterator.GetPosition();
+              auto type = latticeData->GetSite(latticeData->GetDomain().GetContiguousSiteId(location)).GetSiteType();
+              REQUIRE(inlet.Include(dataSourceIterator, location) == (type == geometry::INLET_TYPE));
+              REQUIRE(outlet.Include(dataSourceIterator, location) == (type == geometry::OUTLET_TYPE));
+              inletCount += inlet.Include(dataSourceIterator, location);
+              outletCount += outlet.Include(dataSourceIterator, location);
+          }
+          REQUIRE(inletCount > 0);
+          REQUIRE(outletCount > 0);
+      }
 
       SECTION("StraightLineGeometrySelector") {
 	const util::Vector3D<float> lineEndPoint1{CentreCoordinate * VoxelSize};

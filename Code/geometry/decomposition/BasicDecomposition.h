@@ -44,6 +44,8 @@ namespace hemelb {
              *
              * @return a vector of the rank assigned to each non-solid block (i.e. leaf nodes on the tree).
              */
+            std::vector<int> Decompose(octree::LookupTree const &blockTree) const;
+
             std::vector<int>
             Decompose(octree::LookupTree const &blockTree, std::vector<proc_t> &procAssignedToEachBlock) const;
 

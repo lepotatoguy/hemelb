@@ -42,3 +42,16 @@ All to all implementation: {{ALLTOALL_IMPLEMENTATION}}
 Gathers implementation: {{GATHERS_IMPLEMENTATION}}
 Separated concerns: {{SEPARATE_CONCERNS}}
 {{/BUILD}}
+Performance:
+Geometry blocks read from disk: {{GEOMETRY_BLOCK_READS}}
+Compressed geometry bytes read: {{GEOMETRY_BYTES_READ}}
+Decomposition: {{DECOMPOSITION}}
+Completed updates: {{UPDATES}}
+Time loop seconds (maximum rank): {{LOOP_SECONDS}}
+MLUPS: {{MLUPS}}
+MLUPS per MPI rank: {{MLUPS_PER_RANK}}
+Load imbalance (maximum/mean sites): {{LOAD_IMBALANCE}}
+Peak RSS is a process lifetime high watermark; -1 means unavailable.
+{{#MEMORY_RANK}}
+rank {{RANK}}: setup peak RSS bytes {{SETUP_PEAK_RSS_BYTES}}, peak RSS bytes {{PEAK_RSS_BYTES}}, domain edge sites {{EDGE_SITES}}, halo send distributions {{HALO_DISTRIBUTIONS}}, halo send bytes {{HALO_BYTES}}
+{{/MEMORY_RANK}}

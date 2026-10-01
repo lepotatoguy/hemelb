@@ -68,7 +68,7 @@ namespace hemelb::tests {
         CopyResourceToTempdir("large_cylinder.gmy");
         MoveToTempdir();
 
-        auto timings = std::make_unique<reporting::Timers>(Comms());
+        auto timings = std::make_unique<reporting::Timers>();
         geometry::GeometryReader reader(lb::D3Q15::GetLatticeInfo(), *timings, Comms());
         auto result = reader.LoadAndDecompose("large_cylinder.gmy");
         const auto& tree = result.block_store->GetTree();

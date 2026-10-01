@@ -20,9 +20,6 @@ namespace hemelb::geometry {
                     throw Exception() << "Geometry block count overflows site_t";
                 count *= dimension;
             }
-            constexpr auto recordLength = io::formats::geometry::HeaderRecordLength;
-            if (count > std::uint64_t(std::numeric_limits<int>::max()) / recordLength)
-                throw Exception() << "Geometry header exceeds the supported read size";
             return static_cast<site_t>(count);
         }
 
@@ -40,8 +37,7 @@ namespace hemelb::geometry {
     GmyReadResult::GmyReadResult(const Vec16& dimensionsInBlocks, U16 blockSize) :
             dimensionsInBlocks(dimensionsInBlocks), blockSize(blockSize),
             blockCount(CheckedBlockCount(dimensionsInBlocks)),
-            sitesPerBlock(CheckedSitesPerBlock(blockSize)),
-            Blocks(blockCount)
+            sitesPerBlock(CheckedSitesPerBlock(blockSize))
     {
     }
 

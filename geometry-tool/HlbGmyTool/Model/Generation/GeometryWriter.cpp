@@ -58,7 +58,7 @@ GeometryWriter::GeometryWriter(const std::string& OutputGeometryFile,
     this->BlockCounts[i] = BlockCounts[i];
   }
 
-  std::array<char, geometry::PreambleLength> preamble{};
+  std::array<std::byte, geometry::PreambleLength> preamble{};
   {
     hemelb::io::XdrMemWriter encoder(preamble.data(), preamble.size());
     // General magic
@@ -91,7 +91,7 @@ GeometryWriter::GeometryWriter(const std::string& OutputGeometryFile,
   this->headerBufferLength =
       static_cast<unsigned int>(nBlocks * geometry::HeaderRecordLength);
   this->bodyStart = this->headerStart + this->headerBufferLength;
-  auto headerBuffer = std::make_unique<char[]>(this->headerBufferLength);
+  auto headerBuffer = std::make_unique<std::byte[]>(this->headerBufferLength);
   auto headerEncoder = std::make_unique<hemelb::io::XdrMemWriter>(
       headerBuffer.get(), this->headerBufferLength);
 

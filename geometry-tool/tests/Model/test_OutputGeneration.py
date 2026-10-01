@@ -16,7 +16,7 @@ from HlbGmyTool.Model.Vector import Vector
 from HlbGmyTool.Model.Iolets import Iolet
 from vtk import vtkSphereSource, vtkTriangleFilter
 from hlb.parsers.geometry.simple import ConfigLoader
-from hlb.utils.xml_compare import XmlChecker
+from hlb.utils.xml_compare import XmlChecker, val_to_float
 import fixtures
 
 dataDir = os.path.join(os.path.split(__file__)[0], "data")
@@ -81,7 +81,7 @@ class TestPolyDataGenerator:
         import xml.etree.ElementTree as ET
 
         periods = [e.get("value") for e in ET.parse(p.OutputXmlFile).iter("period")]
-        assert periods == [written, written]  # one inlet and one outlet
+        assert [val_to_float(v) for v in periods] == [float(written), float(written)]  # one inlet and one outlet
 
     def test_valid_profile_has_no_warnings(self, tmpdir):
         generator = OutputGeneration.PolyDataGenerator(self._test_profile(tmpdir))

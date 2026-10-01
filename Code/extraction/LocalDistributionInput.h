@@ -67,6 +67,9 @@ namespace hemelb
 
       InputField distField;
       uint64_t dataStart;
+      uint64_t headerLength = 0;
+      uint64_t distributionBytes = sizeof(double);
+      double distributionOffset = 0.0;
       uint64_t checkpointSiteCount;
       uint64_t timestep;
       uint64_t allCoresWriteLength;

@@ -28,7 +28,10 @@ namespace hemelb::lb
         LatticePosition displ = x - position;
         LatticeDistance z = Dot(displ, normal);
         Dimensionless rSq = (displ.GetMagnitudeSquared() - z * z) / (radius * radius);
-        HASSERT(rSq <= 1.0);
+        if (rSq > 1.0)
+            throw Exception() << "Invalid parabolic boundary: site " << x
+                              << " lies outside iolet radius " << radius
+                              << " (squared radius ratio " << rSq << ")";
 
         // Get the max velocity
         LatticeSpeed max = maxSpeed;

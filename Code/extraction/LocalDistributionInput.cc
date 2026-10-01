@@ -20,7 +20,7 @@
 #include <numeric>
 
 namespace hemelb::extraction {
-  namespace fmt = hemelb::io::formats;
+    namespace fmt = hemelb::io::formats;
 
   // The reader expects each checkpoint record to start with the 8-byte
   // timestep, which LocalPropertyOutput writes from the I/O rank before its
@@ -41,14 +41,8 @@ namespace hemelb::extraction {
     if (maybeOffsetPath) {
       offsetPath = std::move(*maybeOffsetPath);
     } else {
-      offsetPath = fmt::offset::ExtractionToOffset(filePath);
+      offsetPath = fmt::offset::ExtractionToOffset(filePath.string());
     }
-  }
-
-  namespace {
-    // The required xtr field header len
-    uint64_t constexpr expectedFieldHeaderLength = 32U;
-    uint64_t constexpr totalXtrHeaderLength = fmt::extraction::MainHeaderLength + expectedFieldHeaderLength;
   }
 
   void LocalDistributionInput::LoadDistribution(geometry::FieldData* latDat, std::optional<LatticeTimeStep>& targetTime)
@@ -57,9 +51,24 @@ namespace hemelb::extraction {
       const auto NUMVECTORS = dom.GetLatticeInfo().GetNumVectors();
       auto inputFile = net::MpiFile::Open(comms, filePath, MPI_MODE_RDONLY);
       inputFile.SetView(0, MPI_CHAR, MPI_CHAR, "native");
-      ReadExtractionHeaders(inputFile, NUMVECTORS);
-      ReadOffsets(offsetPath);
-      const uint64_t siteLength = 3 * sizeof(uint32_t) + NUMVECTORS * sizeof(double);
+      // Keep the collective file alive while sharing root-only parse errors.
+      // Throwing only on rank zero would block its collective close while
+      // other ranks wait for metadata broadcasts.
+      std::string metadataError;
+      try {
+          ReadExtractionHeaders(inputFile, NUMVECTORS);
+          ReadOffsets(offsetPath.string());
+      } catch (std::exception const& error) {
+          metadataError = error.what();
+      }
+      comms.Broadcast(metadataError, comms.GetIORank());
+      if (!metadataError.empty()) throw Exception() << metadataError;
+      comms.Broadcast(distributionBytes, comms.GetIORank());
+      comms.Broadcast(distributionOffset, comms.GetIORank());
+      comms.Broadcast(dataStart, comms.GetIORank());
+      comms.Broadcast(checkpointSiteCount, comms.GetIORank());
+      comms.Broadcast(allCoresWriteLength, comms.GetIORank());
+      const uint64_t siteLength = 3 * sizeof(uint32_t) + NUMVECTORS * distributionBytes;
       if (allCoresWriteLength < 8 || (allCoresWriteLength - 8) % siteLength != 0 ||
           checkpointSiteCount != (allCoresWriteLength - 8) / siteLength)
         throw Exception() << "Checkpoint site count or record length is inconsistent with its offsets";
@@ -77,7 +86,7 @@ namespace hemelb::extraction {
         throw Exception() << "Checkpoint file contains no timesteps";
 
       auto readTime = [&](uint64_t index) {
-        std::vector<char> buffer(8);
+        std::vector<std::byte> buffer(8);
         inputFile.ReadAt(dataStart + index * allCoresWriteLength, to_span(buffer));
         io::XdrMemReader reader(buffer);
         uint64_t value;
@@ -85,22 +94,29 @@ namespace hemelb::extraction {
         return value;
       };
       uint64_t iTS = 0;
-      if (comms.OnIORank()) {
-        if (targetTime) {
-          uint64_t low = 0, high = nTimes;
-          while (low < high) {
-            const auto mid = low + (high - low) / 2;
-            if (readTime(mid) < *targetTime) low = mid + 1;
-            else high = mid;
+      std::string timeError;
+      try {
+        if (comms.OnIORank()) {
+          if (targetTime) {
+            uint64_t low = 0, high = nTimes;
+            while (low < high) {
+              const auto mid = low + (high - low) / 2;
+              if (readTime(mid) < *targetTime) low = mid + 1;
+              else high = mid;
+            }
+            iTS = low;
+            if (iTS == nTimes || readTime(iTS) != *targetTime)
+              throw Exception() << "Target timestep " << *targetTime << " not found in checkpoint file";
+          } else {
+            iTS = nTimes - 1;
           }
-          iTS = low;
-          if (iTS == nTimes || readTime(iTS) != *targetTime)
-            throw Exception() << "Target timestep " << *targetTime << " not found in checkpoint file";
-        } else {
-          iTS = nTimes - 1;
+          timestep = readTime(iTS);
         }
-        timestep = readTime(iTS);
+      } catch (std::exception const& error) {
+        timeError = error.what();
       }
+      comms.Broadcast(timeError, comms.GetIORank());
+      if (!timeError.empty()) throw Exception() << timeError;
       comms.Broadcast(iTS, comms.GetIORank());
       comms.Broadcast(timestep, comms.GetIORank());
       targetTime = timestep;
@@ -124,14 +140,14 @@ namespace hemelb::extraction {
       for (uint64_t round = 0; round < rounds; ++round) {
         const uint64_t begin = std::min(lastSite, firstSite + round * batchSites);
         const uint64_t count = std::min(batchSites, lastSite - begin);
-        std::vector<char> dataBuffer(count * siteLength);
+        std::vector<std::byte> dataBuffer(count * siteLength);
         if (count)
           inputFile.ReadAt(dataStart + iTS * allCoresWriteLength + 8 + begin * siteLength,
                            to_span(dataBuffer));
 
-        std::vector<std::vector<char>> outgoing(comms.Size());
+        std::vector<std::vector<std::byte>> outgoing(comms.Size());
         for (uint64_t site = 0; site < count; ++site) {
-          const char* record = dataBuffer.data() + site * siteLength;
+          const std::byte* record = dataBuffer.data() + site * siteLength;
           io::XdrMemReader reader(record, 3 * sizeof(uint32_t));
           util::Vector3D<uint32_t> coords;
           reader.read(coords.x());
@@ -153,7 +169,7 @@ namespace hemelb::extraction {
           sendCounts[rank] = int(outgoing[rank].size());
           sendTotal += sendCounts[rank];
         }
-        std::vector<char> sendBuffer;
+        std::vector<std::byte> sendBuffer;
         sendBuffer.reserve(sendTotal);
         for (auto& portion : outgoing)
           sendBuffer.insert(sendBuffer.end(), portion.begin(), portion.end());
@@ -164,7 +180,7 @@ namespace hemelb::extraction {
           recvOffsets[rank] = recvTotal;
           recvTotal += recvCounts[rank];
         }
-        std::vector<char> recvBuffer(recvTotal);
+        std::vector<std::byte> recvBuffer(recvTotal);
         net::MpiCall{MPI_Alltoallv}(sendBuffer.data(), sendCounts.data(), sendOffsets.data(), MPI_BYTE,
                                    recvBuffer.data(), recvCounts.data(), recvOffsets.data(), MPI_BYTE, comms);
 
@@ -186,7 +202,8 @@ namespace hemelb::extraction {
           distribn_t* oldValues = latDat->GetFOld(index * NUMVECTORS);
           distribn_t* newValues = latDat->GetFNew(index * NUMVECTORS);
           for (unsigned i = 0; i < NUMVECTORS; ++i)
-            reader.read(oldValues[i]);
+            oldValues[i] = (distributionBytes == sizeof(float) ? double(reader.read<float>()) : reader.read<double>())
+                          + distributionOffset;
           std::copy(oldValues, oldValues + NUMVECTORS, newValues);
         }
         if (comms.AllReduce(invalidSite, MPI_MAX))
@@ -198,109 +215,73 @@ namespace hemelb::extraction {
     }
 
     void LocalDistributionInput::ReadExtractionHeaders(net::MpiFile& inputFile, const unsigned NUMVECTORS) {
-      // The headers technically aren't needed (because of the offset
-      // file), but we check that they are as expected.
-      if (comms.OnIORank()) {
-	auto preambleBuf = std::vector<char>(fmt::extraction::MainHeaderLength);
-	inputFile.Read(to_span(preambleBuf));
-	auto preambleReader = io::XdrMemReader(preambleBuf);
-
-	// Read the magic numbers.
-	uint32_t hlbMagicNumber, extMagicNumber, version;
-	preambleReader.read(hlbMagicNumber);
-	preambleReader.read(extMagicNumber);
-	preambleReader.read(version);
-
-	// Check the value of the HemeLB magic number.
-	if (hlbMagicNumber != fmt::HemeLbMagicNumber)
-	{
-	  throw Exception() << "This file does not start with the HemeLB magic number."
-			    << " Expected: " << unsigned(fmt::HemeLbMagicNumber)
-			    << " Actual: " << hlbMagicNumber;
-	}
-
-	// Check the value of the extraction file magic number.
-	if (extMagicNumber != fmt::extraction::MagicNumber)
-        {
-	  throw Exception() << "This file does not have the extraction magic number."
-			    << " Expected: " << unsigned(fmt::extraction::MagicNumber)
-			    << " Actual: " << extMagicNumber;
-	}
-
-	// Check the version number.
-	if (version != fmt::extraction::VersionNumber)
-	{
-	  throw Exception() << "Version number incorrect."
-			    << " Supported: " << unsigned(fmt::extraction::VersionNumber)
-			    << " Input: " << version;
-	}
-
-	{
-	  // Obtain the size of voxel in metres.
-	  double voxelSize;
-	  preambleReader.read(voxelSize);
-
-	  // Obtain the origin.
-	  double origin[3];
-	  preambleReader.read(origin[0]);
-	  preambleReader.read(origin[1]);
-	  preambleReader.read(origin[2]);
-
-	  if (expectedVoxelSize) {
-	    // Written from the same double values, so equal up to rounding.
-	    auto const tol = 1e-9 * std::abs(*expectedVoxelSize);
-	    auto const close = [tol](double a, double b) { return std::abs(a - b) <= tol; };
-	    if (!close(voxelSize, *expectedVoxelSize))
-	      throw Exception() << "Checkpoint was written with voxel size " << voxelSize
-				<< " m but this run uses " << *expectedVoxelSize << " m";
-	    for (int i = 0; i < 3; ++i)
-	      if (!close(origin[i], expectedOrigin[i]))
-		throw Exception() << "Checkpoint was written with origin (" << origin[0] << ", "
-				  << origin[1] << ", " << origin[2] << ") m but this run uses ("
-				  << expectedOrigin[0] << ", " << expectedOrigin[1] << ", "
-				  << expectedOrigin[2] << ") m";
-	  }
-	}
-	// Obtain the total number of sites, fields & header len
-	uint64_t numberOfSites;
-	uint32_t numberOfFields, lengthOfFieldHeader;
-	preambleReader.read(numberOfSites);
-	preambleReader.read(numberOfFields);
-	preambleReader.read(lengthOfFieldHeader);
-	checkpointSiteCount = numberOfSites;
-
-	if (numberOfFields != 1 )
-	  throw Exception() << "Checkpoint file must contain exactly one field, the distributions, but has "
-			    << numberOfFields;
-	if (lengthOfFieldHeader != expectedFieldHeaderLength)
-	  throw Exception() << "Checkpoint file's field header must be "
-			    << expectedFieldHeaderLength << " B long, but is "
-			    << lengthOfFieldHeader << " B";
-
-	auto fieldHeaderBuf = std::vector<char>(lengthOfFieldHeader);
-	inputFile.Read(to_span(fieldHeaderBuf));
-	auto fieldHeaderReader = io::XdrMemReader(fieldHeaderBuf);
-
-	fieldHeaderReader.read(distField.name);
-	fieldHeaderReader.read(distField.numberOfElements);
-	fieldHeaderReader.read(distField.typecode);
-	fieldHeaderReader.read(distField.numberOfOffsets);
-
-	if (distField.name != "distributions")
-	  throw Exception() << "Checkpoint file must contain field named 'distributions', but has '"
-			    << distField.name << "'";
-
-	if (distField.numberOfElements != NUMVECTORS)
-	  throw Exception() << "Checkpoint field distributions contains " << distField.numberOfElements
-			    << " distributions but this build of HemeLB requires " << NUMVECTORS;
-
-	if (distField.typecode != static_cast<std::uint32_t>(io::formats::extraction::TypeCode::DOUBLE))
-	  throw Exception() << "Checkpoint contains wrong data type";
-
-	if (distField.numberOfOffsets != 0)
-	  throw Exception() << "Checkpoint should not have offsets";
-
-      }
+        if (!comms.OnIORank()) return;
+        std::vector<std::byte> magic(12);
+        inputFile.Read(to_span(magic));
+        io::XdrMemReader magicReader(magic);
+        const auto hlbMagic = magicReader.read<uint32_t>();
+        const auto xtrMagic = magicReader.read<uint32_t>();
+        const auto version = magicReader.read<uint32_t>();
+        if (hlbMagic != fmt::HemeLbMagicNumber || xtrMagic != fmt::extraction::MagicNumber)
+            throw Exception() << "Invalid checkpoint extraction magic";
+        if (version != 4 && version != 5 && version != 6)
+            throw Exception() << "Unsupported checkpoint extraction version: " << version;
+        const uint64_t mainHeaderLength = version == 6 ? 84 : 60;
+        std::vector<std::byte> main(mainHeaderLength - magic.size());
+        inputFile.Read(to_span(main));
+        io::XdrMemReader header(main);
+        const auto dx = header.read<double>();
+        if (version == 6) { header.read<double>(); header.read<double>(); }
+        PhysicalPosition origin;
+        for (int i = 0; i < 3; ++i) header.read(origin[i]);
+        if (version == 6) header.read<double>();
+        if (expectedVoxelSize) {
+            const auto tol = 1e-9 * std::abs(*expectedVoxelSize);
+            if (!std::isfinite(dx) || std::abs(dx - *expectedVoxelSize) > tol)
+                throw Exception() << "Checkpoint was written with voxel size " << dx
+                                  << " m but this run uses " << *expectedVoxelSize << " m";
+            for (int i = 0; i < 3; ++i)
+                if (!std::isfinite(origin[i]) || std::abs(origin[i] - expectedOrigin[i]) > tol)
+                    throw Exception() << "Checkpoint was written with origin " << origin
+                                      << " m but this run uses " << expectedOrigin << " m";
+        }
+        checkpointSiteCount = header.read<uint64_t>();
+        const auto fields = header.read<uint32_t>();
+        const auto fieldLength = header.read<uint32_t>();
+        if (fields != 1) throw Exception() << "Checkpoint file must contain exactly one distributions field";
+        if (fieldLength < 32 || fieldLength > 48)
+            throw Exception() << "Invalid checkpoint field header length: " << fieldLength;
+        std::vector<std::byte> fieldBuffer(fieldLength);
+        inputFile.Read(to_span(fieldBuffer));
+        io::XdrMemReader field(fieldBuffer);
+        field.read(distField.name);
+        field.read(distField.numberOfElements);
+        if (distField.name != "distributions") throw Exception() << "Checkpoint field must be named distributions";
+        if (distField.numberOfElements != NUMVECTORS)
+            throw Exception() << "Checkpoint field has " << distField.numberOfElements
+                              << " distributions but this build requires " << NUMVECTORS;
+        distributionOffset = 0.0;
+        if (version == 4) {
+            distributionBytes = sizeof(float);
+            distributionOffset = field.read<double>();
+        } else {
+            field.read(distField.typecode);
+            const auto tc = static_cast<fmt::extraction::TypeCode>(distField.typecode);
+            if (tc != fmt::extraction::TypeCode::FLOAT && tc != fmt::extraction::TypeCode::DOUBLE)
+                throw Exception() << "Checkpoint distributions must be float or double";
+            distributionBytes = tc == fmt::extraction::TypeCode::FLOAT ? sizeof(float) : sizeof(double);
+            field.read(distField.numberOfOffsets);
+            if (distField.numberOfOffsets > 1) throw Exception() << "Invalid checkpoint distribution offsets";
+            if (distField.numberOfOffsets == 1)
+                distributionOffset = distributionBytes == sizeof(float) ? double(field.read<float>()) : field.read<double>();
+            if (version == 6) {
+                const double scale = distributionBytes == sizeof(float) ? double(field.read<float>()) : field.read<double>();
+                if (scale != 0.0) throw Exception() << "Checkpoint has scaling applied";
+            }
+        }
+        if (!std::isfinite(distributionOffset)) throw Exception() << "Non-finite checkpoint distribution offset";
+        if (field.GetPosition() != fieldLength) throw Exception() << "Checkpoint field header has trailing bytes";
+        headerLength = mainHeaderLength + fieldLength;
     }
 
     void LocalDistributionInput::ReadOffsets(const std::string& offsetFileName) {
@@ -314,26 +295,26 @@ namespace hemelb::extraction {
 	offsetReader.read(version);
 	offsetReader.read(nRanks);
 
-	if (hlbMagicNumber != fmt::HemeLbMagicNumber)
-	  throw Exception() << "This file does not start with the HemeLB magic number."
-			    << " Expected: " << unsigned(fmt::HemeLbMagicNumber)
-			    << " Actual: " << hlbMagicNumber;
+            if (hlbMagicNumber != fmt::HemeLbMagicNumber)
+                throw Exception() << "This file does not start with the HemeLB magic number."
+                                  << " Expected: " << unsigned(fmt::HemeLbMagicNumber)
+                                  << " Actual: " << hlbMagicNumber;
 
-	if (offMagicNumber != fmt::offset::MagicNumber)
-	  throw Exception() << "This file does not have the offset magic number."
-			    << " Expected: " << unsigned(fmt::offset::MagicNumber)
-			    << " Actual: " << offMagicNumber;
+            if (offMagicNumber != fmt::offset::MagicNumber)
+                throw Exception() << "This file does not have the offset magic number."
+                                  << " Expected: " << unsigned(fmt::offset::MagicNumber)
+                                  << " Actual: " << offMagicNumber;
 
-	if (version != fmt::offset::VersionNumber)
-	  throw Exception() << "Version number incorrect."
-			    << " Supported: " << unsigned(fmt::offset::VersionNumber)
-			    << " Input: " << version;
+            if (version != fmt::offset::VersionNumber)
+                throw Exception() << "Version number incorrect."
+                                  << " Supported: " << unsigned(fmt::offset::VersionNumber)
+                                  << " Input: " << version;
 
 	if (nRanks < 1)
 	  throw Exception() << "Offset file has no MPI ranks";
 	uint64_t previous;
 	offsetReader.read(dataStart);
-	if (dataStart != totalXtrHeaderLength)
+	if (dataStart != headerLength)
 	  throw Exception() << "Offset file starts at an unexpected position";
 	previous = dataStart;
 	for (int i = 0; i < nRanks; ++i) {
@@ -345,8 +326,5 @@ namespace hemelb::extraction {
 	}
 	allCoresWriteLength = previous - dataStart;
       }
-      comms.Broadcast(dataStart, comms.GetIORank());
-      comms.Broadcast(checkpointSiteCount, comms.GetIORank());
-      comms.Broadcast(allCoresWriteLength, comms.GetIORank());
     }
 }

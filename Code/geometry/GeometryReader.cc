@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <limits>
 #include <utility>
+#include <filesystem>
+#include <cstring>
 #include <zlib.h>
 
 #include "io/formats/geometry.h"
@@ -21,7 +23,7 @@
 #include "net/IOCommunicator.h"
 #include "log/Logger.h"
 #include "util/span.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 #include "util/Iterator.h"
 #include "constants.h"
 
@@ -72,36 +74,35 @@ namespace hemelb::geometry
             gmy::WallNormalAvailability::AVAILABLE>;
 
     GeometryReader::GeometryReader(const lb::LatticeInfo& latticeInfo,
-                                   reporting::Timers &atimings, net::IOCommunicator ioComm) :
-            latticeInfo(latticeInfo), computeComms(std::move(ioComm)), timings(atimings)
+                                   reporting::Timers &atimings, net::IOCommunicator ioComm, bool optimise) :
+            latticeInfo(latticeInfo), computeComms(std::move(ioComm)), timings(atimings), optimise(optimise)
     {
     }
 
     GeometryReader::~GeometryReader()
-    {
-    }
+    = default;
 
     GmyReadResult GeometryReader::LoadAndDecompose(const std::string& dataFilePath)
     {
-        timings[reporting::Timers::fileRead].Start();
+        timings.fileRead().Start();
 
-        // Open the file for read on node leaders
-        if (computeComms.AmNodeLeader()) {
-            file = net::MpiFile::Open(
-                computeComms.GetLeadersComm(), dataFilePath, MPI_MODE_RDONLY, MPI_INFO_NULL
-            );
-        }
-
+        headerRecordLength = std::filesystem::path(dataFilePath).extension() == ".gmy+" ? 16 : gmy::HeaderRecordLength;
+        file = net::MpiFile::Open(computeComms, dataFilePath, MPI_MODE_RDONLY, MPI_INFO_NULL);
+        fluidSitesOnEachBlock.clear();
+        blockMetadata.clear();
+        compressedCache.clear();
+        timings.geometryBlocksRead = 0;
+        timings.geometryBytesRead = 0;
         log::Logger::Log<log::Debug, log::OnePerCore>("Reading file preamble");
         GmyReadResult geometry = ReadPreamble();
 
         log::Logger::Log<log::Debug, log::OnePerCore>("Reading file header");
         ReadHeader(geometry.GetBlockCount(), geometry.GetSitesPerBlock());
-        timings[reporting::Timers::fileRead].Stop();
+        timings.fileRead().Stop();
 
         {
-            timings[reporting::Timers::initialDecomposition].Start();
-            principalProcForEachBlock.resize(geometry.GetBlockCount());
+            timings.initialDecomposition().Start();
+
 
             log::Logger::Log<log::Info, log::Singleton>("Creating block-level octree");
             auto blockTree = octree::build_block_tree(
@@ -123,7 +124,7 @@ namespace hemelb::geometry
                                                               computeComms.Size());
 
             // This vector only has entries for blocks that have a least one fluid site
-            procForBlockOct = basicDecomposer.Decompose(blockTree, principalProcForEachBlock);
+            procForBlockOct = basicDecomposer.Decompose(blockTree);
             geometry.block_store = std::make_unique<octree::DistributedStore>(
                     geometry.GetSitesPerBlock(),
                     std::move(blockTree),
@@ -132,13 +133,13 @@ namespace hemelb::geometry
             );
             if constexpr (build_info::VALIDATE_GEOMETRY) {
                 log::Logger::Log<log::Info, log::Singleton>("Validating initial decomposition");
-                basicDecomposer.Validate(principalProcForEachBlock, computeComms);
+                basicDecomposer.Validate(procForBlockOct, computeComms);
             }
 
-            timings[reporting::Timers::initialDecomposition].Stop();
+            timings.initialDecomposition().Stop();
         }
 
-        timings[reporting::Timers::fileRead].Start();
+        timings.fileRead().Start();
         {
           std::vector<U64> blocks_wanted;
           blocks_wanted.reserve((2*nFluidBlocks) / computeComms.Size());
@@ -151,38 +152,34 @@ namespace hemelb::geometry
         if constexpr (build_info::VALIDATE_GEOMETRY) {
             ValidateGeometry(geometry);
         }
-        timings[reporting::Timers::fileRead].Stop();
+        timings.fileRead().Stop();
 
-        log::Logger::Log<log::Info, log::Singleton>("Optimising the domain decomposition.");
-        timings[reporting::Timers::domainDecomposition].Start();
-
-        // Having done an initial decomposition of the geometry, and read in the data, we optimise the
-        // domain decomposition.
-        log::Logger::Log<log::Debug, log::OnePerCore>("Beginning domain decomposition optimisation");
-        OptimiseDomainDecomposition(geometry, principalProcForEachBlock);
-        log::Logger::Log<log::Debug, log::OnePerCore>("Ending domain decomposition optimisation");
-
-        if constexpr (build_info::VALIDATE_GEOMETRY) {
-            log::Logger::Log<log::Info, log::Singleton>("Validating optimised decomposition");
-            ValidateGeometry(geometry);
+        if (optimise) {
+            timings.domainDecomposition().Start();
+            OptimiseDomainDecomposition(geometry);
+            timings.domainDecomposition().Stop();
+        } else {
+            log::Logger::Log<log::Info, log::Singleton>("Using site-weighted octree decomposition.");
+            auto const& tree = geometry.block_store->GetTree();
+            for (auto& [id, block]: geometry.Blocks) {
+                auto leaf = tree.GetLeaf(geometry.GetBlockCoordinatesFromBlockId(id));
+                auto rank = procForBlockOct[leaf.index()];
+                for (auto& site: block.Sites)
+                    if (site.isFluid) site.targetProcessor = rank;
+            }
         }
-
-        timings[reporting::Timers::domainDecomposition].Stop();
-
+        if constexpr (build_info::VALIDATE_GEOMETRY) ValidateGeometry(geometry);
+        compressedCache.clear();
         return geometry;
     }
 
-    std::vector<char> GeometryReader::ReadAllProcesses(std::size_t start, unsigned nBytes)
+    std::vector<std::byte> GeometryReader::ReadAllProcesses(std::size_t start, unsigned nBytes)
     {
         // result
-        std::vector<char> buffer(nBytes);
+        std::vector<std::byte> buffer(nBytes);
         auto sp = to_span(buffer);
-        if (computeComms.AmNodeLeader()) {
-          // file is opened by the leaders comm only
-          file.ReadAtAll(start, sp);
-        }
-        // Broadcast from node leader to others
-        computeComms.GetNodeComm().Broadcast(sp, 0);
+        if (computeComms.OnIORank()) file.ReadAt(start, sp);
+        computeComms.Broadcast(sp, computeComms.GetIORank());
         return buffer;
     }
 
@@ -192,13 +189,13 @@ namespace hemelb::geometry
     GmyReadResult GeometryReader::ReadPreamble()
     {
       MPI_Offset fileSize = 0;
-      if (computeComms.AmNodeLeader())
+      if (computeComms.OnIORank())
         fileSize = file.GetSize();
-      computeComms.GetNodeComm().Broadcast(fileSize, 0);
+      computeComms.Broadcast(fileSize, computeComms.GetIORank());
       if (fileSize < static_cast<MPI_Offset>(gmy::PreambleLength))
         throw Exception() << "Geometry file is shorter than its preamble";
 
-      std::vector<char> preambleBuffer = ReadAllProcesses(0, gmy::PreambleLength);
+      std::vector<std::byte> preambleBuffer = ReadAllProcesses(0, gmy::PreambleLength);
 
       // Create an Xdr translator based on the read-in data.
       auto preambleReader = io::XdrMemReader(preambleBuffer.data(),
@@ -254,9 +251,7 @@ namespace hemelb::geometry
         throw Exception() << "Geometry dimensions and block size must be positive";
 
       const auto blockCount = std::uint64_t(blocksX) * blocksY * blocksZ;
-      if (blockCount > std::uint64_t(std::numeric_limits<int>::max()) / gmy::HeaderRecordLength)
-        throw Exception() << "Geometry header exceeds the supported read size";
-      const auto headerBytes = blockCount * gmy::HeaderRecordLength;
+      const auto headerBytes = blockCount * headerRecordLength;
       if (std::uint64_t(fileSize) < gmy::PreambleLength + headerBytes)
         throw Exception() << "Geometry file is shorter than its block header";
 
@@ -275,212 +270,84 @@ namespace hemelb::geometry
      */
     void GeometryReader::ReadHeader(site_t blockCount, site_t sitesPerBlock)
     {
-      site_t headerByteCount = GetHeaderLength(blockCount);
-      std::vector<char> headerBuffer = ReadAllProcesses(gmy::PreambleLength, headerByteCount);
-
-      // Create a Xdr translation object to translate from binary
-      auto preambleReader = io::XdrMemReader(headerBuffer.data(),
-                                             headerByteCount);
-
-      fluidSitesOnEachBlock.reserve(blockCount);
-      bytesPerCompressedBlock.reserve(blockCount);
-      bytesPerUncompressedBlock.reserve(blockCount);
-
-      // Read in all the data.
-      for (site_t block = 0; block < blockCount; block++)
-      {
-        unsigned int sites, bytes, uncompressedBytes;
-        preambleReader.read(sites);
-        preambleReader.read(bytes);
-        preambleReader.read(uncompressedBytes);
-
-        if (sites > sitesPerBlock)
-          throw Exception() << "Geometry block " << block << " has more fluid sites than sites per block";
-        if (bytes > MAX_GMY_BUFFER_SIZE)
-          throw Exception() << "Compressed geometry block " << block << " exceeds the 64 MiB read buffer";
-        if (sites > 0 && (bytes == 0 || uncompressedBytes == 0))
-          throw Exception() << "Geometry block " << block << " has missing compressed data";
-        const auto maxUncompressed = std::uint64_t(sitesPerBlock) * gmy::MaxFluidSiteRecordLength;
-        if (uncompressedBytes > maxUncompressed)
-          throw Exception() << "Geometry block " << block << " declares too much uncompressed data";
-
-        fluidSitesOnEachBlock.push_back(sites);
-        bytesPerCompressedBlock.push_back(bytes);
-        bytesPerUncompressedBlock.push_back(uncompressedBytes);
-      }
-
-      std::uint64_t declaredBytes = 0;
-      for (auto bytes: bytesPerCompressedBlock)
-        declaredBytes += bytes;
-      MPI_Offset fileSize = 0;
-      if (computeComms.AmNodeLeader())
-        fileSize = file.GetSize();
-      computeComms.GetNodeComm().Broadcast(fileSize, 0);
-      const auto bodyStart = gmy::PreambleLength + std::uint64_t(headerByteCount);
-      if (std::uint64_t(fileSize) - bodyStart < declaredBytes)
-        throw Exception() << "Geometry file is shorter than its declared block data";
-    }
-
-    // Args are vectors with index representing a block ID.
-    // First arg is which blocks this rank wants
-    // Second arg is which rank "owns" them
-    // Returns a pair with:
-    // - a map from source rank to vector of block IDs wanted from it
-    // - the total number of blocks wanted.
-    auto ComputeSources(std::vector<bool> const& wanted, std::vector<int> const& ranks_they_are_on) {
-      std::map<int, std::vector<std::size_t>> ans;
-      auto const N = wanted.size();
-      unsigned total = 0;
-      for (std::size_t i = 0; i < N; ++i) {
-        if (wanted[i]) {
-          // This will default construct an empty vec if this is the first time
-          auto& blocks = ans[ranks_they_are_on[i]];
-          blocks.push_back(i);
-          total += 1;
+      constexpr U64 chunkBlocks = 100000;
+      std::uint64_t offset = gmy::PreambleLength + std::uint64_t(GetHeaderLength(blockCount));
+      U64 active = 0;
+      for (U64 first = 0; first < U64(blockCount); first += chunkBlocks) {
+        const auto count = std::min(chunkBlocks, U64(blockCount) - first);
+        auto buffer = ReadAllProcesses(gmy::PreambleLength + first * headerRecordLength,
+                                       count * headerRecordLength);
+        io::XdrMemReader reader(buffer);
+        for (U64 i = 0; i < count; ++i) {
+          unsigned sites, bytes, uncompressed;
+          reader.read(sites);
+          if (headerRecordLength == 16) reader.read<unsigned>();
+          reader.read(bytes); reader.read(uncompressed);
+          auto id = first + i;
+          if (sites > sitesPerBlock) throw Exception() << "Geometry block " << id << " has more fluid sites than sites per block";
+          if (bytes > MAX_GMY_BUFFER_SIZE) throw Exception() << "Compressed geometry block " << id << " exceeds the 64 MiB read buffer";
+          if (sites && (!bytes || !uncompressed)) throw Exception() << "Geometry block " << id << " has missing compressed data";
+          if (!sites && (bytes || uncompressed)) throw Exception() << "Solid geometry block " << id << " declares block data";
+          if (uncompressed > U64(sitesPerBlock) * gmy::MaxFluidSiteRecordLength)
+              throw Exception() << "Geometry block " << id << " declares too much uncompressed data";
+          if (sites) {
+            fluidSitesOnEachBlock.emplace(id, sites);
+            blockMetadata.emplace(id, BlockMetadata{bytes, uncompressed, offset, int(active % computeComms.Size())});
+            ++active;
+          }
+          offset += bytes;
         }
       }
-      return std::make_pair(std::move(ans), total);
+      if (offset > U64(file.GetSize())) throw Exception() << "Geometry file is shorter than its declared block data";
+      if (!active) throw Exception() << "Geometry contains no fluid blocks";
     }
 
-
-    // Return a map from block gmy index to compressed data, for
-    // those blocks that where the predicate returns true
-    template <std::predicate<std::size_t> PredT>
-    auto GeometryReader::ReadCompressedBlockData(GmyReadResult const& geometry, PredT&& want) -> block_cache {
-        // Strategy: read the entire file once and filter out those
-        // blocks we want.
-
-        // Going to read the file in large chunks (but note using
-        // whole blocks) and only on the node leaders (using
-        // collective MPI IO). Going to use the node communicator to
-        // set up a shared memory allocation to hold this and then
-        // filter in parallel.
-        log::Logger::Log<log::Info, log::Singleton>("Streaming geometry data and caching required blocks.");
-        log::Logger::Log<log::Debug, log::Singleton>("Maximum buffer size %lu B", MAX_GMY_BUFFER_SIZE);
-
-        block_cache ans;
-
-        // Work out where blocks live in the gmy **file**
-        std::size_t const nBlocksGmy = bytesPerCompressedBlock.size();
-        log::Logger::Log<log::Debug, log::Singleton>("Number of GMY blocks %lu", nBlocksGmy);
-        auto const oversized_block = std::find_if(
-            bytesPerCompressedBlock.begin(), bytesPerCompressedBlock.end(),
-            [](unsigned int bytes) { return bytes > MAX_GMY_BUFFER_SIZE; });
-        if (oversized_block != bytesPerCompressedBlock.end()) {
-            throw Exception() << "Compressed geometry block "
-                              << std::distance(bytesPerCompressedBlock.begin(), oversized_block)
-                              << " exceeds the 64 MiB read buffer";
-        }
-        std::size_t const dataStart = gmy::PreambleLength + GetHeaderLength(geometry.GetBlockCount());
-
-        // N + 1 elements, elem i holds the start of block i, elem i+1 holds the end
-        auto const blockBoundsGmy = [&] () {
-            std::vector<std::size_t> ans(nBlocksGmy + 1);
-            ans[0] = dataStart;
-            std::inclusive_scan(
-                bytesPerCompressedBlock.begin(), bytesPerCompressedBlock.end(),
-                ans.begin() + 1, std::plus<std::size_t>(), dataStart
-            );
-            return ans;
-        }();
-
-        log::Logger::Log<log::Debug, log::Singleton>("Setup node level shared memory");
-
-        MPI_Win win;
-        char* local_buf = nullptr;
-
-        // Full size of buffer across node communicator
-        auto total_buf_size = std::min(blockBoundsGmy[nBlocksGmy] - blockBoundsGmy[0],
-                                       MAX_GMY_BUFFER_SIZE);
-        if (total_buf_size == 0)
-            return ans;
-
-        auto&& nodeComm = computeComms.GetNodeComm();
-        auto local_buf_size = (total_buf_size - 1) / nodeComm.Size() + 1;
-
-        // Need contiguous memory.
-        // Note local_buf has pointer into that process's "bit" of memory
-        net::MpiCall{MPI_Win_allocate_shared}(
-            local_buf_size, 1, MPI_INFO_NULL, nodeComm, &local_buf, &win
-        );
-        // Get the whole thing's start address
-        char* buf = local_buf - nodeComm.Rank() * local_buf_size;
-
-        // Open a passive access epoch to the shared buffer
-        net::MpiCall{MPI_Win_lock_all}(MPI_MODE_NOCHECK, win);
-
-        // Get to work reading chunks
-        std::size_t const* blockBoundsGmy_end = &*blockBoundsGmy.end();
-        for (std::size_t i_first_block = 0; i_first_block < nBlocksGmy; /* end of loop */) {
-          // Given we know which block we're starting at, figure out
-          // the most whole blocks we can fit in the buffer.
-          auto first_block_ptr = &blockBoundsGmy[i_first_block];
-          auto max_read_pos = *first_block_ptr + total_buf_size;
-          // upper bound gives the first elem after max_read_pos or _end if none
-          auto end_ptr = std::upper_bound(first_block_ptr, blockBoundsGmy_end, max_read_pos) - 1;
-          std::size_t n_blocks = end_ptr - first_block_ptr;
-          if (n_blocks == 0)
-            throw Exception() << "Geometry reader cannot fit block " << i_first_block
-                              << " in its read buffer";
-          auto read_size = *end_ptr - *first_block_ptr;
-          log::Logger::Log<log::Debug, log::Singleton>("Reading blocks from %lu count %lu", i_first_block, n_blocks);
-
-          // Only read on node leader
-          if (computeComms.AmNodeLeader()) {
-            auto sp = std::span<char>(buf, read_size);
-            // Collective on leaders comm
-            file.ReadAtAll(*first_block_ptr, sp);
+    auto GeometryReader::ReadCompressedBlockData(std::vector<U64> const& wanted) -> block_cache {
+      std::map<int, std::vector<U64>> requests;
+      for (auto id: wanted) requests[blockMetadata.at(id).reader].push_back(id);
+      net::sparse_exchange<U64> query(computeComms, 210);
+      for (auto const& [rank, ids]: requests) query.send(to_const_span(ids), rank);
+      std::map<int, std::vector<U64>> incoming;
+      query.receive([&](int rank, int size) { auto& ids = incoming[rank]; ids.resize(size); return ids.data(); },
+                    [](int, U64*) {});
+      net::sparse_exchange<std::byte> delivery(computeComms, 211);
+      std::list<std::vector<std::byte>> messages;
+      for (auto const& [rank, ids]: incoming) {
+        for (auto id: ids) {
+          auto [it, fresh] = compressedCache.try_emplace(id);
+          auto const& meta = blockMetadata.at(id);
+          if (fresh) {
+            it->second.resize(meta.compressed);
+            timings.readBlock().Start();
+            file.ReadAt(meta.offset, to_span(it->second));
+            ++timings.geometryBlocksRead;
+            timings.geometryBytesRead += meta.compressed;
+            timings.readBlock().Stop();
           }
-          // Need to wait for leader to read
-          nodeComm.Barrier();
-          // Sync the memory
-          net::MpiCall{MPI_Win_sync}(win);
-
-          // Now we've read a chunk of the file. Go through it,
-          // copying out the blocks we want.
-          for (std::size_t i = 0; i < n_blocks; ++i) {
-            auto block_gmy = i_first_block + i;
-            if (want(block_gmy)) {
-              // Recall std::map::operator[] will create the element.
-              auto& block_data = ans[block_gmy];
-              block_data.resize(bytesPerCompressedBlock[block_gmy]);
-
-              auto buf_pos = blockBoundsGmy[block_gmy] - blockBoundsGmy[i_first_block];
-              std::memcpy(block_data.data(), &buf[buf_pos], bytesPerCompressedBlock[block_gmy]);
-            }
-          }
-
-          i_first_block += n_blocks;
+          auto& message = messages.emplace_back(sizeof(U64) + it->second.size());
+          std::memcpy(message.data(), &id, sizeof(id));
+          std::memcpy(message.data() + sizeof(id), it->second.data(), it->second.size());
+          delivery.send(to_const_span(message), rank);
         }
-        // Close the access epoch
-        net::MpiCall{MPI_Win_unlock_all}(win);
-        // and free the window & buffer
-        net::MpiCall{MPI_Win_free}(&win);
-
-        log::Logger::Log<log::Debug, log::Singleton>("Finished caching blocks");
-        return ans;
+      }
+      block_cache ans;
+      std::vector<std::byte> recv;
+      delivery.receive([&](int, int size) { recv.resize(size); return recv.data(); },
+                       [&](int, std::byte*) {
+                         if (recv.size() < sizeof(U64)) throw Exception() << "Truncated geometry delivery";
+                         U64 id; std::memcpy(&id, recv.data(), sizeof(id));
+                         if (recv.size() != sizeof(id) + blockMetadata.at(id).compressed)
+                             throw Exception() << "Invalid geometry delivery size";
+                         ans[id] = std::vector<std::byte>(recv.begin() + sizeof(id), recv.end());
+                       });
+      return ans;
     }
 
-    /**
-     * Read and deserialise the necessary blocks from the file into
-     * `geometry`. Collective.
-     *
-     * Initially, we have procForBlock which is the rank where each
-     * block is wanted (or -1 if unknown).
-     *
-     * - Decide which blocks this rank want (i.e. procForBlock ==
-     *   Rank() plus neigbours).
-     *
-     * - Collectively read the file, filtering blocks to ranks that
-     *   want them.
-     *
-     * - Deserialise those blocks into the geometry.
-     */
     void GeometryReader::ReadInBlocksWithHalo(GmyReadResult& geometry,
                                               const std::vector<U64>& blocksWanted)
     {
       // Create a list of which blocks to read in.
-      timings[reporting::Timers::readBlocksPrelim].Start();
+      timings.readBlocksPrelim().Start();
 
       // Populate the list of blocks to read (including a halo one block wide around all
       // local blocks).
@@ -496,36 +363,28 @@ namespace hemelb::geometry
           auto ijk = tree.GetLeafCoords(idx);
           wanted_gmys.push_back(geometry.GetBlockIdFromBlockCoordinates(ijk));
       }
-      // Recall we hit every block in GMY order, so sort this. We now
-      // only have to test one value at a time and bump the iterator
-      // forward when it matches.
       std::sort(wanted_gmys.begin(), wanted_gmys.end());
-
-      auto compressed_block_data = ReadCompressedBlockData(
-          geometry,
-          [lower=wanted_gmys.cbegin(), upper=wanted_gmys.cend()] (std::size_t gmy) mutable {
-            if (lower != upper && *lower == gmy) {
-              ++lower;
-              return true;
-            } else {
-              return false;
-            }
-          }
-      );
-
+      for (auto it = geometry.Blocks.begin(); it != geometry.Blocks.end();) {
+        if (!std::binary_search(wanted_gmys.begin(), wanted_gmys.end(), it->first)) it = geometry.Blocks.erase(it);
+        else ++it;
+      }
+      std::vector<U64> missing;
+      for (auto id: wanted_gmys) if (!geometry.Blocks.contains(id)) missing.push_back(id);
+      auto compressed_block_data = ReadCompressedBlockData(missing);
       for (auto& [gmy_idx, data]: compressed_block_data) {
         DeserialiseBlock(geometry, data, gmy_idx);
       }
+      timings.readBlocksPrelim().Stop();
     }
 
     void GeometryReader::DeserialiseBlock(
-        GmyReadResult& geometry, std::vector<char> const& compressedBlockData,
+        GmyReadResult& geometry, std::vector<std::byte> const& compressedBlockData,
         site_t block_gmy
     ) {
-        timings[reporting::Timers::readParse].Start();
+        timings.readParse().Start();
         // Create an Xdr interpreter.
         auto blockData = DecompressBlockData(compressedBlockData,
-                                             bytesPerUncompressedBlock[block_gmy], block_gmy);
+                                             blockMetadata.at(block_gmy).uncompressed, block_gmy);
         if (blockData.empty())
           throw Exception() << "Geometry block " << block_gmy << " has no site data";
         io::XdrMemReader lReader(blockData);
@@ -546,31 +405,31 @@ namespace hemelb::geometry
             }
           }
           // Compare with the sites we expected to read.
-          if (numSitesRead != fluidSitesOnEachBlock[block_gmy])
+          if (numSitesRead != fluidSitesOnEachBlock.at(block_gmy))
           {
             log::Logger::Log<log::Error, log::OnePerCore>("Was expecting %i fluid sites on block %i but actually read %i",
-                                                          fluidSitesOnEachBlock[block_gmy],
+                                                          fluidSitesOnEachBlock.at(block_gmy),
                                                           block_gmy,
                                                           numSitesRead);
           }
         }
-      timings[reporting::Timers::readParse].Stop();
+      timings.readParse().Stop();
     }
 
-    std::vector<char> GeometryReader::DecompressBlockData(const std::vector<char>& compressed,
+    std::vector<std::byte> GeometryReader::DecompressBlockData(const std::vector<std::byte>& compressed,
                                                           const unsigned int uncompressedBytes, site_t blockGmy)
     {
-      timings[reporting::Timers::unzip].Start();
+      timings.unzip().Start();
       if (compressed.empty() || uncompressedBytes == 0)
         throw Exception() << "Geometry block " << blockGmy << " has empty compressed or uncompressed data";
 
       // Set up the buffer for decompressed data. We know how long the the data is
-      std::vector<char> uncompressed(uncompressedBytes);
+      std::vector<std::byte> uncompressed(uncompressedBytes);
 
       // Set up the inflator
       z_stream stream{};
       stream.avail_in = compressed.size();
-      stream.next_in = reinterpret_cast<unsigned char*>(const_cast<char*>(compressed.data()));
+      stream.next_in = reinterpret_cast<unsigned char*>(const_cast<std::byte*>(compressed.data()));
 
       int ret = inflateInit(&stream);
       if (ret != Z_OK)
@@ -585,15 +444,14 @@ namespace hemelb::geometry
       if (!complete || endRet != Z_OK)
         throw Exception() << "Decompression error for geometry block " << blockGmy;
 
-      timings[reporting::Timers::unzip].Stop();
+      timings.unzip().Stop();
       return uncompressed;
     }
 
     void GeometryReader::ParseBlock(GmyReadResult& geometry, const site_t block,
                                     io::XdrReader& reader)
     {
-      // We start by clearing the sites on the block. We read the blocks twice (once before
-      // optimisation and once after), so there can be sites on the block from the previous read.
+      // Clear any previous parsed sites before decoding this block.
       geometry.Blocks[block].Sites.clear();
 
       for (site_t localSiteIndex = 0; localSiteIndex < geometry.GetSitesPerBlock();
@@ -713,7 +571,7 @@ namespace hemelb::geometry
 
       // We check the isFluid property and the link type for each direction
       // We also validate that each processor has the same beliefs about each site.
-      for (site_t block_gmy = 0; block_gmy < geometry.GetBlockCount(); ++block_gmy) {
+      for (auto const& [block_gmy, count]: fluidSitesOnEachBlock) {
         auto const& block = geometry.Blocks[block_gmy];
 
         if (block.Sites.empty()) {
@@ -828,36 +686,38 @@ namespace hemelb::geometry
       return ans;
     }
 
-    void GeometryReader::OptimiseDomainDecomposition(GmyReadResult& geometry,
-                                                     const std::vector<proc_t>& procForEachBlock)
+    void GeometryReader::OptimiseDomainDecomposition(GmyReadResult& geometry)
     {
       decomposition::OptimisedDecomposition optimiser(timings,
                                                       computeComms,
                                                       geometry,
                                                       latticeInfo);
 
-      timings[reporting::Timers::reRead].Start();
+      timings.reRead().Start();
       log::Logger::Log<log::Debug, log::OnePerCore>("Rereading blocks");
-      // Reread the blocks based on the ParMetis decomposition.
+      for (auto& [id, block]: geometry.Blocks)
+          for (auto& site: block.Sites)
+              if (site.isFluid) site.targetProcessor = UNKNOWN_PROCESS;
+      // Fetch only blocks newly required by the ParMETIS decomposition.
       RereadBlocks(geometry,
                    optimiser.GetStaying(),
                    optimiser.GetArriving());
-      timings[reporting::Timers::reRead].Stop();
+      timings.reRead().Stop();
 
-      timings[reporting::Timers::moves].Start();
+      timings.moves().Start();
       // Implement the decomposition now that we have read the necessary data.
       log::Logger::Log<log::Debug, log::OnePerCore>("Implementing moves");
       ImplementMoves(geometry,
                      optimiser.GetStaying(),
                      optimiser.GetArriving(),
                      optimiser.GetLeaving());
-      timings[reporting::Timers::moves].Stop();
+      timings.moves().Stop();
     }
 
     // The header section of the config file contains a number of records.
     site_t GeometryReader::GetHeaderLength(site_t blockCount) const
     {
-      return gmy::HeaderRecordLength * blockCount;
+      return headerRecordLength * blockCount;
     }
 
     // Iterator to advance through the moves vector to the first move
@@ -878,7 +738,7 @@ namespace hemelb::geometry
         only_block_id_iterator& operator++() {
             auto block = **this;
             ++pos; // Guard the case where have a fully fluid block
-            auto limit = std::min(pos + max_step, end);
+            auto limit = pos + std::min<site_t>(max_step, end - pos);
             pos = std::upper_bound(
                 pos, limit,
                 block,

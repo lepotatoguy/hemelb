@@ -6,4 +6,5 @@ add_test_lib(test_configuration
   CommandLineTests.cc
   IoletIdCheckTests.cc
   SimConfigTests.cc
+  PathManagerTests.cc
   )

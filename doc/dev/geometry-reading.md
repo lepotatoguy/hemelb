@@ -15,8 +15,8 @@ an `Exception` naming the block (and site, where relevant):
 
 - **Preamble and header.** Block dimensions and block size must be
   positive. Block counts use checked 64-bit arithmetic, and the header must
-  fit both the supported read size (`int` range) and the actual file before
-  any block storage is allocated.
+  fit the actual file before block data is allocated. Header records are read
+  in chunks; the former total-header `int` limit is removed.
 - **Block records.** A block cannot declare more fluid sites than sites per
   block, a fluid block must have compressed and uncompressed data, and the
   uncompressed length cannot exceed `sitesPerBlock *
@@ -28,7 +28,7 @@ an `Exception` naming the block (and site, where relevant):
   types (it previously relied on `HASSERT`, which only runs in debug
   builds). A block with trailing bytes after its last site is rejected.
 
-Limit: each compressed block must fit the 64 MiB streaming buffer
+Limit: each compressed block must fit the 64 MiB block buffer
 (`MAX_GMY_BUFFER_SIZE`). Larger blocks are rejected with an error; reading
 them would need a change to the buffering strategy.
 
@@ -50,7 +50,10 @@ unknown link cut type instead of writing an incomplete site record.
 count using 64-bit integers (it previously used `float`, which cannot
 distinguish nearby boundaries above about 16.7 million sites). Every rank
 gets at least one non-solid block, and a cumulative count beyond the 64-bit
-range is an error. ParMETIS then refines this split.
+range is an error. ParMETIS refines this split by default; the runtime
+`octree` option uses it directly. Metadata and parsed block storage are sparse,
+and assigned reader ranks distribute cached compressed blocks. See
+[geometry setup](../user/scalability-and-inputs.md) for details.
 
 Because of that rule, a run cannot use more MPI processes than there are
 blocks containing fluid. HemeLB then stops with a message giving both

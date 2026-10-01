@@ -30,7 +30,7 @@ def make_config(path, checkpoint=None, offsets=None, changes=None):
         initial.remove(initial.find("pressure"))
         ET.SubElement(initial, "checkpoint", file=str(checkpoint), offsets=str(offsets))
     properties = ET.Element("properties")
-    ET.SubElement(properties, "checkpoint", file="checkpoint_%d.xtr", period="2")
+    ET.SubElement(root.find("simulation"), "checkpoint", period="2")
     root.append(properties)
     tree.write(path, encoding="unicode", xml_declaration=True)
 
@@ -48,13 +48,13 @@ def run(launcher, executable, ranks, config, output):
 
 def checkpoint_at(output, timestep):
     matches = []
-    for path in (output / "Extracted").glob("checkpoint_*.xtr"):
+    for path in (output / "Checkpoints").glob("*/distributions.xtr"):
         data = path.read_bytes()
-        if struct.unpack_from(">Q", data, 92)[0] == timestep:
+        if struct.unpack_from(">Q", data, 124)[0] == timestep:
             matches.append(path)
     if len(matches) != 1:
         raise AssertionError(f"Expected one checkpoint at timestep {timestep}, got {matches}")
-    expected_name = f"checkpoint_{timestep:03d}.xtr"
+    expected_name = "distributions.xtr"
     if matches[0].name != expected_name:
         raise AssertionError(f"Expected {expected_name}, got {matches[0].name}")
     return matches[0]
@@ -62,13 +62,13 @@ def checkpoint_at(output, timestep):
 
 def saved_sites(path):
     data = path.read_bytes()
-    count = struct.unpack_from(">Q", data, 44)[0]
-    vectors = struct.unpack_from(">I", data, 80)[0]
+    count = struct.unpack_from(">Q", data, 68)[0]
+    vectors = struct.unpack_from(">I", data, 104)[0]
     record_size = 12 + 8 * vectors
-    if len(data) != 100 + count * record_size:
+    if len(data) != 132 + count * record_size:
         raise AssertionError("Unexpected checkpoint record length")
     sites = {}
-    for offset in range(100, len(data), record_size):
+    for offset in range(132, len(data), record_size):
         coordinate = struct.unpack_from(">III", data, offset)
         values = struct.unpack_from(f">{vectors}d", data, offset + 12)
         if coordinate in sites:
@@ -84,7 +84,7 @@ def check_rejects_other_geometry(work, launcher, executable):
     make_config(fresh)
     run(launcher, executable, 1, fresh, saved)
     checkpoint = checkpoint_at(saved, 2)
-    offsets = saved / "Extracted/checkpoint_.off"
+    offsets = saved / "Checkpoints/distributions.off"
     cases = {
         "voxel size": {"simulation/voxel_size": "1.5e-06"},
         "origin": {"simulation/origin": "(-1.0e-05,-1.05e-05,-2.45248049736e-05)"},
@@ -111,7 +111,7 @@ def check_direction(work, launcher, executable, writers, readers):
 
     restart = work / f"{label}-restart.xml"
     source_checkpoint = checkpoint_at(saved, 2)
-    make_config(restart, source_checkpoint, saved / "Extracted/checkpoint_.off")
+    make_config(restart, source_checkpoint, saved / "Checkpoints/distributions.off")
     resumed = work / f"{label}-resumed"
     run(launcher, executable, readers, restart, resumed)
 

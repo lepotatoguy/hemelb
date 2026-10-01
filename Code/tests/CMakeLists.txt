@@ -42,17 +42,21 @@ add_to_resources(resources/four_cube.gmy resources/four_cube.xml resources/four_
   resources/large_cylinder.gmy resources/large_cylinder.xml
 )
 
-if (HEMELB_BUILD_MULTISCALE)
-  add_to_resources(multiscale/mpwide/MPWSettings.cfg)
-endif()
 
-add_test_executable(hemelb-tests main.cc SimulationMasterTests.cc)
+add_test_executable(hemelb-tests main.cc SimulationControllerTests.cc)
 add_test(NAME hemelb-tests COMMAND hemelb-tests)
 
 # Restart a checkpoint on a different number of MPI processes and check the
 # results match; also check mismatched geometries are rejected.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
+  add_test(NAME legacy-compatibility-mpi
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/legacy_compatibility_mpi.py
+            --hemelb $<TARGET_FILE:${HEMELB_EXECUTABLE}> --mpirun ${MPIEXEC_EXECUTABLE})
+  set_tests_properties(legacy-compatibility-mpi PROPERTIES TIMEOUT 120)
+  add_test(NAME geometry-setup-mpi
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/geometry_setup_mpi.py
+            --hemelb $<TARGET_FILE:${HEMELB_EXECUTABLE}> --mpirun ${MPIEXEC_EXECUTABLE})
   add_test(NAME checkpoint-restart-mpi
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/checkpoint_restart_mpi.py
             --hemelb $<TARGET_FILE:${HEMELB_EXECUTABLE}> --mpirun ${MPIEXEC_EXECUTABLE})
@@ -70,10 +74,14 @@ add_to_tests(extraction)
 add_to_tests(geometry)
 add_to_tests(io)
 add_to_tests(lb)
-add_to_tests(multiscale)
 add_to_tests(net)
 add_to_tests(reporting)
 add_to_tests(util)
+
+if (HEMELB_BUILD_MULTISCALE)
+  add_to_resources(multiscale/mpwide/MPWSettings.cfg)
+  add_to_tests(multiscale)
+endif()
 
 if (HEMELB_BUILD_RBC)
   add_to_resources(

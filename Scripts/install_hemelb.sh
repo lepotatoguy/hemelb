@@ -111,18 +111,18 @@ install_macos_deps() {
         fi
     fi
     log "Installing Homebrew packages"
-    brew install cmake open-mpi boost metis ctemplate pkg-config git
+    brew install cmake open-mpi boost metis ctemplate tinyxml2 pkg-config git
 }
 
 install_linux_deps() {
     if ! command -v apt-get >/dev/null 2>&1; then
-        die "Only apt-based distributions are handled automatically. Install a C++20 compiler, CMake >= 3.13, MPI, Boost, TinyXML, ParMETIS, CTemplate and zlib, then rerun with --no-system-deps."
+        die "Only apt-based distributions are handled automatically. Install a C++20 compiler, CMake >= 3.13, MPI, Boost, TinyXML-2, ParMETIS, CTemplate and zlib, then rerun with --no-system-deps."
     fi
     log "Installing apt packages"
     run_root apt-get update
     run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential cmake git curl ca-certificates pkg-config \
-        libopenmpi-dev openmpi-bin libboost-dev libtinyxml-dev \
+        libopenmpi-dev openmpi-bin libboost-dev libtinyxml2-dev \
         libparmetis-dev libmetis-dev libctemplate-dev zlib1g-dev \
         libgl1 libglx0 libopengl0 libxt6
 }

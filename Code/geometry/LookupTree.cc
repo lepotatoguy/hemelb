@@ -129,7 +129,14 @@ namespace hemelb::geometry::octree {
         return !(lhs.mPos == rhs.mPos);
     }
 
-    LookupTree build_block_tree(const Vec16& dimensionsInBlocks, std::vector<site_t> const& fluidSitesPerBlock) {
+    LookupTree build_block_tree(const Vec16& dims, std::vector<site_t> const& counts) {
+        std::map<U64, site_t> sparse;
+        for (U64 i = 0; i < counts.size(); ++i)
+            if (counts[i]) sparse.emplace(i, counts[i]);
+        return build_block_tree(dims, sparse);
+    }
+
+    LookupTree build_block_tree(const Vec16& dimensionsInBlocks, std::map<U64, site_t> const& fluidSitesPerBlock) {
         auto biggest_dim = *std::max_element(dimensionsInBlocks.begin(), dimensionsInBlocks.end());
         // What power of two is greater than or equal to the biggest dimension of the domain?
         U16 N = 1;
@@ -140,19 +147,17 @@ namespace hemelb::geometry::octree {
         }
         LookupTree ans(N);
 
-        // Geometry file format decrees this layout of blocks
-        auto const block_strides = util::Vector3D<std::size_t>(
-                std::size_t(dimensionsInBlocks.y()) * dimensionsInBlocks.z(),
-                dimensionsInBlocks.z(),
-                1
-        );
-
-        // Now iterate over the blocks, IN OCTREE ORDER
-        for (auto block_ijk: IterBounds{dimensionsInBlocks}) {
-            auto block_i = Dot(block_ijk, block_strides);
-            if (auto nsites = fluidSitesPerBlock[block_i]) {
-                // Add to the tree
-                auto oct = ijk_to_oct(block_ijk);
+        std::vector<std::pair<U64, site_t>> leaves;
+        leaves.reserve(fluidSitesPerBlock.size());
+        for (auto [id, count]: fluidSitesPerBlock) {
+            const U64 yz = U64(dimensionsInBlocks.y()) * dimensionsInBlocks.z();
+            Vec16 ijk(id / yz, (id / dimensionsInBlocks.z()) % dimensionsInBlocks.y(), id % dimensionsInBlocks.z());
+            if (count) leaves.emplace_back(ijk_to_oct(ijk), count);
+        }
+        std::sort(leaves.begin(), leaves.end());
+        for (auto [oct_id, nsites]: leaves) {
+            {
+                auto oct = oct_id;
                 // ll = leaf level - start here
                 auto ll = N;
                 ans.levels[ll].node_ids.push_back(oct);

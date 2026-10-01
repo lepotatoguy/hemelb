@@ -26,7 +26,7 @@ ext_modules = [
 
 setup(
     name="hlb",
-    version="0.4.0",
+    version="0.4.1",
     description="HemeLB tools",
     author="Rupert Nash",
     author_email="r.nash@epcc.ed.ac.uk",
@@ -56,6 +56,7 @@ setup(
             "hlb-extracted-to-vtk = hlb.converters.ExtractedPropertyToVtk:main",
             "hlb-gmy-selfconsistent = hlb.parsers.geometry.self_consistency:main",
             "hlb-gmy-countsites = hlb.parsers.geometry.count_sites:main",
+            "hlb-convert-config = hlb.converters.Config:main",
             "hlb-gmy-3to4 = hlb.converters.Gmy3to4:main",
         ],
     },

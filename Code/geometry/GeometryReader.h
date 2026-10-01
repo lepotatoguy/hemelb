@@ -31,7 +31,7 @@ namespace hemelb::geometry
         using BlockLocation = util::Vector3D<site_t>;
 
         GeometryReader(const lb::LatticeInfo&,
-                       reporting::Timers &timings, net::IOCommunicator ioComm);
+                       reporting::Timers &timings, net::IOCommunicator ioComm, bool optimise = true);
         ~GeometryReader();
 
         GmyReadResult LoadAndDecompose(const std::string& dataFilePath);
@@ -39,7 +39,7 @@ namespace hemelb::geometry
     private:
         // Read from the file into a buffer on all processes.
         // This is collective and start and nBytes must be the same on all ranks.
-        std::vector<char> ReadAllProcesses(std::size_t startBytes, unsigned nBytes);
+        std::vector<std::byte> ReadAllProcesses(std::size_t startBytes, unsigned nBytes);
 
         // Read the preamble and create the empty read result.
         GmyReadResult ReadPreamble();
@@ -49,13 +49,9 @@ namespace hemelb::geometry
         void ReadHeader(site_t blockCount, site_t sitesPerBlock);
 
         // map from block GMY index to vect of data
-        using block_cache = std::map<U64, std::vector<char>>;
+        using block_cache = std::map<U64, std::vector<std::byte>>;
 
-        // Load compressed data from the file if the predicate is true for that block's GMY index.
-        template <std::predicate<std::size_t> PredT>
-        block_cache ReadCompressedBlockData(GmyReadResult const& geometry, PredT&& p);
-
-
+        block_cache ReadCompressedBlockData(std::vector<U64> const& wanted);
         // Given a vector of the block OCT ids that we want, add a
         // one-block halo and read those blocks into the
         // GmyReadResult.
@@ -70,10 +66,10 @@ namespace hemelb::geometry
 
         // Parse a compressed block of data into the geometry at the given GMY index
         void DeserialiseBlock(GmyReadResult& geometry,
-                              std::vector<char> const& compressed_data, site_t block_gmy);
+                              std::vector<std::byte> const& compressed_data, site_t block_gmy);
 
         // Decompress the block data
-        std::vector<char> DecompressBlockData(const std::vector<char>& compressed,
+        std::vector<std::byte> DecompressBlockData(const std::vector<std::byte>& compressed,
                                               const unsigned int uncompressedBytes, site_t blockGmy);
 
         // Given a reader for a block's data, parse that into the
@@ -86,8 +82,7 @@ namespace hemelb::geometry
 
         // Use the OptimisedDecomposition class to refine a simple,
         // block-level initial decomposition.
-        void OptimiseDomainDecomposition(GmyReadResult& geometry,
-                                         const std::vector<proc_t>& procForEachBlock);
+        void OptimiseDomainDecomposition(GmyReadResult& geometry);
 
         // Check for self-consistency
         void ValidateGeometry(const GmyReadResult& geometry);
@@ -108,13 +103,8 @@ namespace hemelb::geometry
         //! Info about the connectivity of the lattice.
         const lb::LatticeInfo& latticeInfo;
 
-        // File accessed to read in the geometry data.
-        //
-        // We are going
-        // to read the whole file collectively and sequentially in
-        // chunks. The node leaders will read data either into private
-        // memory and broadcast or into node-shared memory and do a
-        // barrier/fence.
+        // The I/O rank broadcasts header chunks. Assigned readers fetch
+        // active compressed blocks independently and distribute requested data.
         net::MpiFile file;
 
         //! Communicator for all ranks that will need a slice of the geometry
@@ -123,13 +113,16 @@ namespace hemelb::geometry
         //! How many blocks with at least one fluid site
         U64 nFluidBlocks;
         //! The number of fluid sites on each block in the file.
-        std::vector<site_t> fluidSitesOnEachBlock;
-        //! The number of bytes each block in the file takes up while still compressed.
-        std::vector<unsigned int> bytesPerCompressedBlock;
-        //! The number of bytes each block in the file takes up when uncompressed.
-        std::vector<unsigned int> bytesPerUncompressedBlock;
-        //! The process assigned to each block.
-        std::vector<proc_t> principalProcForEachBlock;
+        std::map<U64, site_t> fluidSitesOnEachBlock;
+        struct BlockMetadata {
+            unsigned compressed, uncompressed;
+            std::uint64_t offset;
+            int reader;
+        };
+        std::map<U64, BlockMetadata> blockMetadata;
+        block_cache compressedCache;
+        bool optimise;
+        unsigned headerRecordLength = 12;
         //! The process for fluid-containing blocks in octree order
         std::vector<proc_t> procForBlockOct;
 

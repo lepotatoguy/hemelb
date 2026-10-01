@@ -14,21 +14,21 @@ and 64-bit integers; strings are a length followed by the bytes, padded to a
 multiple of 4).
 
 ## Main header
-The file begins with a main header (length = 60 bytes)
+The file begins with a main header (length = 84 bytes)
 * uint32 - HemeLbMagicNumber
 * uint32 - ExtractionMagicNumber
 * uint32 - Format version number
 * double - Voxel size (metres)
+* double - Time step (seconds)
+* double - Mass scale (kg)
 * double x 3 - Origin x,y,z components (metres)
+* double - Reference pressure (Pa)
 * uint64 - Total number of sites
 * uint32 - Field count
 * uint32 - Length of the field header that follows
   
 HemeLbMagicNumber = 0x686c6221 ("hlb!"), ExtractionMagicNumber =
-0x78747204 ("xtr" + 4). This branch writes version 5. Its Python reader accepts versions 4 and 5;
-the native checkpoint reader expects version 5 with a single double-precision
-`distributions` field and no field offsets. See the
-[checkpoint workflow](../../user/checkpoints.md).
+0x78747204 ("xtr" + 4). The version number is currently 6.
 
 ## Field header
 This header has fieldCount entries and in each one:
@@ -38,6 +38,7 @@ This header has fieldCount entries and in each one:
  * uint32 - number of offset values that follow (valid values are {0,
             1, n_values})
  * type[n_offsets] - the array of offsets, saved as the type indicated above
+ * type - lattice-to-physical scale; zero indicates no scaling
 
 ## Field data type codes
 The data in the main file is saved as one of the following types (see
@@ -59,24 +60,25 @@ Each record consists of:
     voxel size and add the origin to get metres)
   * for each field
     * the number of values specified in the corresponding field
-      header, saved as the type indicated, with any offset being
-      subtracted (scalars being broadcast, vectors being element wise
-      subtracted)
-
-## Physical units
-
-Grid positions are lattice coordinates. Physical position in metres is
-`origin + voxel_size * grid`. This branch writes velocity in m/s and pressure in
-mmHg. Pressure data subtracts the configured reference pressure before writing;
-the Python reader restores that offset from the field header. The format does
-not encode a unit string for each field, so readers also need the writer's
-conventions.
+      header, saved as the type indicated. Decode as `(stored + offset) * scale`,
+      using no scale multiplication when the stored scale is zero. Pressure
+      stores a lattice pressure difference and its field offset is reference
+      pressure divided by the pressure scale.
 
 ## Offset files
 The offset files are a companion to this file - see
 [offset.md](offset.md) for details.
 
 ## Changelog
+
+### Version 6
+
+Adds timestep, mass scale, reference pressure, and per-field scales. Field bodies
+use lattice units. The Python reader accepts versions 4, 5, and 6; older versions
+retain their physical-unit interpretation. Checkpoint loading also accepts all
+three versions, restores distribution offsets, and promotes stored floats to
+double precision. The geometry, lattice vector count, and offset-file layout
+are checked before loading.
 
 ### Version 5
 

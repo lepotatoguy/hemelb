@@ -75,4 +75,17 @@
 		</timer>
 		{{/TIMER}}
 	</timings>
+  <performance>
+    <geometry_block_reads>{{GEOMETRY_BLOCK_READS}}</geometry_block_reads>
+    <geometry_bytes_read>{{GEOMETRY_BYTES_READ}}</geometry_bytes_read>
+    <decomposition>{{DECOMPOSITION}}</decomposition>
+    <completed_updates>{{UPDATES}}</completed_updates>
+    <loop_seconds>{{LOOP_SECONDS}}</loop_seconds>
+    <mlups>{{MLUPS}}</mlups>
+    <mlups_per_rank>{{MLUPS_PER_RANK}}</mlups_per_rank>
+    <load_imbalance>{{LOAD_IMBALANCE}}</load_imbalance>
+    {{#MEMORY_RANK}}
+    <rank_memory rank="{{RANK}}" setup_peak_rss_bytes="{{SETUP_PEAK_RSS_BYTES}}" peak_rss_bytes="{{PEAK_RSS_BYTES}}" edge_sites="{{EDGE_SITES}}" halo_distributions="{{HALO_DISTRIBUTIONS}}" halo_send_bytes="{{HALO_BYTES}}" />
+    {{/MEMORY_RANK}}
+  </performance>
 </report>

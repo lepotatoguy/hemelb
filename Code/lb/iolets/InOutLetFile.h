@@ -40,6 +40,8 @@ namespace hemelb::lb
             pressureFilePath = path;
           }
 
+          void SetPressureScale(double scale) { pressureScale = scale; }
+
           inline LatticeDensity GetDensityMin() const override
           {
             return densityMin;
@@ -59,6 +61,7 @@ namespace hemelb::lb
           LatticeDensity densityMin;
           LatticeDensity densityMax;
           std::filesystem::path pressureFilePath;
+          double pressureScale = 1.0;
           using DataPair = std::pair<LatticeTime, LatticeDensity>;
           std::vector<DataPair> file_data_lat;
       };

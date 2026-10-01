@@ -1,3 +1,23 @@
+# Unreleased scalability and input improvements
+
+Merged upstream/checkpoint. New simulation XML uses version 6 and Pa. Existing
+HemePure version 3 and HemeLB version 5 XML load directly with their legacy mmHg
+units. Checkpoints in extraction versions 4, 5, and 6 load across MPI rank counts.
+Legacy pressure-file units and double-precision output settings survive saved
+restart XML; source inputs remain unchanged.
+Extraction output now uses version 6 with lattice-to-physical conversion metadata.
+Checkpoint output moves to Checkpoints/<step>/ with restart.xml and distributions.xtr.
+Rank-portable restart and geometry validation are retained. TinyXML-2 replaces TinyXML.
+Pressure-file loading handles trailing newlines and unsorted, duplicate times safely.
+
+Sparse geometry setup reads active compressed blocks once across ranks and caches
+them through redistribution. Runtime decomposition selects octree or ParMETIS.
+Reports include MLUPS, load imbalance, halo volume, and per-rank peak RSS.
+`hlb-convert-config` converts XML versions 3 and 5 to version 6; `.gmy+` block
+weights are ignored. Python extraction reads versions 4, 5, and 6. Inlet/outlet
+extraction selectors are supported. Pressure extraction preserves nonzero
+reference pressure. See [the guide](doc/user/scalability-and-inputs.md).
+
 # Changelog
 
 Changes in this fork relative to upstream `hemelb-codes/hemelb` commit

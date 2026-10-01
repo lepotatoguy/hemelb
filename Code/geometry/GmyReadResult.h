@@ -13,7 +13,7 @@
 #include "units.h"
 #include "constants.h"
 #include "geometry/GeometryBlock.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 #include "util/Vector3D.h"
 
 namespace hemelb::geometry
@@ -31,6 +31,16 @@ namespace hemelb::geometry
     /***
      * Model of the information in a geometry file
      */
+    class SparseBlockResults : public std::map<U64, BlockReadResult> {
+    public:
+        using std::map<U64, BlockReadResult>::operator[];
+        BlockReadResult const& operator[](U64 id) const {
+            auto it = find(id);
+            static const BlockReadResult empty;
+            return it == end() ? empty : it->second;
+        }
+    };
+
     class GmyReadResult
     {
     public:
@@ -147,7 +157,7 @@ namespace hemelb::geometry
         site_t sitesPerBlock;
 
       public:
-        std::vector<BlockReadResult> Blocks; //! Array of Block models
+        SparseBlockResults Blocks; //! Array of Block models
         std::unique_ptr<octree::DistributedStore> block_store;
     };
 

@@ -31,7 +31,7 @@ runs:
         apt-get install -y
         g++-13
         libopenmpi-dev
-        libtinyxml-dev
+        libtinyxml2-dev
         libparmetis-dev
         libctemplate-dev
         ${{ inputs.extra_apt }}

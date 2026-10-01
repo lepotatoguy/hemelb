@@ -11,6 +11,7 @@
 #include <compare>
 #include <memory>
 #include <vector>
+#include <map>
 
 #include <boost/container/flat_map.hpp>
 
@@ -251,6 +252,7 @@ namespace hemelb::geometry::octree
     };
 
     LookupTree build_block_tree(const Vec16& dimensionsInBlocks, std::vector<site_t> const& fluidSitesPerBlock);
+    LookupTree build_block_tree(const Vec16& dimensionsInBlocks, std::map<U64, site_t> const& fluidSitesPerBlock);
 
     // Store something (in this case the rank that owns a given site and its local index)
     // distributed across MPI processes.
