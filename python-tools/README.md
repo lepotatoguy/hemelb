@@ -3,6 +3,11 @@
 <!-- file AUTHORS. This software is provided under the terms of the -->
 <!-- license in the file LICENSE. -->
 
-# HemeLB python tools
+# HemeLB Python tools
 
-Please see the doc folder: <../doc/user/python-tools.md>
+Read geometry and extraction files, export field data as text or VTK, and
+check geometry consistency. The `hlb` package includes compiled Cython extensions.
+
+[Installation and commands](../doc/user/python-tools.md),
+[extraction format](../doc/dev/file-formats/extraction.md), and
+[test instructions](../doc/dev/README.md#geometry-and-analysis-tools).

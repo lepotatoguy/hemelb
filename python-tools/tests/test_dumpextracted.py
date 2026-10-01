@@ -106,3 +106,35 @@ def test_command_line_writes_to_stdout_or_file(monkeypatch, tmp_path):
     dump.main([str(source)])
     dump.main([str(source), str(tmp_path / "out.csv")])
     assert calls == [(str(source), None), (str(source), str(tmp_path / "out.csv"))]
+
+
+def _reference_rows(fields, field_spec):
+    # The original one-value-at-a-time writer, kept to check that the faster
+    # column-at-a-time writer produces exactly the same text.
+    import csv
+
+    out = StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    for row in fields:
+        values = []
+        for name, xdrType, memType, length, offset in field_spec:
+            value = row[name]
+            width = length[0] if isinstance(length, tuple) and length else 1
+            if width == 1:
+                values.append(value)
+            else:
+                values.extend(value)
+        writer.writerow(values)
+    return out.getvalue()
+
+
+def test_fast_writer_matches_reference(diffTestDir):
+    from hlb.parsers.extraction import ExtractedProperty
+
+    snap = os.path.join(diffTestDir, "CleanExtracted", "flow_snapshot.xtr")
+    prop = ExtractedProperty(snap)
+    for t in prop.times:
+        fields = prop.GetByTimeStep(t)
+        fast = StringIO()
+        dump_module._write_rows(fields, prop._fieldSpec, fast)
+        assert fast.getvalue() == _reference_rows(fields, prop._fieldSpec)

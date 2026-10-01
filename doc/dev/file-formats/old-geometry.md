@@ -66,7 +66,7 @@ This is a bitwise structure describing several things about a site.
   * The bit is set to one if there is a boundary
   * The directions are ordered as in source:Code/D3Q15.cc (the setuptool links against this code)
 * The next four bits are unused. They _may_ have previously encoded the direction closest to the boundary normal.
-* The next ten bits give an index into either the inlet array or outlet array specified in the [XML Config File](XMLConfigFile/), depending on whether the site is an inlet or outlet.
+* The next ten bits give an index into either the inlet array or outlet array specified in the [XML Config File](../../user/XmlConfiguration.md), depending on whether the site is an inlet or outlet.
   * This puts an upper limit of 1024 on the number of inlets and outlets which may exist.
 * The final bit specifies whether the site is a pressure edge, i.e. any of the directions intersect a wall
 

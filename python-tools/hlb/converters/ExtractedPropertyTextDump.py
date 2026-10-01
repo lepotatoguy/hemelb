@@ -5,8 +5,10 @@
 # license in the file LICENSE.
 import argparse
 import sys
-import csv
 import os
+
+import numpy as np
+
 from ..parsers.extraction import ExtractedProperty
 
 
@@ -34,27 +36,29 @@ def _write_dump(filename, stream):
 
     header = "# " + ", ".join(_columns(propFile._fieldSpec))
     print(header, file=stream)
-    writer = csv.writer(stream, lineterminator="\n")
-
     for t in propFile.times:
         fields = propFile.GetByTimeStep(t)
         print("# Timestep {:d}".format(t), file=stream)
-
-        for row in fields:
-            values = []
-            for name, xdrType, memType, length, offset in propFile._fieldSpec:
-                try:
-                    value = row[name]
-                except (TypeError, IndexError):
-                    value = getattr(row, name)
-                width = length[0] if isinstance(length, tuple) and length else 1
-                if width == 1:
-                    values.append(value)
-                else:
-                    values.extend(value)
-            writer.writerow(values)
-
+        _write_rows(fields, propFile._fieldSpec, stream)
         print("", file=stream)
+
+
+def _write_rows(fields, field_spec, stream):
+    """Write one comma-separated line per site.
+
+    Each column is converted to text with NumPy in one step instead of one
+    value at a time; astype(str) gives the same text as str() on each value,
+    so the output is unchanged (tests/test_dumpextracted.py checks this).
+    """
+    columns = []
+    for name, xdrType, memType, length, offset in field_spec:
+        values = np.asarray(fields[name])
+        values = values.reshape(values.shape[0], -1)
+        columns.extend(values[:, i].astype(str) for i in range(values.shape[1]))
+    if not columns or len(columns[0]) == 0:
+        return
+    stream.write("\n".join(map(",".join, zip(*columns))))
+    stream.write("\n")
 
 
 def unpack(filename, stream=sys.stdout, out_csv=None):

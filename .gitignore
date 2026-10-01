@@ -7,12 +7,10 @@ build*/
 Code/build/*
 Code/build_clang/*
 install/*
-results/*
 dependencies/build/*
 deploy/.jobscripts
 deploy/machines_user.json
 deploy/machines_user.yml
-personal/*
 CMakeFiles/*
 CMakeCache.txt
 Code/client/displayClient
@@ -40,3 +38,12 @@ Tools/GenerateStl
 _skbuild
 dist
 .vagrant
+
+hemelb-experiments/*
+results/*
+personal/*
+hemelb-scripts/*
+papers/*
+outputs/*
+
+/research/

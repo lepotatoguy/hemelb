@@ -1,64 +1,91 @@
-
 # This file is part of HemeLB and is Copyright (C)
 # the HemeLB team and/or their institutions, as detailed in the
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-Instructions to configure, build, and install HemeLB.
+Installing HemeLB
+=================
 
-HemeLB uses CMake (http://cmake.org/cmake/help/cmake-2-8-docs.html)
-CMake works best with 'out of source' builds, these are recommended for HemeLB.
-To build and install from any CMake file (CMakeLists.txt) do:
-     > mkdir build
-     > cd build
-     > cmake <path to directory containing CMakeLists.txt> <options>
-     > make
-     > make install (optional, will copy executables into path.)
-Common options include -DCMAKE_INSTALL_PREFIX to set the path to install to, if you do not have root.
-CMake options can be configured with a GUI on many systems by using ccmake instead of cmake above.
-     * When the ccmake gui appears:
-     * press c to generate options, press e to move on from any messages displayed by cmake. 
-     * edit any options displayed, 
-     * press c to see if there are any new options resulting from the previous round of choices
-     * repeat until you are happy with the options
-     * press g to generate the build
-     * move on to the make step as usual.
+This file describes fix/hemelb-improvements. Use the guides in the branch
+being built: solver XML versions and pressure units differ between branches.
+The complete installation guide is doc/user/install.md.
 
-HemeLB provides three entry points to the CMake system. 
-     * When building for use, the "Master build file" is easiest to use
-     * When building for development, the individual "Code" and "dependencies" entry points provide the most control.
-# Master build file
-     * Resides at the top level of the HemeLB checkout
-     * Optionally builds all HemeLB components
-          (NOTE - only builds hemelb and unittests)
-     * Will download and build HemeLB dependencies as necessary
-     * (Invokes Code and Dependencies builds.)
-# Code build file
-     * Resides in Code/ directory
-     * Assumes all HemeLB dependencies are installed and accessible
-     * Builds HemeLB and optionally the unit-tests
-# Dependencies build file
-     * Resides in dependencies/ directory
-     * Builds dependencies for HemeLB and places them where the Code/ build will find them
-     * Attempts to download from the internet
-     * Will look for pre-downloaded tarballs of dependencies in dependencies/distributions (or choose where with ccmake)
+Quick install: macOS or Debian/Ubuntu Linux
+==========================================
 
---- Useful CMAKE options. --
+    git clone --branch fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
+    cd hemelb
+    Scripts/install_hemelb.sh
 
-These can be set with -D<OPTION>=<VALUE> or using CCMAKE
-Global options:
-	CMAKE_BUILD_TYPE: Can be None, Debug or Release. Release compiles with optimisation. Debug compiles with -g.
-	TIXML_USE_STL: Should TinyXML use the C++ Standard template library?
-Options for Code, or master build:
-	CMAKE_INSTALL_PREFIX: Location where make install will install to.
-	(CPPUNIT;PARMETIS;TINYXML)-(LIBRARY;INCLUDE): Locations where dependent libraries will be obtained
-	USE_HEMELB_DEBUGGER: When HemeLB runs, should automatically start and attach to a system-appropriate debugger.
-	USE_MULTIMACHINE: Use support for multi-level parallelism.
-	HEMELB_BUILD_UNITTESTS: Should the unit-tests be built?
-	HEMELB_LOG_LEVEL: Log level, can be debug, info, or warning.
-	
-Options for dependencies, or master build:
-	CPPUNIT_TARBALL, TINYXML_TARBALL, PARMETIS_TARBALL: URL to download or path to find dependency tarchive.
-	(If cmake detects a local install of these, the TARBALL options will not be enabled.)
-	
- 
+Defaults:
+  Solver prefix: ~/.local/hemelb
+  Tool environment: conda environment gmy-tool
+  System packages: installed through Homebrew or apt unless skipped
+  Tests: hemelb-tests is built and run
+
+Useful options:
+  --prefix DIR        Choose the solver installation prefix
+  --env-name NAME     Choose a fresh conda environment name
+  --env-prefix DIR    Choose the conda environment by path instead
+  --jobs N            Control parallel build jobs
+  --no-system-deps    Use system packages already installed
+  --no-gmy-tool       Install only the solver, skipping both Python tools
+  --no-tests          Skip executing unit tests; they are still built
+  --no-gui            Skip macOS GUI launcher setup
+
+After installation:
+
+    export PATH="$HOME/.local/hemelb/bin:$PATH"
+    conda activate gmy-tool
+
+The first-run guide is doc/user/getting-started.md. It uses the bundled
+cylinder geometry and doc/examples/first-run.xml, including field output
+and checkpoints. A full geometry-tool installation is not needed to run
+prepared XML/GMY inputs.
+
+Manual builds
+=============
+
+    cmake -S . -B build -G "Unix Makefiles" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX="$HOME/.local/hemelb" \
+          -DHEMELB_SUBPROJECT_MAKE_JOBS=4
+    cmake --build build -j 4
+
+The top-level super build finds or builds dependencies, then builds and
+installs the solver. It invokes make for the solver subproject. Use Code/
+as the source for a code-only build with existing dependencies; use
+dependencies/ for dependency preparation. See doc/user/main-application.md
+and doc/user/CMakeOptions.md for layouts, library hints, and model options.
+
+Requirements and version sources
+================================
+
+The solver requires a C++20 compiler, CMake >= 3.13, MPI >= 3.0, Boost
+headers >= 1.77, ParMETIS 4.x, METIS, TinyXML 2.x, CTemplate, and zlib.
+TinyXML2 is a different library and is not used by this branch. Tests use
+Catch2 2.x. RBC builds additionally need HDF5 and VTK; multiscale builds
+need MPWide.
+
+The fallback versions are specified by dependency build files:
+  dependencies/<Name>/build.cmake
+  Boost 1.77.0; ParMETIS 4.0.2; TinyXML 2.6.2; CTemplate 2.4;
+  zlib 1.2.6; Catch2 2.13.9; HDF5 1.8.15; VTK 9.1.0; MPWide 1.1.
+
+The geometry tool and Python tools have their own dependency environment:
+  geometry-tool/conda-environment.yml: main package pins
+  geometry-tool/conda-lock/osx-64.txt: exact Intel macOS package URLs
+  geometry-tool/conda-lock/linux-64.txt: exact Linux x86_64 package URLs
+  geometry-tool/pyproject.toml: pip build-isolation pins
+
+The install script uses the platform lock and installs both packages with
+--no-deps --no-build-isolation. The geometry tool environment supports
+Python 3.8 through 3.11; the Python-tools CI matrix covers 3.8 through 3.13.
+On Apple Silicon the solver is native, while the geometry-tool environment
+uses osx-64 under Rosetta. Keep those build environments separate.
+
+System compiler, MPI, CMake, and package-manager versions are not pinned
+by this repository. CI configuration lives in .github/workflows/; its
+matrix describes intended coverage, not the outcome of a particular run.
+Recorded earlier validation is in CHANGELOG.md. See doc/dev/README.md for
+local tests and doc/user/troubleshooting.md for common failures.
