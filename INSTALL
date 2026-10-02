@@ -17,11 +17,11 @@ This builds HemeLB into ~/.local/hemelb (programs hemelb, hemelb-confcheck
 and hemelb-tests) and installs the geometry tool (hlb-gmy-gui, hlb-gmy-cli)
 and the Python tools into a conda environment called gmy-tool. Run
 "Scripts/install_hemelb.sh --help" for the options. Full guide:
-doc/user/install.md. First run: doc/user/getting-started.md.
+doc/user/install.md. Quick start: doc/user/getting-started.md.
 
 
-Building by hand
-----------------
+Installing HemeLB manually
+=========================
 
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=$HOME/.local/hemelb

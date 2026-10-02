@@ -1,4 +1,4 @@
-# Complete first-run example
+# Complete quick-start example
 
 The files in this folder describe one cylinder case, from surface preparation
 to solver output. See the [walkthrough](../doc/user/getting-started.md) for copying

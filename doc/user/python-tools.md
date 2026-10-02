@@ -27,7 +27,7 @@ python -m venv "$HOME/.venvs/hemelb-tools"
 python -m pip install ./python-tools
 ```
 
-Use the [locked conda environment](geometry-tool.md#installing-by-hand) when
+Use the [locked conda environment](geometry-tool.md#installing-the-geometry-tool-manually) when
 installing both tools. Run converters outside the source-package directories
 so Python uses the installed compiled extensions.
 

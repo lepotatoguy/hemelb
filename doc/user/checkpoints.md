@@ -32,14 +32,14 @@ saved model state and can break relative paths.
 
 ## Resume the example
 
-After completing the [first run](getting-started.md), launch its generated
+After completing the [quick start](getting-started.md), launch its generated
 restart configuration from the first-run folder:
 
 ```sh
 mpirun -n 4 hemelb -in results/Checkpoints/100/restart.xml -out resumed
 ```
 
-The first run used two ranks; this run resumes on four. A new output directory
+The original run used two ranks; this run resumes on four. A new output directory
 is required. The original final timestep is still 200, so the restarted run
 continues from 100 to 200. To continue longer, change `<simulation><steps>`
 in the restart XML to the desired total timestep. It is the final timestep,

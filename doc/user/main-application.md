@@ -27,7 +27,9 @@ modules. Run commands from the repository root unless stated otherwise.
 platforms. The geometry tool has a separate Python/VTK environment; see its
 [installation guide](geometry-tool.md#install).
 
-## Choose a build layout
+## Installing HemeLB manually
+
+Choose a build layout for your installation:
 
 | Source folder | Purpose | Installation |
 | :--- | :--- | :--- |
@@ -111,7 +113,7 @@ to the XML; the `-out` argument is relative to the shell's current directory.
 The run writes `report.txt` and `report.xml`. Extracted fields appear under `Extracted/` when requested in `<properties>`.
 `<simulation><checkpoint period="..." /></simulation>` creates checkpoints
 and saved restart XML under `Checkpoints/<step>/`. The version 6 reader returns
-pressure in Pa, including for runs started from legacy XML. Follow [getting started](getting-started.md) for a configuration
+pressure in Pa, including for runs started from legacy XML. Follow [quick start](getting-started.md) for a configuration
 with output enabled and [checkpoints](checkpoints.md) for restart instructions.
 
 Ranks cannot outnumber blocks containing fluid; the solver reports the limit

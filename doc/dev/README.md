@@ -98,7 +98,7 @@ requires that checkout; missing fixtures are not a successful full test run.
 | Geometry generation, solver, and analytical pipe profile | From the repository root: `HEMELB_EXECUTABLE=/path/to/hemelb python Code/tests/pythontests/poiseuilleflowtest.py -v` in `gmy-tool` |
 | Stored fluid outputs and checkpoints | External `hemelb-tests` repository; commands and environment in [main-app.yml](../../.github/workflows/main-app.yml) |
 | Full installation and short solver run | [install-script.yml](../../.github/workflows/install-script.yml) |
-| Documentation example | [first-run walkthrough](../user/getting-started.md) and [restart walkthrough](../user/checkpoints.md) |
+| Documentation example | [quick-start walkthrough](../user/getting-started.md) and [restart walkthrough](../user/checkpoints.md) |
 
 ## CI coverage and triggers
 

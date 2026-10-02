@@ -13,8 +13,8 @@ and TinyXML2. XML3/5 and extraction/checkpoint4/5 also load directly. For a repe
 | `hlb-gmy-cli` or analysis command not found | Activate the conda environment chosen at installation |
 | Conda environment already exists | Choose another `--env-name`; use the existing environment only if its packages match the required setup |
 | Missing `HlbGmyTool.Model.Generation`, `hlb.utils.xdr`, or geometry `BaseSite` | Install the packages with their compiled extensions and run from outside the source-package directories |
-| VMTK cannot be installed through pip | Use the locked conda environment in the [geometry guide](geometry-tool.md#installing-by-hand) |
-| macOS GUI reports no screen access | Use the framework-Python launcher setup in the [geometry guide](geometry-tool.md#installing-by-hand) |
+| VMTK cannot be installed through pip | Use the locked conda environment in the [geometry guide](geometry-tool.md#installing-the-geometry-tool-manually) |
+| macOS GUI reports no screen access | Use the framework-Python launcher setup in the [geometry guide](geometry-tool.md#installing-the-geometry-tool-manually) |
 | Architecture/linker mismatch on Apple Silicon | Keep the native solver build separate from the Intel geometry-tool environment; check which compiler, Python, and libraries are active |
 
 `command -v hemelb`, `command -v mpirun`, and `python -m pip --version` identify

@@ -24,7 +24,7 @@ conda activate gmy-tool
 hlb-gmy-cli --help
 ```
 
-### Installing by hand
+### Installing the geometry tool manually
 
 The tool needs VMTK 1.5, which is easiest to get from conda-forge. VMTK 1.5
 is only published for Linux (x86_64) and Intel macOS with Python 3.8 to
