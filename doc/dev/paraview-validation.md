@@ -30,6 +30,4 @@ range from another case.
 
 This check covers the bundled fluid example and its two saved frames. Other
 geometries, collision models, RBC output, and larger exports were not tested
-in this GUI check. ParaView 6.1.1 could not be validated on this Mac: dialog
-interactions crashed in its Cocoa UI code. The successful GUI result above
-applies to ParaView 5.13.3.
+in this GUI check.

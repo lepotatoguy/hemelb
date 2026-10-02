@@ -143,7 +143,7 @@ Run the install command from the repository root with the tools environment
 active. The bundled example passed simulation, export, coordinate and field
 checks, and pressure/velocity rendering with timestep changes in the ParaView
 5.13.3 GUI on macOS 27.0. See the [validation record](../dev/paraview-validation.md)
-for the tested revisions, scope, and the ParaView 6.1.1 UI limitation.
+for the tested revisions and scope.
 
 ## Geometry commands
 
