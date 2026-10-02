@@ -19,6 +19,8 @@ with the branch under test.
 ## Implementation references
 
 - [CPU verification commands and model restrictions](cpu-verification.md)
+- [CPU profiling, optimization and measured timings](cpu-performance.md)
+- [Branching-vessel and collision-model CPU benchmarks](representative-cpu-benchmarks.md)
 - [CPU comparison and validation record](comparison-and-roadmap.md)
 - [Geometry reading, validation, and decomposition](geometry-reading.md)
 - [Checkpoint loading across rank counts](checkpoint-restart.md)

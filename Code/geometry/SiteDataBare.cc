@@ -126,24 +126,6 @@ namespace hemelb::geometry
       return 0u;
     }
 
-    bool SiteData::HasWall(Direction direction) const
-    {
-      // If at the zero direction then always false, so set mask to all zeros.
-      const unsigned mask = direction ?
-	1U << (direction - 1U) :
-	0U;
-      return (wallIntersection & mask) != 0;
-    }
-
-    bool SiteData::HasIolet(Direction direction) const
-    {
-      // If at the zero direction then always false, so set mask to all zeros.
-      unsigned mask = direction ?
-	1U << (direction - 1U) :
-	0U;
-      return (ioletIntersection & mask) != 0;
-    }
-
     uint32_t SiteData::GetIoletIntersectionData() const
     {
       return ioletIntersection;

@@ -48,6 +48,10 @@
 
 ### Changed
 
+- Scalar density/momentum reductions keep partial sums local; wall and iolet
+  link checks are inline. Both reduce work in the CPU collision/streaming path
+  while retaining existing precision, input handling and checkpoint formats.
+  [Measured timings and limitations](doc/dev/cpu-performance.md) are recorded.
 - Integrated the upstream checkpoint implementation. New solver and geometry
   configurations use XML6 and Pa; extraction output uses version 6 with
   timestep duration, reference pressure, and lattice-to-physical conversion
@@ -70,11 +74,83 @@
 - HemePure attribution is retained in `COPYING.HemePure` and installed with
   the solver.
 
+### CPU comparison scores
+
+The 2026-10-02 [branching-vessel and collision-model matrix](doc/dev/representative-cpu-benchmarks.md)
+compares the branch with MRT repair `fba2d6f9` against HemePure `0bf67b16`.
+Both use scalar D3Q19, BFL/Nash, NEUTRAL costs and `-O3 -DNDEBUG` on Apple M5.
+Three alternating paired repeats compare equal fluid-worker counts, with
+600/300/60 updates on 94323/197431/2010048-site branching fixtures. The ratio
+is HemePure median elapsed divided by branch median elapsed, truncated to
+three decimals; elapsed includes launch, setup, monitoring and extraction.
+Native decomposition and reader scheduling differ as documented in the record.
+
+| Geometry | Collision model | 1 fluid worker | 2 fluid workers | 4 fluid workers |
+| :--- | :--- | :--- | :--- | :--- |
+| Six-branch | LBGK | 2.211× | 1.578× | 1.682× |
+| Six-branch | TRT | 2.117× | 1.571× | 1.702× |
+| Six-branch | MRT | 1.367× | 0.965× | 1.020× |
+| Bifurcation, 197431 sites | LBGK | 1.500× | 1.456× | 1.596× |
+| Bifurcation, 197431 sites | TRT | 1.943× | 1.529× | 1.559× |
+| Bifurcation, 197431 sites | MRT | 1.199× | 1.000× | 0.996× |
+| Bifurcation, 2010048 sites | LBGK | 1.380× | 1.236× | 1.311× |
+| Bifurcation, 2010048 sites | TRT | 1.198× | 1.205× | 1.327× |
+| Bifurcation, 2010048 sites | MRT | 1.211× | 0.917× | 0.963× |
+
+LBGK/TRT were faster in all tested equal-worker configurations. MRT had four
+slower multi-worker medians, so there is no universal runtime advantage.
+Separate LBGK memory samples recorded lower maximum per-rank lifetime peak
+RSS for HemePure in all nine configurations. The record includes exact times,
+equal-allocation scores, numerical agreement and input-reproduction commands.
+RBC is excluded.
+
+The earlier small-cylinder scores below used different assertion settings:
+
+Measured on 2026-10-02: optimized branch commit `bab60b0f` versus HemePure
+CPU commit `0bf67b16b23b41a06507810337a445f9916d62bf`. Apple M5, macOS 27.0,
+AppleClang 21.0.0, Open MPI 5.0.9, Release `-O3`, scalar
+D3Q19/LBGK/BFL/Nash pressure, NEUTRAL costs and ParMETIS disabled. The branch
+used `-DNDEBUG`; HemePure retained assertions in this historical series. The cylinder
+has 2400 fluid sites and runs 3000 updates with one matched field frame.
+Each score is the median of three alternating paired runs; elapsed time
+includes MPI launch, setup, monitoring and output. No builds or tests ran
+concurrently.
+
+Speedup is HemePure median elapsed time divided by branch median elapsed time,
+truncated to three decimal places. HemePure reserves one rank when multiple
+ranks are allocated, so equal fluid-worker counts are shown first:
+
+| Fluid workers | HemePure allocated ranks | Branch allocated ranks | HemePure elapsed (s) | Branch elapsed (s) | Speedup |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | 2 | 1 | 1.6932546669999997 | 0.9896887909999998 | 1.710× |
+| 2 | 3 | 2 | 1.1530365829999987 | 0.7254317500000003 | 1.589× |
+| 4 | 5 | 4 | 1.2137617079999998 | 0.6344771250000001 | 1.913× |
+
+Equal allocated MPI rank counts:
+
+| Allocated ranks | HemePure fluid workers | Branch fluid workers | HemePure elapsed (s) | Branch elapsed (s) | Speedup |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | 1 | 1 | 1.82107325 | 1.0320087920000005 | 1.764× |
+| 2 | 1 | 2 | 1.8430617090000005 | 0.7372506249999997 | 2.499× |
+| 4 | 3 | 4 | 1.0589593750000006 | 0.6180433329999993 | 1.713× |
+
+All 18 paired pressure/velocity comparisons passed the prescribed combined
+absolute/relative tolerances: pressure `5e-5 Pa`, velocity `1e-8 m/s`, relative
+`1e-5`. Maximum differences were `4.487413297837861e-06 Pa` and
+`2.60770320892334e-08 m/s`. These scores apply to this small cylinder and build;
+they do not establish cluster scaling or a universal speed advantage.
+
+See the [comparison record](doc/dev/comparison-and-roadmap.md#current-optimized-branch-vs-hemepure)
+for executable hashes and the earlier baseline results.
+
 ### Compatibility
 
 - Existing HemePure XML3 and HemeLB XML5 configurations load directly,
   preserving legacy pressure units, pressure-file values, and iolet
   coordinates. Conversion is optional and source files are unchanged.
+- Legacy TRT/MRT `relaxation_parameter` values do not override the branch
+  kernels' native parameter rules. The [benchmark record](doc/dev/representative-cpu-benchmarks.md)
+  documents the matched rates and the remaining legacy-parameter parity gap.
 - Fluid checkpoints in extraction versions 4, 5, and 6 can restart with a
   different MPI rank count. Legacy float distributions are promoted to
   double and stored offsets are restored. Geometry and lattice metadata
@@ -84,6 +160,9 @@
   and double-precision output settings.
 
 ### Fixed
+
+- MRT equilibrium-only reconstruction uses the current distribution-array and
+  moment-projection interfaces, allowing MRT boundary paths to compile.
 
 - XML scalar and vector readers accept decimal and C99 hexadecimal floats
   consistently with GNU and Clang standard libraries. Malformed and

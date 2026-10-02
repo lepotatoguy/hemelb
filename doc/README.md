@@ -25,6 +25,8 @@ Use the solver and Python tools from this branch together.
 | Couple to an external flow/pressure program | [Coupling](user/coupling.md) |
 | Seed and emit passive particles | [Tracers](user/tracers.md) |
 | Select output regions, fields, precision, and time windows | [Field extraction](user/extraction.md) |
+| Profile and tune CPU execution | [CPU performance](dev/cpu-performance.md) |
+| Compare branching vessels and collision models | [CPU benchmarks](dev/representative-cpu-benchmarks.md) |
 | Reproduce CPU model and compatibility checks | [CPU verification](dev/cpu-verification.md) |
 | Compare CPU capabilities and measured results | [Comparison and roadmap](dev/comparison-and-roadmap.md) |
 | Use a per-site velocity profile | [Non-cylindrical velocity inlets](user/non-cylindrical-velocity-inlets.md) |

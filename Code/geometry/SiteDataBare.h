@@ -43,8 +43,18 @@ namespace hemelb::geometry
           return ioletId;
         }
 
-        bool HasWall(Direction direction) const;
-        bool HasIolet(Direction direction) const;
+        bool HasWall(Direction direction) const
+        {
+          // The rest direction never intersects a boundary.
+          const unsigned mask = direction ? 1U << (direction - 1U) : 0U;
+          return (wallIntersection & mask) != 0;
+        }
+
+        bool HasIolet(Direction direction) const
+        {
+          const unsigned mask = direction ? 1U << (direction - 1U) : 0U;
+          return (ioletIntersection & mask) != 0;
+        }
 
         /**
          * These functions return internal representations and should only be used for debugging.

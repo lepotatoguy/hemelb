@@ -207,13 +207,18 @@ namespace hemelb::lb
         inline static void CalculateDensityAndMomentum(const_span f,
                                                        distribn_t &density,
                                                        LatticeMomentum& momentum) {
-            density = 0.0;
-            momentum = {0.0, 0.0, 0.0};
+            // Accumulate locally and write outputs after all distribution loads.
+            distribn_t rho = 0.0, mx = 0.0, my = 0.0, mz = 0.0;
             for (Direction i = 0; i < NUMVECTORS; ++i)
             {
-              density += f[i];
-              momentum += VECTORS[i] * f[i];
+              const distribn_t value = f[i];
+              rho += value;
+              mx += CX[i] * value;
+              my += CY[i] * value;
+              mz += CZ[i] * value;
             }
+            density = rho;
+            momentum = {mx, my, mz};
         }
 
 #endif

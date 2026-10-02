@@ -50,6 +50,7 @@ contains the matching STL, geometry-tool profile, GMY, and XML configuration.
 | Restart from saved fluid distributions | [Checkpoint workflow](doc/user/checkpoints.md) |
 | Read results in Python or export them for ParaView | [Python tools](doc/user/python-tools.md) |
 | Tune geometry loading or use existing inputs | [Scalability and compatibility](doc/user/scalability-and-inputs.md) |
+| Profile and tune CPU execution | [CPU performance](doc/dev/cpu-performance.md) |
 | Select CPU boundaries and collision models | [CPU models](doc/user/cpu-models.md) |
 | Exchange flow and pressure with a peer | [Coupling](doc/user/coupling.md) |
 | Track passive particles | [Tracers](doc/user/tracers.md) |

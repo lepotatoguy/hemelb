@@ -98,10 +98,14 @@ compare both equal allocations and equal fluid-worker counts.
 The comparison document records measured local CPU runs, a Yang pipe check at
 two resolutions, and a paired sponge-pulse diagnostic. Finite-state and restart
 regressions alone do not establish physical accuracy, an outlet reflection
-coefficient, or a stability envelope for a new geometry. Native AVX execution,
-cluster-scale performance, production peer coupling, active colloids, and RBC
-validation for the new features remain unverified. Retain the original inputs
-and raw results when adding a verification record.
+coefficient, or a stability envelope for a new geometry. The baseline commit
+`b746135b` passed its RBC build/parallel regression jobs and native AVX2
+arithmetic check in [GitHub run 36966075537](https://github.com/lepotatoguy/hemelb/actions/runs/36966075537);
+AVX512 execution was skipped. Subsequent local CPU optimization checks and
+measurements are recorded in [CPU performance](cpu-performance.md). Full-solver
+SIMD speed, cluster-scale performance, production peer coupling, active colloids,
+and RBC physical validation with the new fluid features remain unverified.
+Retain the original inputs and raw results when adding a verification record.
 
 ## Documentation workflow checked on 2026-10-01
 

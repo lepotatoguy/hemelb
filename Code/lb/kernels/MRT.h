@@ -74,15 +74,15 @@ namespace hemelb::lb
         {
             LatticeType::CalculateFeq(hydroVars.density,
                                                hydroVars.momentum,
-                                               hydroVars.f_eq.f);
+                                               hydroVars.f_eq);
 
             for (unsigned int ii = 0; ii < NUMVECTORS; ++ii)
             {
-              hydroVars.f_neq.f[ii] = hydroVars.f[ii] - hydroVars.f_eq.f[ii];
+              hydroVars.f_neq[ii] = hydroVars.f[ii] - hydroVars.f_eq[ii];
             }
 
             /** @todo #222 consider computing m_neq directly in the moment space. See d'Humieres 2002. */
-            MomentType::ProjectVelsIntoMomentSpace(hydroVars.f_neq.f, hydroVars.m_neq);
+            ProjectVelsIntoMomentSpace(hydroVars.f_neq, hydroVars.m_neq);
           }
 
         void Collide(const LbmParameters* const lbmParams, VarsType& hydroVars)

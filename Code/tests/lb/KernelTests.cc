@@ -349,9 +349,18 @@ namespace hemelb::tests
                                                            lbmParams.GetOmega(),
                                                            expectedPostCollision0);
 
+            // Boundary reconstruction supplies density and momentum directly.
+            HYDRO equilibriumOnly(f_original);
+            equilibriumOnly.density = expectedDensity0;
+            equilibriumOnly.momentum = expectedMomentum0;
+            mrtLbgkEquivalentKernel.CalculateFeq(equilibriumOnly, 0);
+            mrtLbgkEquivalentKernel.Collide(&lbmParams, equilibriumOnly);
+
             // Compare.
             for (unsigned int ii = 0; ii < NV; ++ii) {
                 REQUIRE(Approx(expectedPostCollision0[ii]).margin(allowedError) == hydroVars0.GetFPostCollision()[ii]);
+                REQUIRE(Approx(expectedFEq0[ii]).margin(allowedError) == equilibriumOnly.GetFEq()[ii]);
+                REQUIRE(Approx(expectedPostCollision0[ii]).margin(allowedError) == equilibriumOnly.GetFPostCollision()[ii]);
             }
         }
     };
@@ -370,4 +379,3 @@ namespace hemelb::tests
     }
 
 }
-
