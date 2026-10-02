@@ -6,6 +6,7 @@
 from __future__ import absolute_import
 import math
 import wx
+from wx.lib.scrolledpanel import ScrolledPanel
 
 from .Layout import H, V, StretchSpacer, RectSpacer
 from .VectorCtrl import VectorCtrl, VectorCtrlMapper
@@ -31,11 +32,11 @@ from ..Bindings.Bindings import WxActionBinding
 from ..Model.Profile import Profile
 
 
-class ToolPanel(wx.Panel):
+class ToolPanel(ScrolledPanel):
     """Tools Panel for the LHS of the window."""
 
     def __init__(self, controller, *args, **kwargs):
-        wx.Panel.__init__(self, *args, **kwargs)
+        ScrolledPanel.__init__(self, *args, **kwargs)
         self.controller = controller
 
         self.controlPanel = ControlPanel(controller, self)
@@ -63,7 +64,27 @@ class ToolPanel(wx.Panel):
         )
         sizer = layout.create()
         self.SetSizer(sizer)
+        self.SetupScrolling()
         return
+
+    def ScrollChildIntoView(self, child):
+        # The editor controls are nested inside panels, so their positions
+        # must be measured relative to this scrolling viewport.
+        position = self.ScreenToClient(child.GetScreenPosition())
+        size = child.GetSize()
+        client = self.GetClientSize()
+        start = list(self.GetViewStart())
+        for axis, rate in enumerate(self.GetScrollPixelsPerUnit()):
+            if rate <= 0:
+                continue
+            if position[axis] < 0:
+                start[axis] += math.floor(position[axis] / rate)
+            elif position[axis] + size[axis] > client[axis]:
+                distance = position[axis] + min(size[axis], client[axis]) - client[axis]
+                start[axis] += math.ceil(distance / rate)
+            start[axis] = max(0, start[axis])
+        if tuple(start) != tuple(self.GetViewStart()):
+            self.Scroll(*start)
 
     pass
 
@@ -271,8 +292,13 @@ class IoletsDetailPanel(wx.Panel):
             VectorCtrlMapper(self.normalVector, "Value", wx.EVT_TEXT),
         )
 
-        pressureLabel = wx.StaticText(self, label="Pressure / mmHg")
+        pressureLabel = wx.StaticText(self, label="Pressure / mmHg; phase / rad")
         self.pressureVector = VectorCtrl(self)
+        for field, hint in zip(
+            (self.pressureVector.x, self.pressureVector.y, self.pressureVector.z),
+            ("Mean pressure / mmHg", "Amplitude / mmHg", "Phase / rad"),
+        ):
+            field.SetToolTip(hint)
         controller.BindValue(
             "Iolets.Selection.Pressure",
             VectorCtrlMapper(self.pressureVector, "Value", wx.EVT_TEXT),

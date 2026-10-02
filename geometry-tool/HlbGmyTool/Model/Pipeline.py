@@ -69,7 +69,12 @@ class Pipeline(Observable):
         if hasattr(self, "Interactor"):
             render_window = self.Interactor.GetRenderWindow()
             if render_window is not None:
-                render_window.Render()
+                # Repaint wx after the current edit and widget updates finish.
+                # Its paint handler also waits for the native window handle.
+                if hasattr(self.Interactor, "Refresh"):
+                    self.Interactor.Refresh(False)
+                else:
+                    self.Interactor.Render()
         return
 
     def SetViewX(self):
@@ -78,6 +83,8 @@ class Pipeline(Observable):
         dist = cam.GetDistance()
         cam.SetPosition(focus[0] + dist, focus[1], focus[2])
         cam.SetViewUp(0, 0, 1)
+        self.Renderer.ResetCameraClippingRange()
+        self.Render()
         return
 
     def SetViewY(self):
@@ -86,6 +93,8 @@ class Pipeline(Observable):
         dist = cam.GetDistance()
         cam.SetPosition(focus[0], focus[1] + dist, focus[2])
         cam.SetViewUp(0, 0, 1)
+        self.Renderer.ResetCameraClippingRange()
+        self.Render()
         return
 
     def SetViewZ(self):
@@ -94,6 +103,8 @@ class Pipeline(Observable):
         dist = cam.GetDistance()
         cam.SetPosition(focus[0], focus[1], focus[2] + dist)
         cam.SetViewUp(1, 0, 0)
+        self.Renderer.ResetCameraClippingRange()
+        self.Render()
         return
 
     def SetInteractor(self, iact):
@@ -210,6 +221,7 @@ class Pipeline(Observable):
                 self.Renderer.RemoveActor(item.actor)
                 pass
             pass
+        self.Render()
         return
 
     pass

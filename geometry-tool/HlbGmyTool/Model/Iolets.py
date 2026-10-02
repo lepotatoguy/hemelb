@@ -39,6 +39,7 @@ class Iolet(Observable, metaclass=AutoReg):
         "Normal": Vector(0.0, 0.0, 1.0),
         "Radius": 0.5,
     }
+
     # TODO: Move the representation of the plane (a vtkPlaneSource)
     # into this class from PlacedIolet. It should have the side
     # effect of simplifying the bindings.
@@ -135,7 +136,7 @@ class SinusoidalPressureIolet(Iolet):
         amp = self.Pressure.y
         phs = self.Pressure.z
         # The phase is written to the XML, and used by HemeLB, in radians.
-        return "p = %.2f + %.2f cos(wt + %.2f rad)" % (avg, amp, phs)
+        return "p = %.6g + %.6g cos(wt + %.6g rad)" % (avg, amp, phs)
 
     pass
 

@@ -121,6 +121,15 @@ this file records what changed and how it was checked at the time.
   XML always said. The label now shows radians; the XML is unchanged.
 - The GUI's DEBUG button is only shown when the tool was started from a
   terminal; otherwise the debugger froze the window.
+- Geometry tool GUI (from `5c9b7213` on `feat/scalability-input-improvements`):
+  the tools panel scrolls, and scrolls the focused control into view, when
+  the window is too short. Camera and placement changes redraw, repeated
+  updates within one wx event share a single repaint, and the macOS preview
+  keeps the geometry after editing. New iolets avoid names already in a
+  loaded profile. The pressure label reads "mmHg; phase / rad" with
+  per-field tooltips, and the displayed equation keeps small amplitudes.
+  The profile chooser accepts `.pr2` and `.pro`; loading a legacy profile
+  keeps the editor and preview bound to the loaded data.
 - The geometry tool warns when an iolet only just reaches the wall (nearest
   wall beyond 0.9 of its radius). The repository's Poiseuille sample profile
   (iolet radius 0.75 mm in a pipe of the same width) generated a pipe with
@@ -198,6 +207,12 @@ this file records what changed and how it was checked at the time.
 - New unit tests: iolet id checks, the too-many-processes message, the
   pulse period and phase label, the DEBUG button, the CLI and GUI help, the
   dump tool arguments, and the 'only just reaches' warning.
+- Geometry GUI tests for startup layout, scrolling controls into view,
+  profile switching, loaded-name collisions and camera redraws
+  (`geometry-tool/tests/View/test_MainWindow.py`, plus additions to the
+  iolet and profile-pipeline tests). The geometry suite passed 74 tests on
+  macOS (Python 3.8, wxPython 4.2.0, VTK 9.1.0) using this branch's Python
+  sources with the installed compiled extension.
 
 ### Build
 

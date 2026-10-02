@@ -23,7 +23,23 @@ class MainWindow(wx.Frame):
 
         self.toolPanel = ToolPanel(controller, self.splitter)
         self.vtkPanel = VtkViewPanel(controller.Pipeline, self.splitter)
-        self.splitter.SplitVertically(self.toolPanel, self.vtkPanel)
+        tools = self.toolPanel.GetSizer().GetMinSize()
+        tools.width = max(tools.width + self.FromDIP(20), self.FromDIP(480))
+        available = wx.Display().GetClientArea().GetSize()
+        width = min(tools.width + self.FromDIP(420), available.width)
+        height = min(max(tools.height, self.FromDIP(720)), available.height)
+        self.SetClientSize((width, height))
+        self.SetMinSize(self.FromDIP((640, 360)))
+        self.splitter.SetMinimumPaneSize(self.FromDIP(160))
+        self.splitter.SetSashGravity(0.0)
+        self.splitter.SplitVertically(
+            self.toolPanel, self.vtkPanel, min(tools.width, width - self.FromDIP(320))
+        )
+
+        layout = wx.BoxSizer(wx.VERTICAL)
+        layout.Add(self.splitter, 1, wx.EXPAND)
+        self.SetSizer(layout)
+        self.Layout()
 
         self.Show(True)
 
