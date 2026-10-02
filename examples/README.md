@@ -2,7 +2,7 @@
 
 The files in this folder describe one cylinder case, from surface preparation
 to solver output. See the [walkthrough](../doc/user/getting-started.md) for copying
-them into a run folder, simulation, analysis, and regeneration commands.
+them into a run folder, running the simulation, and analysing results.
 
 | File | Purpose |
 | :--- | :--- |
@@ -26,7 +26,7 @@ uses the generated origin, voxel size, and iolets, with monitoring and output
 requests added. The surface extends beyond the clipping planes, so the original
 STL's end caps are outside the simulated fluid segment.
 
-## Regenerate without replacing the prepared pair
+## Regenerate without replacing the prepared pair (optional)
 
 With the geometry and Python tools installed and their environment active:
 
@@ -38,6 +38,6 @@ hlb-gmy-selfconsistent regenerated.gmy
 Always use the newly generated XML with the regenerated GMY. Copy the
 `<simulation><checkpoint period="100" /></simulation>` request and the
 `<properties>` section from `first-run.xml` into it to enable field output, as
-shown in the [walkthrough](../doc/user/getting-started.md#regenerate-the-case-from-stl).
+shown in the [geometry guide](../doc/user/geometry-tool.md#regenerate-the-case-from-stl-optional).
 A later library version or changed profile may generate a different lattice;
 the new XML carries the corresponding origin and voxel size.
