@@ -66,7 +66,7 @@ conda activate gmy-tool                        # for hlb-gmy-gui, hlb-gmy-cli, .
 mpirun -n 4 hemelb -in input.xml -out results
 ```
 
-Next, follow [Getting started](getting-started.md) for a first run from a
+Next, follow [Quick start](getting-started.md) for a quick start from a
 surface to results.
 
 ## Platform notes
@@ -130,7 +130,7 @@ Optional: `command -v hemelb-confcheck` confirms that the XML-checking tool is a
 Substitute your environment name if customized. The installer runs the C++ unit
 executable; to run the MPI restart test too, use the CTest command in
 [build and run](main-application.md#test). Continue with
-[getting started](getting-started.md), or consult
+[quick start](getting-started.md), or consult
 [troubleshooting](troubleshooting.md) if installation fails.
 
 ## Uninstalling

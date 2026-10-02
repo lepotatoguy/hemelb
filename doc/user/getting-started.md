@@ -1,4 +1,4 @@
-# First run: a cylinder with field output
+# Quick start: a cylinder with field output
 
 This walkthrough uses the bundled cylinder geometry and a configuration with
 velocity, pressure, and checkpoint output already enabled. It checks that the

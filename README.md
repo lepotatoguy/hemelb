@@ -35,7 +35,7 @@ export PATH="$HOME/.local/hemelb/bin:$PATH"
 conda activate gmy-tool
 ```
 
-Follow the [first-run walkthrough](doc/user/getting-started.md) to run a bundled
+Follow the [quick-start walkthrough](doc/user/getting-started.md) to run a bundled
 example and inspect its results. The root-level [examples folder](examples/README.md)
 contains the matching STL, geometry-tool profile, GMY, and XML configuration.
 
@@ -44,7 +44,7 @@ contains the matching STL, geometry-tool profile, GMY, and XML configuration.
 | Task | Guide |
 | :--- | :--- |
 | Install, customize paths, or resolve setup problems | [Installation](doc/user/install.md) |
-| Run your first simulation | [Getting started](doc/user/getting-started.md) |
+| Run your first simulation | [Quick start](doc/user/getting-started.md) |
 | Prepare your own STL and inlet/outlet profile | [Geometry tool](doc/user/geometry-tool.md) |
 | Choose units, boundaries, and outputs | [XML configuration](doc/user/XmlConfiguration.md) |
 | Build manually or on a cluster | [Build and run](doc/user/main-application.md), [CMake options](doc/user/CMakeOptions.md) |

@@ -38,13 +38,13 @@ After installation:
     export PATH="$HOME/.local/hemelb/bin:$PATH"
     conda activate gmy-tool
 
-The first-run guide is doc/user/getting-started.md. It uses the bundled
+The quick-start guide is doc/user/getting-started.md. It uses the bundled
 cylinder geometry and examples/first-run.xml, including field output
 and checkpoints. A full geometry-tool installation is not needed to run
 prepared XML/GMY inputs.
 
-Manual builds
-=============
+Installing HemeLB manually
+=========================
 
     cmake -S . -B build -G "Unix Makefiles" \
           -DCMAKE_BUILD_TYPE=Release \
