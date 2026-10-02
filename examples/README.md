@@ -26,16 +26,18 @@ uses the generated origin, voxel size, and iolets, with monitoring and output
 requests added. The surface extends beyond the clipping planes, so the original
 STL's end caps are outside the simulated fluid segment.
 
-## Regenerate without replacing the prepared pair (optional)
+## Regenerate from the profile (optional)
 
-With the geometry and Python tools installed and their environment active:
+With the tools environment active, run in the copied example folder. Keep
+`first-run.pr2` and `first-run.stl` together:
 
 ```sh
-hlb-gmy-cli first-run.pr2 --geometry regenerated.gmy --xml generated.xml
-hlb-gmy-selfconsistent regenerated.gmy
+hlb-gmy-cli first-run.pr2
+hlb-gmy-selfconsistent first-run.gmy
 ```
 
-Always use the newly generated XML with the regenerated GMY. Copy the
+The profile writes `first-run.gmy` and `generated.xml`, replacing the copied
+GMY. Use `generated.xml` with this geometry. Copy the
 `<simulation><checkpoint period="100" /></simulation>` request and the
 `<properties>` section from `first-run.xml` into it to enable field output, as
 shown in the [geometry guide](../doc/user/geometry-tool.md#regenerate-the-case-from-stl-optional).

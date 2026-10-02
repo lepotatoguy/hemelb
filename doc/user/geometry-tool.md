@@ -202,9 +202,18 @@ What this means in practice:
 ## Run the command-line generator
 
 `hlb-gmy-cli` does what the GUI's "Generate" button does, without a window.
-It needs a profile, because inlets and outlets can only be defined there
-(create one in the GUI and use "Save Profile"). Every other setting can be
-overridden on the command line; `hlb-gmy-cli --help` lists them all.
+Save a `.pr2` profile in the GUI, then run:
+
+```sh
+hlb-gmy-cli example.pr2
+```
+
+The profile supplies the input STL and the output GMY/XML filenames. Keep the
+STL beside the profile when `StlFile` contains just its filename. If it is
+missing, the command reports the expected STL path and stops.
+
+Command-line options can override profile settings for a single run;
+`hlb-gmy-cli --help` lists them all.
 
 ```
 hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
@@ -347,13 +356,14 @@ The copied `first-run.stl` contains a cylinder in millimetres. Its matching
 and pressure conditions. With `gmy-tool` active, run in the first-run folder:
 
 ```sh
-hlb-gmy-cli first-run.pr2 --geometry regenerated.gmy --xml generated.xml
-hlb-gmy-countsites regenerated.gmy
-hlb-gmy-selfconsistent regenerated.gmy
+hlb-gmy-cli first-run.pr2
+hlb-gmy-countsites first-run.gmy
+hlb-gmy-selfconsistent first-run.gmy
 ```
 
-Keep the supplied GMY/XML pair unchanged. Regeneration writes a separate pair,
-including the geometry's newly computed origin.
+The profile names the outputs `first-run.gmy` and `generated.xml`. Regeneration
+replaces `first-run.gmy` in the working folder and writes a new XML with the
+geometry's computed origin.
 
 ### Add output requests to generated XML
 
