@@ -48,6 +48,14 @@
 
 ### Changed
 
+- The geometry GUI opens with a usable editor and preview layout, scrolls
+  controls into view in smaller windows, and redraws camera and placement
+  changes. Repeated updates within a wx event share one repaint, and macOS
+  repainting retains the geometry preview after editing.
+  New iolets avoid names already present in a loaded profile. Pressure is
+  labelled in mmHg with phase in radians, and the displayed equation retains
+  small amplitudes. The profile chooser accepts both `.pr2` and `.pro`;
+  legacy loading keeps the editor and preview bound to the loaded data.
 - Scalar density/momentum reductions keep partial sums local; wall and iolet
   link checks are inline. Both reduce work in the CPU collision/streaming path
   while retaining existing precision, input handling and checkpoint formats.

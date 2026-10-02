@@ -16,6 +16,7 @@ from HlbGmyTool.Controller.PipelineController import PipelineController
 from HlbGmyTool.Controller.ProfileController import ProfileController
 from HlbGmyTool.Model.Pipeline import Pipeline
 from HlbGmyTool.Model.Profile import Profile
+from HlbGmyTool.Model.Iolets import Inlet, Outlet
 
 
 def test_stl_preview_waits_for_a_loaded_mesh(capfd):
@@ -104,3 +105,103 @@ def test_started_from_terminal_without_stdin(monkeypatch):
 
     monkeypatch.setattr(pc.sys, "stdin", None)
     assert not pc.StartedFromTerminal()
+
+
+def test_new_iolets_do_not_reuse_loaded_names():
+    profile = Profile()
+    profile.Iolets.append(Inlet(Name="Inlet1"))
+    profile.Iolets.append(Outlet(Name="Outlet1"))
+    controller = ProfileController(profile)
+    controller.Iolets.AddInlet()
+    controller.Iolets.AddOutlet()
+    assert [iolet.Name for iolet in profile.Iolets] == [
+        "Inlet1",
+        "Outlet1",
+        "Inlet2",
+        "Outlet2",
+    ]
+
+
+def test_legacy_profile_keeps_controller_bindings():
+    profile = Profile()
+    profile.Iolets.append(Inlet(Name="Previous inlet"))
+    controller = ProfileController(profile)
+    iolets = profile.Iolets
+    seed = profile.SeedPoint
+    legacy = Path(__file__).parents[3] / (
+        "Code/tests/pythontests/resources/poiseuille_flow_test.pro"
+    )
+    expected = Profile()
+    expected.LoadFromFile(str(legacy))
+    profile.LoadFromFile(str(legacy))
+
+    assert profile.Iolets is iolets is controller.Iolets.delegate
+    assert profile.SeedPoint is seed is controller.SeedPoint.delegate
+    assert [io.Name for io in controller.Iolets.delegate] == [
+        io.Name for io in expected.Iolets
+    ]
+    controller.SeedPoint.SetValueForKey("x", 0.25)
+    assert profile.SeedPoint.x == 0.25
+    controller.Iolets.AddOutlet()
+    assert profile.Iolets[-1].Name == "Outlet2"
+
+
+@pytest.mark.parametrize("action", ["SetViewX", "SetViewY", "SetViewZ"])
+def test_camera_actions_redraw_the_preview(monkeypatch, action):
+    pipeline = Pipeline()
+    renders = []
+    monkeypatch.setattr(pipeline, "Render", lambda: renders.append(True))
+    getattr(pipeline, action)()
+    assert renders == [True]
+
+
+def test_placed_items_redraw_without_hiding_the_surface(monkeypatch):
+    pipeline = Pipeline()
+    renders = []
+    monkeypatch.setattr(pipeline, "Render", lambda: renders.append(True))
+    pipeline.PlacedSeed.Enabled = True
+    assert pipeline.Renderer.HasViewProp(pipeline.PlacedSeed.actor)
+    pipeline.PlacedSeed.Enabled = False
+    assert not pipeline.Renderer.HasViewProp(pipeline.PlacedSeed.actor)
+    assert pipeline.Renderer.HasViewProp(pipeline.SurfaceActor)
+    assert renders == [True, True]
+
+
+def test_pipeline_uses_the_interactors_window_readiness_guard():
+    class Interactor:
+        def __init__(self):
+            self.window = None
+            self.renders = 0
+
+        def GetRenderWindow(self):
+            return self.window
+
+        def Render(self):
+            self.renders += 1
+
+    pipeline = Pipeline()
+    pipeline.Interactor = Interactor()
+    pipeline.Render()
+    assert pipeline.Interactor.renders == 0
+    # A wx interactor can have a render window before its native handle is
+    # ready. Its Render method owns that check; the pipeline must use it.
+    pipeline.Interactor.window = object()
+    pipeline.Render()
+    assert pipeline.Interactor.renders == 1
+
+
+def test_wx_preview_repaints_after_the_current_edit():
+    class Interactor:
+        def GetRenderWindow(self):
+            return object()
+
+        def Refresh(self, erase):
+            self.erase = erase
+
+        def Render(self):
+            pytest.fail("wx repainting must wait for the paint event")
+
+    pipeline = Pipeline()
+    pipeline.Interactor = Interactor()
+    pipeline.Render()
+    assert pipeline.Interactor.erase is False

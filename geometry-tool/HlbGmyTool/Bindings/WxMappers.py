@@ -168,26 +168,18 @@ class WxListCtrlSelectionMapper(Mapper, Translator):
         return self.widget.GetFirstSelected()
 
     def _Set(self, ind):
-        self.Unobserve()
-        try:
-            prevSelected = self._Get()
-            if ind != prevSelected:
-                # If the selection wasn't already selected
-                self.widget.SetItemState(
-                    ind, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED
-                )
-                if prevSelected >= 0:
-                    # There was a previous selection (prevSelected
-                    # will be -1 if there was one)
-                    self.widget.SetItemState(prevSelected, 0, wx.LIST_STATE_SELECTED)
-                    pass
-                pass
-
-        finally:
-            self.Observe()
-            pass
-
-        return
+        # Mapper.Set already suspends events while updating this control.
+        # wx uses index -1 to apply a state to every row.
+        if ind == -1:
+            self.widget.SetItemState(-1, 0, wx.LIST_STATE_SELECTED)
+            return
+        prevSelected = self._Get()
+        if ind != prevSelected:
+            self.widget.SetItemState(
+                ind, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED
+            )
+            if prevSelected >= 0:
+                self.widget.SetItemState(prevSelected, 0, wx.LIST_STATE_SELECTED)
 
     pass
 

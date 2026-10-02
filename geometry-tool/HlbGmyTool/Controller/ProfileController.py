@@ -139,11 +139,21 @@ class ProfileController(
         return
 
     def LoadFromFile(self, ignored=None):
-        dialog = wx.FileDialog(None, style=wx.FD_OPEN, wildcard="*.pro|*.pr2")
+        dialog = wx.FileDialog(
+            None,
+            style=wx.FD_OPEN,
+            wildcard="Geometry profiles (*.pr2;*.pro)|*.pr2;*.pro",
+        )
 
         if dialog.ShowModal() == wx.ID_OK:
             try:
+                # Detach the editor from the old iolet before replacing rows.
+                self.Iolets.SelectedIndex = None
                 self.delegate.LoadFromFile(dialog.GetPath())
+                if hasattr(self, "Pipeline"):
+                    # Fit after all iolets have loaded, so the previous profile's
+                    # planes do not determine the new geometry's camera bounds.
+                    self.Pipeline.delegate.ResetView()
             except Exception as err:
                 ShowMessage("Cannot open profile:\n\n%s" % err, wx.ICON_ERROR)
             pass

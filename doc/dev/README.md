@@ -14,7 +14,8 @@ with the branch under test.
 | `python-tools/` | `hlb` parsers and converters, including Cython extensions |
 | `dependencies/`, `CMake/` | Dependency builds, find modules, and shared options |
 | `Scripts/` | Installer and repository checks |
-| `doc/` | User guides, examples, and implementation/file-format references |
+| `examples/` | Runnable cases with prepared inputs and source geometry |
+| `doc/` | User guides and implementation/file-format references |
 
 ## Implementation references
 
@@ -23,6 +24,7 @@ with the branch under test.
 - [Branching-vessel and collision-model CPU benchmarks](representative-cpu-benchmarks.md)
 - [CPU comparison and validation record](comparison-and-roadmap.md)
 - [Geometry reading, validation, and decomposition](geometry-reading.md)
+- [Geometry GUI validation](geometry-gui-validation.md)
 - [Checkpoint loading across rank counts](checkpoint-restart.md)
 - File formats: [geometry](file-formats/geometry.md),
   [legacy geometry](file-formats/old-geometry.md),

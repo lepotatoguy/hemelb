@@ -12,7 +12,7 @@ from HlbGmyTool.Model.Vector import Vector
 
 def test_pressure_equation_formats_valid_values():
     inlet = Inlet()
-    assert inlet.PressureEquation == "p = 0.00 + 0.00 cos(wt + 0.00 rad)"
+    assert inlet.PressureEquation == "p = 0 + 0 cos(wt + 0 rad)"
 
 
 def test_pressure_equation_shows_phase_in_radians():
@@ -20,7 +20,13 @@ def test_pressure_equation_shows_phase_in_radians():
     # GUI must not label it in degrees.
     inlet = Inlet()
     inlet.Pressure.x, inlet.Pressure.y, inlet.Pressure.z = 80.0, 5.0, 1.5708
-    assert inlet.PressureEquation == "p = 80.00 + 5.00 cos(wt + 1.57 rad)"
+    assert inlet.PressureEquation == "p = 80 + 5 cos(wt + 1.5708 rad)"
+
+
+def test_pressure_equation_preserves_small_pressures():
+    inlet = Inlet()
+    inlet.Pressure.x, inlet.Pressure.y, inlet.Pressure.z = 0.02, 0.005, 0.5
+    assert inlet.PressureEquation == "p = 0.02 + 0.005 cos(wt + 0.5 rad)"
 
 
 def test_pressure_equation_reports_invalid_values():

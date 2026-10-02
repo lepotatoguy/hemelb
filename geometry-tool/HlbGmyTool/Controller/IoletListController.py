@@ -19,6 +19,9 @@ class IoletListController(ListController):
 
     def AddInlet(self):
         self.nInlets += 1
+        names = {iolet.Name for iolet in self.delegate}
+        while "Inlet%d" % self.nInlets in names:
+            self.nInlets += 1
         self.append(
             Inlet(
                 Name="Inlet%d" % (self.nInlets),
@@ -29,6 +32,9 @@ class IoletListController(ListController):
 
     def AddOutlet(self):
         self.nOutlets += 1
+        names = {iolet.Name for iolet in self.delegate}
+        while "Outlet%d" % self.nOutlets in names:
+            self.nOutlets += 1
         self.append(
             Outlet(
                 Name="Outlet%d" % (self.nOutlets),

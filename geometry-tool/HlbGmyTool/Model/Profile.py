@@ -308,7 +308,16 @@ class Profile(Observable):
             if attr in values:
                 setattr(self, attr, values.pop(attr))
         for attr, val in values.items():
-            setattr(self, attr, val)
+            if attr == "SeedPoint":
+                self.SeedPoint.CloneFrom(val)
+            elif attr == "Iolets":
+                # Keep the list that the GUI and preview controllers observe.
+                while self.Iolets:
+                    self.Iolets.pop()
+                for iolet in val:
+                    self.Iolets.append(iolet)
+            else:
+                setattr(self, attr, val)
         return
 
     @staticmethod

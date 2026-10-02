@@ -75,4 +75,11 @@ class RWI(wxVTKRenderWindowInteractor):
 
         return
 
+    def OnPaint(self, event):
+        wxVTKRenderWindowInteractor.OnPaint(self, event)
+        # VTK paints this window. Letting wx process the same paint event
+        # afterwards can erase the scene on macOS.
+        if wx.Platform == "__WXMAC__":
+            event.Skip(False)
+
     pass

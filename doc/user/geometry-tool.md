@@ -98,8 +98,14 @@ pytest
 
 Run the tests from `tests/`, not from `geometry-tool/`: from there Python
 would import the source folder, which lacks the compiled extension. The GUI
-tests are skipped if wxPython is not installed. The
-[developer notes](../dev/README.md#how-to-run-the-tests) list all test suites.
+tests are skipped if wxPython is not installed, and window layout tests need
+a display. On macOS, run them with the framework interpreter:
+
+```sh
+"$CONDA_PREFIX/python.app/Contents/MacOS/python" -m pytest
+```
+
+The [developer notes](../dev/README.md#how-to-run-the-tests) list all test suites.
 
 ## Run GUI
 
@@ -117,9 +123,14 @@ hlb-gmy-gui --profile vessel.pr2
 | `--geometry PATH` | Set the GMY output path |
 | `--xml PATH` | Set the XML output path |
 
+The tool opens with room for the editor and preview. The tools panel scrolls
+when the window is too short to show the output controls. **Fit** frames the
+geometry; **X**, **Y**, and **Z** switch the view immediately.
+
 A typical session:
 
-1. **Choose** the STL (or **Open Profile** to continue earlier work) and set
+1. **Choose** the STL (or **Open Profile**, which accepts `.pr2` and legacy
+   `.pro` files, to continue earlier work) and set
    its units. The voxel size is set to the surface's average edge length;
    change it, or press **Reset** to go back to that value.
 2. **Add Inlet** / **Add Outlet**, then **Place** each one on the surface and
@@ -127,7 +138,10 @@ A typical session:
    holds the cosine boundary condition: `x` is the mean and `y` the amplitude
    (mmHg), `z` the phase in radians. The label under it shows the resulting
    equation.
-3. **Place** the seed point anywhere inside the vessel.
+3. Use **Place** to pick a seed position on the visible surface, then **Finish**.
+   Adjust its coordinates to put the seed strictly inside the fluid volume.
+   Surface picking alone does not select an interior point. For the bundled
+   cylinder, the seed is `(0, 0, 0)` in millimetres.
 4. Choose the output `.gmy` and `.xml` files; **Generate** becomes available
    when all inputs are valid. Problems and warnings are shown in a message
    box.
@@ -140,6 +154,9 @@ from there.
 The mesh preview stays empty until an STL file has loaded. If VTK
 reports an STL reading or pipeline error after a file is selected,
 check the file and the error instead of ignoring it.
+
+See the [GUI validation record](../dev/geometry-gui-validation.md) for the
+tested environment, controls and generated-case checks.
 
 
 ## Preparing the surface: closed or open
