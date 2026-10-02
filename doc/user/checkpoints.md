@@ -20,7 +20,7 @@ is under the run's `Extracted/` directory. For a 200-step run, the checkpoint
 at step 100 is `checkpoint_100.xtr`; the matching offsets are
 `checkpoint_.off`, with `%d` removed. Keep both files.
 
-The [first-run configuration](../examples/first-run.xml) already enables this
+The [first-run configuration](../../examples/first-run.xml) already enables this
 output. Complete that [walkthrough](getting-started.md) before the example below.
 
 ## Resume the first-run example
@@ -39,8 +39,11 @@ ET.SubElement(initial, "checkpoint",
               offsets="results/Extracted/checkpoint_.off")
 tree.write("restart.xml", encoding="utf-8", xml_declaration=True)
 PYCODE
+```
 
-hemelb-confcheck restart.xml
+Optionally check `restart.xml` with `hemelb-confcheck restart.xml`, then resume:
+
+```sh
 mpirun -n 4 hemelb -in restart.xml -out resumed
 ```
 

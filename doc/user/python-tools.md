@@ -65,50 +65,62 @@ rank counts by `grid` coordinates.
 
 ## Export for ParaView
 
-Run this in the first-run folder with the tools environment active. It creates
-one ASCII `.vtu` per saved timestep and a `whole.pvd` collection. ASCII files
-are larger than binary files, but avoid appended-data parsing failures observed
-in the local VTK 9.1 environment.
+The installed command exports every saved timestep from an extraction file:
 
 ```sh
-python - <<'PYCODE'
-import vtk
-from hlb.parsers.extraction import ExtractedProperty
-from hlb.converters.GmyUnstructuredGridReader import GmyUnstructuredGridReader
-from hlb.converters.ExtractedPropertyUnstructuredGridReader import (
-    ExtractedPropertyUnstructuredGridReader,
-    WritePVDFile,
-)
-
-geometry = GmyUnstructuredGridReader("first-run.xml")
-extraction = ExtractedProperty("results/Extracted/whole.xtr")
-converter = ExtractedPropertyUnstructuredGridReader()
-converter.SetInputConnection(geometry.GetOutputPort())
-converter.SetExtraction(extraction)
-writer = vtk.vtkXMLUnstructuredGridWriter()
-writer.SetInputConnection(converter.GetOutputPort())
-writer.SetDataModeToAscii()
-files = {}
-for timestep in extraction.times:
-    converter.SetTime(timestep)
-    filename = "whole_{}.vtu".format(int(timestep))
-    writer.SetFileName(filename)
-    if writer.Write() != 1:
-        raise RuntimeError("Could not write " + filename)
-    files[int(timestep)] = filename
-WritePVDFile(files, "whole")
-PYCODE
+hlb-extracted-to-vtk results/Extracted/whole.xtr whole
 ```
 
-Open `whole.pvd` in ParaView. Fields are attached to cells, not points.
-The collection uses lattice timestep numbers; multiply by the XML `step_length`
-to obtain seconds. The export recipe was checked with the bundled first-run
-geometry; inspecting it in the ParaView GUI is a separate step.
+This writes `whole_100.vtu`, `whole_200.vtu`, and `whole.pvd` for the bundled
+first-run case. Open `whole.pvd` in ParaView, click **Apply**, and select a field
+such as `pressure` or `velocity` under cell data. The time controls move through
+the saved frames. The [ParaView PVD reader](https://www.paraview.org/paraview-docs/v5.9.1/python/paraview.simple.PVDReader.html)
+loads the collection.
 
-Use the original XML as the geometry input. Passing only a `.gmy` creates
-coordinates in lattice units, while extraction positions are in metres.
-The geometry and extraction must refer to the same run geometry, and the
-geometry must remain unscaled before the field-matching step.
+No GMY or XML is required. Each extracted site becomes a voxel centred on its
+stored grid coordinate, with the extraction header's physical origin and voxel
+size. Coordinates are metres; field names, types, and values are preserved,
+including field offsets restored by the reader. Six-component symmetric tensors
+are reordered from HemeLB's `XX XY XZ YY YZ ZZ` to VTK's `XX YY ZZ XY YZ XZ`.
+Only sites present in the extraction are exported, so a plane or region output
+shows that selected subset rather than the whole fluid geometry. Voxel faces
+approximate the domain; they do not reconstruct sub-voxel wall cuts.
+
+The collection uses lattice timestep numbers by default. To show seconds,
+provide the run's XML `step_length` in seconds. For the bundled example:
+
+```sh
+hlb-extracted-to-vtk results/Extracted/whole.xtr paraview/whole --step-length 0.0001
+```
+
+This creates the output folder and uses collection times `0.01` and `0.02`
+seconds. VTU filenames retain lattice timesteps. The collection references
+frames relative to its own folder, so move or copy the folder as a unit.
+
+Omit the output argument to write beside the input, using its basename. An
+output ending in `.pvd` is also accepted. Existing collection or frame files
+are refused before writing. ASCII VTU is used to avoid appended-data parsing
+failures observed with local VTK 9.1; it produces larger files than binary VTU.
+See the [VTK writer documentation](https://vtk.org/doc/nightly/html/classvtkXMLUnstructuredGridWriter.html).
+
+The command is implemented in
+[ExtractedPropertyToVtk.py](../../python-tools/hlb/converters/ExtractedPropertyToVtk.py).
+It can also be run as a Python module:
+
+```sh
+python -m hlb.converters.ExtractedPropertyToVtk results/Extracted/whole.xtr whole
+hlb-extracted-to-vtk --help
+```
+
+If the command is missing after updating the repository, reinstall the package:
+
+```sh
+python -m pip install ./python-tools
+```
+
+Run the install command from the repository root with the tools environment
+active. VTU round-trip checks cover coordinates and field values; the ParaView
+GUI has not been exercised locally.
 
 ## Geometry commands
 
@@ -126,6 +138,8 @@ The `3to4` command concerns the legacy geometry format. It does not convert
 arbitrary version 3 solver XML or newer branch formats. The format references
 are [geometry](../dev/file-formats/geometry.md) and
 [old geometry](../dev/file-formats/old-geometry.md).
+
+Optional: [Scripts/gmy-to-stl.py](../../Scripts/gmy-to-stl.py) creates a stepped, capped STL preview when the original surface is unavailable (`python /path/to/hemelb/Scripts/gmy-to-stl.py mesh.gmy preview.stl`; see `--help` for XML scaling).
 
 ## Tests and limitations
 

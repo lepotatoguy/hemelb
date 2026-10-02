@@ -39,7 +39,7 @@ After installation:
     conda activate gmy-tool
 
 The first-run guide is doc/user/getting-started.md. It uses the bundled
-cylinder geometry and doc/examples/first-run.xml, including field output
+cylinder geometry and examples/first-run.xml, including field output
 and checkpoints. A full geometry-tool installation is not needed to run
 prepared XML/GMY inputs.
 

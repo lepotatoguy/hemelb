@@ -85,7 +85,6 @@ launcher.
 ## Run
 
 ```sh
-hemelb-confcheck input.xml
 mpirun -n 2 hemelb -in input.xml -out results
 ```
 
@@ -94,6 +93,12 @@ mpirun -n 2 hemelb -in input.xml -out results
 | `-in FILE` | Configuration XML, required |
 | `-out FOLDER` | New output directory; defaults to `results` beside the XML |
 | `-debug 0` or `-debug 1` | Disable or enable the built-in debugger; default 0 |
+
+Before launching, you can optionally check the XML with:
+
+```sh
+hemelb-confcheck input.xml
+```
 
 `hemelb-confcheck` checks XML parsing, units, and compiled boundary choices.
 It does not load geometry or check that referenced input files are available.

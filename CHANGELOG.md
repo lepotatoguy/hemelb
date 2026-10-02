@@ -15,6 +15,13 @@ this file records what changed and how it was checked at the time.
 
 ### Documentation
 
+- Moved the bundled example to the root-level `examples/` folder and updated
+  the walkthrough, documentation links, and example paths.
+- Bundled matching cylinder STL, geometry-tool profile, GMY, and version 5 XML
+  in [examples](examples/README.md), with a walkthrough from surface
+  generation to simulation and CSV output. Regeneration reproduced the supplied
+  GMY; two-rank runs and a four-rank restart matched final distributions exactly.
+- Optional [Scripts/gmy-to-stl.py](Scripts/gmy-to-stl.py) exports GMY voxel boundaries as STL for visual inspection.
 - Reorganised the branch's installation, first-run, XML, analysis, and developer
   guides around a runnable cylinder example. Added fluid checkpoint and
   troubleshooting guides, clarified version 5/mmHg conventions and CI path
@@ -29,6 +36,14 @@ this file records what changed and how it was checked at the time.
 
 ### Added
 
+- `hlb-extracted-to-vtk` exports extraction files directly to ASCII VTU frames
+  and a ParaView PVD collection ([guide](doc/user/python-tools.md#export-for-paraview)).
+  It uses physical coordinates and cell fields without requiring GMY/XML,
+  supports optional collection times in seconds, and refuses existing outputs.
+  Eleven tests passed, covering extraction versions 4/5, reordered site rows,
+  field offsets, tensors, integer precision, and output handling. Installed CLI
+  and module exports round-tripped the bundled run's coordinates, velocity, and
+  pressure through VTK; the ParaView GUI was not exercised.
 - Checkpoints can be restarted with a different number of MPI processes
   ([design note](doc/dev/checkpoint-restart.md)).
 - `Scripts/install_hemelb.sh` installs HemeLB, the geometry tool and the

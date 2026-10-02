@@ -7,17 +7,20 @@ guide: other branches may use different versions and units.
 
 ## Start here
 
-1. [Install](user/install.md) the solver and tools.
-2. [Run the bundled cylinder](user/getting-started.md) and inspect its output.
+1. [Install HemeLB and all related tools](user/install.md).
+2. [Run the example](user/getting-started.md) and inspect its output.
 3. [Generate a geometry](user/geometry-tool.md) from your own STL surface.
 4. [Configure the simulation](user/XmlConfiguration.md), including field output.
-5. [Analyse the results](user/python-tools.md) or [restart a checkpoint](user/checkpoints.md).
+5. [Run the simulation](https://github.com/lepotatoguy/hemelb/blob/fix/hemelb-improvements/doc/user/main-application.md#run).
+6. [Analyse the results](user/python-tools.md).
+7. (Optional) [Resume from a saved checkpoint](user/checkpoints.md) if the simulation stops before it finishes.
 
 | Task | Reference |
 | :--- | :--- |
 | Manual installation or cluster build | [Build and run](user/main-application.md) |
 | Change lattice, collision model, or boundary implementation | [CMake options](user/CMakeOptions.md) |
 | Use a per-site velocity profile | [Non-cylindrical velocity inlets](user/non-cylindrical-velocity-inlets.md) |
+| Try a complete STL/profile/GMY/XML case | [Example files](../examples/README.md) |
 | Diagnose installation or simulation errors | [Troubleshooting](user/troubleshooting.md) |
 | Develop and test the code | [Developer guide](dev/README.md) |
 | Inspect binary file layouts | [Geometry](dev/file-formats/geometry.md), [extraction](dev/file-formats/extraction.md), [offsets](dev/file-formats/offset.md) |

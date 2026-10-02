@@ -48,8 +48,8 @@ layouts.
 | Output directory already exists | Choose a new `-out` folder |
 | Launcher cannot start ranks | Check the scheduler allocation and MPI runtime; the launcher must match the linked MPI |
 
-`hemelb-confcheck input.xml` catches configuration parsing and boundary-choice
-errors. Geometry and referenced-file checks happen during simulation setup.
+Optionally use `hemelb-confcheck input.xml` to check configuration parsing and
+boundary choices. Geometry and referenced-file checks happen during simulation setup.
 
 ## Results and restarts
 
@@ -58,8 +58,8 @@ errors. Geometry and referenced-file checks happen during simulation setup.
 | Run completes without `.xtr` field files | Add `<properties><propertyoutput ...>`; generated XML has no field output by default |
 | No samples at the requested interval | Ensure the run reaches that interval and check for early convergence termination |
 | CSV appears to lack timestep values | Timestep numbers are in comment headers, not a column; use the [Python reader](python-tools.md#read-fields-in-python) for arrays |
-| Appended binary VTU cannot be read | Use the verified ASCII recipe in [ParaView export](python-tools.md#export-for-paraview); this occurred in the local VTK 9.1 environment |
-| VTK conversion places cells incorrectly | Generate the physical-coordinate grid from the run's XML, then attach extraction data to that unscaled grid |
+| Appended binary VTU cannot be read | Use `hlb-extracted-to-vtk`, which writes ASCII VTU; see [ParaView export](python-tools.md#export-for-paraview) |
+| VTK conversion places cells incorrectly | Use `hlb-extracted-to-vtk` to export physical coordinates from the extraction header; check that the run used the matching GMY/XML pair |
 | Restart cannot find an offset file | Pass the shared `.off` path explicitly; see the [checkpoint workflow](checkpoints.md) |
 | Checkpoint geometry or distribution mismatch | Use the original voxel size, origin, fluid-site set, and lattice; keep the corresponding offsets |
 | Newer extraction format rejected | The bundled Python reader handles versions 4 and 5; use tools from the branch that wrote other formats |

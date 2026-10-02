@@ -1,0 +1,10 @@
+/generated.xml
+/generated-results/
+/results/
+/resumed/
+/whole.csv
+/whole*.vtu
+/whole.pvd
+/voxel-surface*.stl
+/regenerated.gmy
+/generated-whole.csv

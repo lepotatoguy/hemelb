@@ -36,7 +36,8 @@ conda activate gmy-tool
 ```
 
 Follow the [first-run walkthrough](doc/user/getting-started.md) to run a bundled
-cylinder case and inspect its results. It includes a ready-to-use configuration.
+example and inspect its results. The root-level [examples folder](examples/README.md)
+contains the matching STL, geometry-tool profile, GMY, and XML configuration.
 
 ## Documentation
 

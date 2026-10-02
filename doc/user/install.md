@@ -119,12 +119,13 @@ can repeat them.
 
 ```sh
 command -v hemelb
-command -v hemelb-confcheck
 hemelb-tests
 conda activate gmy-tool
 hlb-gmy-cli --help
 hlb-dump-extracted-properties --help
 ```
+
+Optional: `command -v hemelb-confcheck` confirms that the XML-checking tool is available.
 
 Substitute your environment name if customized. The installer runs the C++ unit
 executable; to run the MPI restart test too, use the CTest command in

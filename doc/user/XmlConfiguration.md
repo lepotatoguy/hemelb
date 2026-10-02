@@ -5,9 +5,9 @@ The solver requires `<hemelbsettings version="5">`. Physical pressures use
 mmHg on this branch; do not substitute Pa or configurations from another branch
 without checking its format. The geometry tool writes version 5 XML.
 
-Start with the [ready-to-run example](../examples/first-run.xml) and
-[first-run guide](getting-started.md). Check parsing, units, and compiled
-boundary choices with:
+Start with the [ready-to-run example](../../examples/first-run.xml) and
+[first-run guide](getting-started.md). You can optionally check parsing, units,
+and compiled boundary choices with:
 
 ```sh
 hemelb-confcheck input.xml

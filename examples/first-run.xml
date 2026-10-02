@@ -1,42 +1,42 @@
 <?xml version='1.0' encoding='utf-8'?>
 <hemelbsettings version="5">
   <simulation>
-    <step_length units="s" value="4.4e-07" />
-    <steps units="lattice" value="200" />
+    <step_length value="0.0001" units="s" />
+    <steps value="200" units="lattice" />
     <stresstype value="1" />
-    <voxel_size units="m" value="1.4e-06" />
-    <origin units="m" value="(-1.05e-05,-1.05e-05,-2.45248049736e-05)" />
+    <voxel_size value="0.0001" units="m" />
+    <origin value="(-0.00055,-0.00055,-0.0015500000000000002)" units="m" />
   </simulation>
   <geometry>
-    <datafile path="large_cylinder.gmy" />
+    <datafile path="first-run.gmy" />
   </geometry>
   <inlets>
     <inlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0" units="mmHg" />
-        <mean value="1e-5" units="mmHg" />
-        <phase value="0" units="rad" />
+        <mean value="0.01" units="mmHg" />
+        <amplitude value="0.0" units="mmHg" />
+        <phase value="0.0" units="rad" />
         <period value="1" units="s" />
       </condition>
-      <normal units="dimensionless" value="(0.0,0.0,1.0)" />
-      <position units="m" value="(0.0,0.0,-2.4e-5)" />
+      <normal value="(0.0,0.0,1.0)" units="dimensionless" />
+      <position value="(0.0,0.0,-0.0015)" units="m" />
     </inlet>
   </inlets>
   <outlets>
     <outlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0" units="mmHg" />
-        <mean value="0" units="mmHg" />
-        <phase value="0" units="rad" />
+        <mean value="0.0" units="mmHg" />
+        <amplitude value="0.0" units="mmHg" />
+        <phase value="0.0" units="rad" />
         <period value="1" units="s" />
       </condition>
-      <normal units="dimensionless" value="(0.0,0.0,-1.0)" />
-      <position units="m" value="(0.0,0.0,2.4e-5)" />
+      <normal value="(0.0,0.0,-1.0)" units="dimensionless" />
+      <position value="(0.0,0.0,0.0015)" units="m" />
     </outlet>
   </outlets>
   <initialconditions>
     <pressure>
-      <uniform units="mmHg" value="0.0" />
+      <uniform value="0.0" units="mmHg" />
     </pressure>
   </initialconditions>
   <monitoring>
