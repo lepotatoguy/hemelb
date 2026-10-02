@@ -321,6 +321,49 @@ Notes on legacy `.pro` files:
   `Code/tests/pythontests/resources/poiseuille_flow_test.pr2`.
 
 
+## Regenerate the case from STL (optional)
+
+The copied `first-run.stl` contains a cylinder in millimetres. Its matching
+`first-run.pr2` sets the voxel size, seed point, inlet/outlet clipping planes,
+and pressure conditions. With `gmy-tool` active, run in the first-run folder:
+
+```sh
+hlb-gmy-cli first-run.pr2 --geometry regenerated.gmy --xml generated.xml
+hlb-gmy-countsites regenerated.gmy
+hlb-gmy-selfconsistent regenerated.gmy
+```
+
+Keep the supplied GMY/XML pair unchanged. Regeneration writes a separate pair,
+including the geometry's newly computed origin. Generated XML has no field
+output; copy the ready example's output requests into it:
+
+```sh
+python - <<'PYCODE'
+import copy
+import xml.etree.ElementTree as ET
+
+tree = ET.parse("generated.xml")
+outputs = ET.parse("first-run.xml").getroot().find("properties")
+tree.getroot().append(copy.deepcopy(outputs))
+tree.write("generated.xml", encoding="utf-8", xml_declaration=True)
+PYCODE
+```
+
+Optionally check the generated XML with `hemelb-confcheck generated.xml`, then
+start the simulation and convert its output:
+
+```sh
+mpirun -n 2 hemelb -in generated.xml -out generated-results
+hlb-dump-extracted-properties generated-results/Extracted/whole.xtr generated-whole.csv
+```
+
+This completes STL/profile to GMY/XML to simulation to field output. Use
+`generated.xml` for the regenerated run, especially after changing voxel size
+or iolet settings. Re-run the geometry generator before adding `<properties>`
+again, so the section is not duplicated.
+
+To edit the surface profile, follow the [GUI workflow](#run-gui).
+
 ## Profile (.pr2) files
 
 The geometry tool can save everything it uses to generate a geometry in a

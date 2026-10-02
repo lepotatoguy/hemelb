@@ -29,7 +29,7 @@ Use the [locked conda environment](geometry-tool.md#installing-the-geometry-tool
 installing both tools. Run converters outside the source-package directories
 so Python uses the installed compiled extensions.
 
-## Export comma-separated text
+## Export results to readable CSV
 
 ```sh
 hlb-dump-extracted-properties results/Extracted/whole.xtr whole.csv
@@ -65,64 +65,14 @@ rank counts by `grid` coordinates.
 
 ## Export for ParaView
 
-The installed command exports every saved timestep from an extraction file:
+Use the **ParaView 5.13.3 GUI (tested)**. Export the results:
 
 ```sh
-hlb-extracted-to-vtk results/Extracted/whole.xtr whole
+hlb-extracted-to-vtk results/Extracted/whole.xtr whole --step-length 0.0001
 ```
 
-This writes `whole_100.vtu`, `whole_200.vtu`, and `whole.pvd` for the bundled
-first-run case. Open `whole.pvd` in ParaView, click **Apply**, and select a field
-such as `pressure` or `velocity` under cell data. The time controls move through
-the saved frames. The [ParaView PVD reader](https://www.paraview.org/paraview-docs/v5.9.1/python/paraview.simple.PVDReader.html)
-loads the collection.
-
-No GMY or XML is required. Each extracted site becomes a voxel centred on its
-stored grid coordinate, with the extraction header's physical origin and voxel
-size. Coordinates are metres; field names, types, and values are preserved,
-including field offsets restored by the reader. Six-component symmetric tensors
-are reordered from HemeLB's `XX XY XZ YY YZ ZZ` to VTK's `XX YY ZZ XY YZ XZ`.
-Only sites present in the extraction are exported, so a plane or region output
-shows that selected subset rather than the whole fluid geometry. Voxel faces
-approximate the domain; they do not reconstruct sub-voxel wall cuts.
-
-The collection uses lattice timestep numbers by default. To show seconds,
-provide the run's XML `step_length` in seconds. For the bundled example:
-
-```sh
-hlb-extracted-to-vtk results/Extracted/whole.xtr paraview/whole --step-length 0.0001
-```
-
-This creates the output folder and uses collection times `0.01` and `0.02`
-seconds. VTU filenames retain lattice timesteps. The collection references
-frames relative to its own folder, so move or copy the folder as a unit.
-
-Omit the output argument to write beside the input, using its basename. An
-output ending in `.pvd` is also accepted. Existing collection or frame files
-are refused before writing. ASCII VTU is used to avoid appended-data parsing
-failures observed with local VTK 9.1; it produces larger files than binary VTU.
-See the [VTK writer documentation](https://vtk.org/doc/nightly/html/classvtkXMLUnstructuredGridWriter.html).
-
-The command is implemented in
-[ExtractedPropertyToVtk.py](../../python-tools/hlb/converters/ExtractedPropertyToVtk.py).
-It can also be run as a Python module:
-
-```sh
-python -m hlb.converters.ExtractedPropertyToVtk results/Extracted/whole.xtr whole
-hlb-extracted-to-vtk --help
-```
-
-If the command is missing after updating the repository, reinstall the package:
-
-```sh
-python -m pip install ./python-tools
-```
-
-Run the install command from the repository root with the tools environment
-active. The bundled example passed simulation, export, coordinate and field
-checks, and pressure/velocity rendering with timestep changes in the ParaView
-5.13.3 GUI on macOS 27.0. See the [validation record](../dev/paraview-validation.md)
-for the tested revisions and scope.
+Open `whole.pvd`, click **Apply**, and select `pressure` or `velocity`
+(**Magnitude**) under cell data. Use the time controls to view the saved frames.
 
 ## Geometry commands
 
