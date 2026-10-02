@@ -86,6 +86,27 @@ explains field selection, physical coordinates, and output options.
 To resume at timestep 100 with another rank count, follow the
 [checkpoint guide](checkpoints.md).
 
+## Inspect the example in the GUI (optional)
+
+With `gmy-tool` active, run this from the copied first-run folder:
+
+```sh
+hlb-gmy-gui --profile first-run.pr2
+```
+
+Use **Fit** to frame the surface, **X**, **Y**, or **Z** to change the viewing
+axis, and drag or scroll over the preview to rotate or zoom. Select an inlet
+or outlet to inspect its centre, radius, inward normal and pressure. The
+pressure fields use mmHg for mean and amplitude, and radians for phase.
+
+If you generate new inputs in the GUI, first change the output paths to
+`regenerated.gmy` and `generated.xml` so the supplied pair is preserved.
+Follow the [output configuration steps below](#add-output-requests-to-generated-xml) to add
+field-output and checkpoint requests to the generated XML before running it.
+The [GUI guide](geometry-tool.md#run-gui) explains profile editing and seed
+placement; the [validation record](../dev/geometry-gui-validation.md) records
+the end-to-end check through simulation and ParaView 5.13.3.
+
 ## Regenerate the case from STL
 
 The copied `first-run.stl` contains a cylinder in millimetres. Its matching
@@ -99,8 +120,12 @@ hlb-gmy-selfconsistent regenerated.gmy
 ```
 
 Keep the supplied GMY/XML pair unchanged. Regeneration writes a separate pair,
-including the geometry's newly computed origin. Generated XML has no field
-output; copy the ready example's output requests into it:
+including the geometry's newly computed origin.
+
+### Add output requests to generated XML
+
+Generated XML has no field output; copy the ready example's output requests
+into it:
 
 ```sh
 python - <<'PYCODE'

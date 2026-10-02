@@ -19,6 +19,8 @@ Use the solver and Python tools from this branch together.
 | Task | Reference |
 | :--- | :--- |
 | Manual installation or cluster build | [Build and run](user/main-application.md) |
+| Edit geometry profiles and preview an STL | [Geometry GUI](user/geometry-tool.md#run-gui) |
+| Check the tested GUI workflow and generated case | [GUI validation](dev/geometry-gui-validation.md) |
 | Change lattice, collision model, or boundary implementation | [CMake options](user/CMakeOptions.md) |
 | Load legacy inputs or tune decomposition and readers | [Scalability and inputs](user/scalability-and-inputs.md) |
 | Choose Windkessel, Yang, sponge/LES, or elastic models | [CPU models](user/cpu-models.md) |

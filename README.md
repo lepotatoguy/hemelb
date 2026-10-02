@@ -14,6 +14,12 @@ and HemeLB XML5 inputs and extraction/checkpoint versions 4, 5, and 6. New XML
 and output use version 6, with pressure in Pa. See the
 [changelog](CHANGELOG.md) and [compatibility guide](doc/user/scalability-and-inputs.md).
 
+The geometry GUI has a scrollable editor and combines repeated preview updates
+into one repaint. It opens both `.pr2` and legacy `.pro` profiles, and displays
+pressure in mmHg with phase in radians. See the
+[GUI walkthrough](doc/user/geometry-tool.md#run-gui) and
+[validation record](doc/dev/geometry-gui-validation.md).
+
 ## Install
 
 On macOS or Debian/Ubuntu Linux, from a terminal:
@@ -44,7 +50,7 @@ contains the matching STL, geometry-tool profile, GMY, and XML configuration.
 | :--- | :--- |
 | Install, customize paths, or resolve setup problems | [Installation](doc/user/install.md) |
 | Run your first simulation | [Quick start](doc/user/getting-started.md) |
-| Prepare your own STL and inlet/outlet profile | [Geometry tool](doc/user/geometry-tool.md) |
+| Prepare your own STL and inlet/outlet profile | [Geometry GUI](doc/user/geometry-tool.md#run-gui) |
 | Choose units, boundaries, and outputs | [XML configuration](doc/user/XmlConfiguration.md) |
 | Build manually or on a cluster | [Build and run](doc/user/main-application.md), [CMake options](doc/user/CMakeOptions.md) |
 | Restart from saved fluid distributions | [Checkpoint workflow](doc/user/checkpoints.md) |
