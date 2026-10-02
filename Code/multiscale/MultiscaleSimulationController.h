@@ -10,6 +10,7 @@
 #include "lb/iolets/InOutLetMultiscale.h"
 #include "multiscale/Intercommunicator.h"
 #include "SimulationController.h"
+#include "configuration/SimBuilder.h"
 #include "util/span.h"
 
 namespace hemelb::multiscale
@@ -22,12 +23,16 @@ namespace hemelb::multiscale
     class MultiscaleSimulationController : public SimulationController
     {
     public:
-        MultiscaleSimulationController(configuration::CommandLine &options,
-                                   const net::IOCommunicator& ioComm,
-                                   Intercommunicator & aintercomms) :
-            SimulationController(options, ioComm), intercomms(aintercomms),
-                multiscaleIoletType("inoutlet")
-        {
+      MultiscaleSimulationController(configuration::CommandLine &options,
+                                     const net::IOCommunicator &ioComm,
+                                     Intercommunicator &aintercomms)
+          : SimulationController(ioComm), intercomms(aintercomms), multiscaleIoletType("inoutlet")
+      {
+          timings.total().Start();
+          fileManager = std::make_shared<configuration::PathManager>(options, ioComm.OnIORank(),
+                                                                     ioComm.Size());
+          simConfig = configuration::SimConfig::New(fileManager->GetInputFile());
+          configuration::SimBuilder(simConfig).build<Traits<>>(*this);
           // We only have one shared object type so far, an iolet.
           lb::InOutLetMultiscale::DefineType(multiscaleIoletType);
 
@@ -182,7 +187,7 @@ namespace hemelb::multiscale
           log::Logger::Log<log::Debug, log::OnePerCore>("MSController ShareICs started...");
           intercomms.ShareInitialConditions();
           log::Logger::Log<log::Debug, log::OnePerCore>("MSController Init finished!");
-        }
+      }
 
         void PrintVectorList(std::vector<std::vector<site_t> > v)
         {

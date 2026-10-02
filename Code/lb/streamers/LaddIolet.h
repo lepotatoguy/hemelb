@@ -43,7 +43,7 @@ namespace hemelb::lb
             // link and a1_i = w_1 / cs2
 
             int boundaryId = site.GetIoletId();
-            auto iolet = dynamic_cast<InOutLetVelocity*>(bValues->GetLocalIolet(boundaryId));
+            auto iolet = dynamic_cast<InOutLetVelocity *>(bValues->GetGlobalIolet(boundaryId));
             LatticePosition sitePos(site.GetGlobalSiteCoords());
 
             LatticePosition halfWay(sitePos);

@@ -197,38 +197,16 @@ namespace hemelb::extraction
                          << uint32_t(code::type_to_enum(field.typecode))
                          << field.noffsets;
 
-            double scale = overload_visit(field.src,
-                                          [&](source::Pressure) {
-                                              return dPressure;
-                                          },
-                                          [&](source::Velocity) {
-                                              return dx / dt;
-                                          },
-                                          [&](source::ShearStress) {
-                                              return dPressure;
-                                          },
-                                          [&](source::VonMisesStress) {
-                                              return dPressure;
-                                          },
-                                          [&](source::ShearRate) {
-                                              return 1.0 / dt;
-                                          },
-                                          [&](source::StressTensor) {
-                                              return dPressure;
-                                          },
-                                          [&](source::Traction) {
-                                              return dPressure;
-                                          },
-                                          [&](source::TangentialProjectionTraction) {
-                                              return dPressure;
-                                          },
-                                          [](source::Distributions) {
-                                              return 0.0;
-                                          },
-                                          [](source::MpiRank) {
-                                              return 0.0;
-                                          }
-            );
+            double scale = overload_visit(
+                field.src, [&](source::Pressure) { return dPressure; }, [&](source::Velocity)
+                { return dx / dt; }, [&](source::ShearStress) { return dPressure; },
+                [&](source::VonMisesStress) { return dPressure; }, [&](source::ShearRate)
+                { return 1.0 / dt; }, [&](source::StressTensor) { return dPressure; },
+                [&](source::Traction) { return dPressure; },
+                [&](source::TangentialProjectionTraction) { return dPressure; },
+                [&](source::NormalProjectionTraction) { return dPressure; },
+                [&](source::WallExtension) { return dx; },
+                [](source::Distributions) { return 0.0; }, [](source::MpiRank) { return 0.0; });
             std::visit([&](auto&& tag) {
                            using T = decltype(tag);
                            // Configured pressure offsets are in Pa; the file adds offsets before scaling.
@@ -245,7 +223,8 @@ namespace hemelb::extraction
 
     bool LocalPropertyOutput::ShouldWrite(unsigned long timestepNumber) const
     {
-      return ( (timestepNumber % outputSpec.frequency) == 0);
+        return timestepNumber >= outputSpec.start && timestepNumber <= outputSpec.stop &&
+               (timestepNumber % outputSpec.frequency) == 0;
     }
 
     const PropertyOutputFile& LocalPropertyOutput::GetOutputSpec() const
@@ -312,53 +291,60 @@ namespace hemelb::extraction
                     for (auto& fieldSpec: outputSpec.fields)
                     {
                         overload_visit(
-                                fieldSpec.src,
-                                [&](source::Pressure) {
-                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetPressure());
-                                },
-                                [&](source::Velocity) {
-                                    auto&& v = dataSource->GetVelocity();
-                                    write(xdrWriter, fieldSpec.typecode, v.x(), v.y(), v.z());
-                                },
-                                //! @TODO: Work out how to handle the different stresses.
-                                [&](source::VonMisesStress) {
-                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetVonMisesStress());
-                                },
-                                [&](source::ShearStress) {
-                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetShearStress());
-                                },
-                                [&](source::ShearRate) {
-                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetShearRate());
-                                },
-                                [&](source::StressTensor) {
-                                    util::Matrix3D tensor = dataSource->GetStressTensor();
-                                    // Only the upper triangular part of the symmetric
-                                    // tensor is stored. Storage is row-wise.
-                                    write(xdrWriter, fieldSpec.typecode,
-                                          tensor[0][0], tensor[0][1], tensor[0][2],
-                                          tensor[1][1], tensor[1][2],
-                                          tensor[2][2]);
-                                },
-                                [&](source::Traction) {
-                                    auto&& t = dataSource->GetTraction();
-                                    write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
-                                },
-                                [&](source::TangentialProjectionTraction) {
-                                    auto&& t = dataSource->GetTangentialProjectionTraction();
-                                    write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
-                                },
-                                [&](source::Distributions) {
-                                    unsigned numComponents = dataSource->GetNumVectors();
-                                    distribn_t const* d_ptr = dataSource->GetDistribution();
-                                    for (auto i = 0U; i < numComponents; i++)
-                                    {
-                                        write(xdrWriter, fieldSpec.typecode, d_ptr[i]);
-                                    }
-                                },
-                                [&](source::MpiRank) {
-                                    write(xdrWriter, fieldSpec.typecode, comms.Rank());
+                            fieldSpec.src, [&](source::Pressure)
+                            { write(xdrWriter, fieldSpec.typecode, dataSource->GetPressure()); },
+                            [&](source::Velocity)
+                            {
+                                auto &&v = dataSource->GetVelocity();
+                                write(xdrWriter, fieldSpec.typecode, v.x(), v.y(), v.z());
+                            },
+                            //! @TODO: Work out how to handle the different stresses.
+                            [&](source::VonMisesStress) {
+                                write(xdrWriter, fieldSpec.typecode,
+                                      dataSource->GetVonMisesStress());
+                            },
+                            [&](source::ShearStress)
+                            { write(xdrWriter, fieldSpec.typecode, dataSource->GetShearStress()); },
+                            [&](source::ShearRate)
+                            { write(xdrWriter, fieldSpec.typecode, dataSource->GetShearRate()); },
+                            [&](source::StressTensor)
+                            {
+                                util::Matrix3D tensor = dataSource->GetStressTensor();
+                                // Only the upper triangular part of the symmetric
+                                // tensor is stored. Storage is row-wise.
+                                write(xdrWriter, fieldSpec.typecode, tensor[0][0], tensor[0][1],
+                                      tensor[0][2], tensor[1][1], tensor[1][2], tensor[2][2]);
+                            },
+                            [&](source::Traction)
+                            {
+                                auto &&t = dataSource->GetTraction();
+                                write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
+                            },
+                            [&](source::TangentialProjectionTraction)
+                            {
+                                auto &&t = dataSource->GetTangentialProjectionTraction();
+                                write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
+                            },
+                            [&](source::NormalProjectionTraction)
+                            {
+                                auto t = dataSource->GetNormalProjectionTraction();
+                                write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
+                            },
+                            [&](source::WallExtension) {
+                                write(xdrWriter, fieldSpec.typecode,
+                                      dataSource->GetWallExtension());
+                            },
+                            [&](source::Distributions)
+                            {
+                                unsigned numComponents = dataSource->GetNumVectors();
+                                distribn_t const *d_ptr = dataSource->GetDistribution();
+                                for (auto i = 0U; i < numComponents; i++)
+                                {
+                                    write(xdrWriter, fieldSpec.typecode, d_ptr[i]);
                                 }
-                        );
+                            },
+                            [&](source::MpiRank)
+                            { write(xdrWriter, fieldSpec.typecode, comms.Rank()); });
                     }
                 }
             }
@@ -415,37 +401,13 @@ namespace hemelb::extraction
 
     unsigned LocalPropertyOutput::GetFieldLength(source::Type src) const
     {
-      return overload_visit(src,
-	[](source::Pressure) {
-	  return 1U;
-	},
-	[](source::Velocity) {
-	  return 3U;
-	},
-	[](source::ShearStress) {
-	  return 1U;
-	},
-	[](source::VonMisesStress) {
-	  return 1U;
-	},
-	[](source::ShearRate) {
-	  return 1U;
-	},
-	[](source::StressTensor) {
-	  return 6U;
-	},
-	[](source::Traction) {
-	  return 3U;
-	},
-	[](source::TangentialProjectionTraction) {
-	  return 3U;
-	},
-	[&](source::Distributions) {
-	  return dataSource->GetNumVectors();
-	},
-	[](source::MpiRank) {
-	  return 1U;
-	}
-      );
+        return overload_visit(
+            src, [](source::Pressure) { return 1U; }, [](source::Velocity) { return 3U; },
+            [](source::ShearStress) { return 1U; }, [](source::VonMisesStress) { return 1U; },
+            [](source::ShearRate) { return 1U; }, [](source::StressTensor) { return 6U; },
+            [](source::Traction) { return 3U; }, [](source::TangentialProjectionTraction)
+            { return 3U; }, [](source::NormalProjectionTraction) { return 3U; },
+            [](source::WallExtension) { return 1U; }, [&](source::Distributions)
+            { return dataSource->GetNumVectors(); }, [](source::MpiRank) { return 1U; });
     }
 }

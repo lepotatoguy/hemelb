@@ -233,7 +233,9 @@ namespace hemelb::tests
         REQUIRE(tree.levels[0].sites_per_node[0] == 3);
     }
 
-    TEST_CASE_METHOD(helpers::FolderTestFixture, "Geometry reader ignores gmy+ weights", "[geometry]") {
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "Geometry reader retains gmy+ costs and identical site records", "[geometry]")
+    {
         CopyResourceToTempdir("large_cylinder.gmy");
         MoveToTempdir();
         std::ifstream input("large_cylinder.gmy", std::ios::binary);
@@ -254,6 +256,9 @@ namespace hemelb::tests
         auto plain = reader.LoadAndDecompose("large_cylinder.gmy");
         auto weighted = weightedReader.LoadAndDecompose("weighted.gmy+");
         REQUIRE(plain.Blocks.size() == weighted.Blocks.size());
+        REQUIRE(!weighted.computationalWeights.empty());
+        for (auto const &[id, cost] : weighted.computationalWeights)
+            REQUIRE(cost == 17);
         for (auto const& [id, block]: plain.Blocks) {
             auto const& other = weighted.Blocks.at(id);
             REQUIRE(block.Sites.size() == other.Sites.size());
@@ -275,5 +280,4 @@ namespace hemelb::tests
         }
         REQUIRE(times.parmetis().Get() == 0);
     }
-
 }

@@ -7,6 +7,7 @@
 #define HEMELB_EXTRACTION_PROPERTYOUTPUTFILE_H
 
 #include <filesystem>
+#include <limits>
 #include <variant>
 #include <vector>
 
@@ -31,6 +32,8 @@ namespace hemelb::extraction
     util::clone_ptr<GeometrySelector> geometry;
     std::vector<OutputField> fields;
     file_timestep_mode ts_mode;
+    unsigned long start = 0;
+    unsigned long stop = std::numeric_limits<unsigned long>::max();
   };
 }
 

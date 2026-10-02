@@ -6,6 +6,7 @@ on:
       - main
       - 'fix/**'
       - 'feature/**'
+      - 'feat/**'
     paths:
       - '.github/workflows/py-*'
       - 'python-tools/**'

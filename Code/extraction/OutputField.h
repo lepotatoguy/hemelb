@@ -25,23 +25,20 @@ namespace hemelb::extraction
     struct StressTensor {};
     struct Traction {};
     struct TangentialProjectionTraction {};
+    struct NormalProjectionTraction
+    {
+    };
+    struct WallExtension
+    {
+    };
     struct Distributions {};
     struct MpiRank {};
 
     // Variant of tags. This is a finite sum type so can get compiler
     // to exhaustively check for use (much neater than an enum!).
-    using Type = std::variant<
-      Pressure,
-      Velocity,
-      ShearStress,
-      VonMisesStress,
-      ShearRate,
-      StressTensor,
-      Traction,
-      TangentialProjectionTraction,
-      Distributions,
-      MpiRank
-    >;
+    using Type = std::variant<Pressure, Velocity, ShearStress, VonMisesStress, ShearRate,
+                              StressTensor, Traction, TangentialProjectionTraction,
+                              NormalProjectionTraction, WallExtension, Distributions, MpiRank>;
   }
 
   // Namespace holding variant and helpers for the type to be saved to

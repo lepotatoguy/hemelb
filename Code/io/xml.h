@@ -18,6 +18,7 @@
 
 #include "Exception.h"
 #include "util/traits.h"
+#include "util/ReadFloatingPoint.h"
 
 namespace tinyxml2 {
     // Forward declare the TinyXML types needed.
@@ -762,7 +763,10 @@ namespace hemelb::io::xml
         // Read bools as true/false
         attrStream >> std::noskipws >> std::boolalpha;
 
-        attrStream >> out;
+        if constexpr (std::is_floating_point_v<T>)
+            util::ReadFloatingPoint(attrStream, out);
+        else
+            attrStream >> out;
         if (attrStream.fail())
         {
             throw DeserialisationError(*this, name, s) << " error in extraction operator";

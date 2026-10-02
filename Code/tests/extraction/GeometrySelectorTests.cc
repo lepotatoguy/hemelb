@@ -18,6 +18,7 @@
 #include "extraction/GeometrySurfaceSelector.h"
 #include "extraction/SurfacePointSelector.h"
 #include "extraction/IoletGeometrySelector.h"
+#include "extraction/SphereGeometrySelector.h"
 
 #include "tests/helpers/FourCubeLatticeData.h"
 #include "tests/helpers/HasCommsTestFixture.h"
@@ -75,6 +76,29 @@ namespace hemelb::tests
 	REQUIRE(!geometrySelector.Include(dataSourceIterator, invalidLocation));
       };
 
+      SECTION("Sphere and surface within sphere")
+      {
+          PhysicalPosition centre{0.04, 0.04, 0.04};
+          double radius = 0.04;
+          extraction::SphereGeometrySelector sphere(centre, radius), surface(centre, radius, true);
+          TestOutOfGeometrySites(sphere);
+          TestOutOfGeometrySites(surface);
+          dataSourceIterator.Reset();
+          while (dataSourceIterator.ReadNext())
+          {
+              auto location = dataSourceIterator.GetPosition();
+              auto point = location.as<double>() * dataSourceIterator.GetVoxelSize() +
+                           dataSourceIterator.GetOrigin().as<double>();
+              bool inside = (point - centre).GetMagnitudeSquared() <= radius * radius;
+              REQUIRE(sphere.Include(dataSourceIterator, location) == inside);
+              REQUIRE(surface.Include(dataSourceIterator, location) ==
+                      (inside && dataSourceIterator.IsWallSite(location)));
+          }
+          REQUIRE_THROWS(extraction::SphereGeometrySelector(centre, 0));
+          REQUIRE_THROWS(extraction::SphereGeometrySelector(centre, -1));
+          auto copy = std::unique_ptr<extraction::GeometrySelector>(surface.clone());
+          REQUIRE(dynamic_cast<extraction::SphereGeometrySelector *>(copy.get())->IsSurfaceOnly());
+      }
 
       SECTION("IoletGeometrySelector") {
           extraction::IoletGeometrySelector inlet(true), outlet(false);

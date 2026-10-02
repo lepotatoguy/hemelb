@@ -7,6 +7,7 @@
 #define HEMELB_LB_STREAMERS_STREAMERTYPEFACTORY_H
 
 #include "lb/streamers/Common.h"
+#include "lb/iolets/BoundaryValues.h"
 #include "lb/streamers/BulkStreamer.h"
 
 namespace hemelb::lb
@@ -37,11 +38,13 @@ namespace hemelb::lb
         BulkLink<CollisionType> bulkLinkDelegate;
         WallLinkImpl wallLinkDelegate;
         IoletLinkImpl ioletLinkDelegate;
+        BoundaryValues *boundaries;
 
-    public:
-        StreamerTypeFactory(InitParams& initParams) :
-                collider(initParams), bulkLinkDelegate(collider, initParams),
-                wallLinkDelegate(collider, initParams), ioletLinkDelegate(collider, initParams)
+      public:
+        StreamerTypeFactory(InitParams &initParams)
+            : collider(initParams), bulkLinkDelegate(collider, initParams),
+              wallLinkDelegate(collider, initParams), ioletLinkDelegate(collider, initParams),
+              boundaries(initParams.boundaryObject)
         {
         }
 
@@ -60,6 +63,11 @@ namespace hemelb::lb
 
                 collider.CalculatePreCollision(hydroVars, site);
 
+                if constexpr (can_have_iolet)
+                {
+                    boundaries->GetGlobalIolet(site.GetIoletId())
+                        ->ObserveSite(hydroVars.density, hydroVars.velocity);
+                }
                 collider.Collide(lbmParams, hydroVars);
 
                 for (Direction ii = 0; ii < LatticeType::NUMVECTORS; ii++)

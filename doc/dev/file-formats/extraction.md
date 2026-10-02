@@ -65,6 +65,22 @@ Each record consists of:
       stores a lattice pressure difference and its field offset is reference
       pressure divided by the pressure scale.
 
+## Physical units and legacy formats
+
+The default Python reader returns velocity in m/s, pressure and stresses in Pa,
+and wall extension in metres for version 6. `physical_units=False` skips scale
+multiplication but still restores stored offsets. Version 4/5 headers are
+60 bytes, omit timestep/mass/reference-pressure metadata, and encode no
+per-field scale. Version 4 fields have a component count and one double offset
+without a type code; all field bodies are floats. Version 5 adds type codes
+and configurable offsets. Both legacy formats store physical values using the
+original writer's conventions, typically mmHg pressure. The reader does not
+convert those legacy pressures to Pa.
+
+New `.xtr` files are read with this branch's tools; backward loading support
+does not imply that older binaries can read version 6 output. See
+[field extraction](../../user/extraction.md) and [Python tools](../../user/python-tools.md).
+
 ## Offset files
 The offset files are a companion to this file - see
 [offset.md](offset.md) for details.

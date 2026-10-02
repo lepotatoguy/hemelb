@@ -69,17 +69,20 @@ namespace hemelb
 	  MultiscaleSimulationController<MPWideIntercommunicator> heme(options, Comms(), intercomms);
 	  // Mock out the behaviour of the simulation iteration, but with the other model linked in.
 	  //std::cout << "HemeLB about to be run..." << std::endl;
-	  while (heme.GetState()->GetTime() < 20.0) {
-	    heme.DoTimeStep();
-	    //std::cout << "Step taken, going to incrementSharedTime." << std::endl;
-	    intercomms.UnitTestIncrementSharedTime(); //simple hack func that mocks a 1.0 increase in the 'other' simulation.
-	  }
-	  heme.Finalise();
-	  REQUIRE(heme.GetState()->GetTime() == Approx(20.0));
-	  //CPPUNIT_ASSERT_DOUBLES_EQUAL(zerod->currentTime, 20.5, 1e-6); // does one more step, where it sets the shared time.
-	}
+          while (heme.GetState().GetTime() < 20.0)
+          {
+              heme.DoTimeStep();
+              // std::cout << "Step taken, going to incrementSharedTime." << std::endl;
+              intercomms.UnitTestIncrementSharedTime(); // simple hack func that mocks a 1.0
+                                                        // increase in the 'other' simulation.
+          }
+          heme.Finalise();
+          REQUIRE(heme.GetState().GetTime() == Approx(20.0));
+          // CPPUNIT_ASSERT_DOUBLES_EQUAL(zerod->currentTime, 20.5, 1e-6); // does one more step,
+          // where it sets the shared time.
+        }
 
-	delete mockheme;
+        delete mockheme;
 	delete pbuffer;
 	delete LBorchestration;
       }

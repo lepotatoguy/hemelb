@@ -216,6 +216,14 @@ def check_cr(log, filename, fix=False):
         log.info(filename, "Skipping non-source file")
         return True
 
+    # Imported reference cases retain their source license and attribution.
+    # Their provenance is recorded in cases/hemepure/README.md; do not relabel them.
+    repository = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    relative = os.path.relpath(filename, repository).replace(os.sep, "/")
+    if relative.startswith("cases/hemepure/"):
+        log.info(filename, "Skipping reference case with retained HemePure license")
+        return True
+
     if filename in excluded_files:
         log.info(filename, "Skipping file as not checked")
         return True

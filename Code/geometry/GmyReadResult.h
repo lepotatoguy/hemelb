@@ -44,42 +44,37 @@ namespace hemelb::geometry
     class GmyReadResult
     {
     public:
-        /**
-         * Default constructor initialises internal variables
-         */
-        GmyReadResult(const Vec16& dimensionsInBlocks, U16 blockSize);
+      std::map<U64, U64> computationalWeights;
+      /**
+       * Default constructor initialises internal variables
+       */
+      GmyReadResult(const Vec16 &dimensionsInBlocks, U16 blockSize);
 
-        //! Destructor has to be defined in a TU where LookupTree is defined
-        ~GmyReadResult();
-        GmyReadResult(GmyReadResult&&) = default;
-        GmyReadResult& operator=(GmyReadResult&&) = default;
+      //! Destructor has to be defined in a TU where LookupTree is defined
+      ~GmyReadResult();
+      GmyReadResult(GmyReadResult &&) = default;
+      GmyReadResult &operator=(GmyReadResult &&) = default;
 
-        /***
-         * Returns the total count of blocks in the bounding box of the geometry.
-         * @return count of blocks in the geometry.
-         */
-        inline site_t GetBlockCount() const
-        {
-          return blockCount;
-        }
+      /***
+       * Returns the total count of blocks in the bounding box of the geometry.
+       * @return count of blocks in the geometry.
+       */
+      inline site_t GetBlockCount() const { return blockCount; }
 
-        /**
-         * Returns the number of sites in each cubic block.
-         * @return Number of sites in each block of the geometry.
-         */
-        inline site_t GetSitesPerBlock() const
-        {
-          return sitesPerBlock;
-        }
+      /**
+       * Returns the number of sites in each cubic block.
+       * @return Number of sites in each block of the geometry.
+       */
+      inline site_t GetSitesPerBlock() const { return sitesPerBlock; }
 
-        /***
-         * Get the i.d. of a block, i.e. the one-d coordinate, from the three-d coordinate.
-         * @todo Use this to replace domain_type::GetBlockGmyIdxFromBlockCoords
-         */
-        inline site_t GetBlockIdFromBlockCoordinates(U16 blockI, U16 blockJ, U16 blockK) const
-        {
+      /***
+       * Get the i.d. of a block, i.e. the one-d coordinate, from the three-d coordinate.
+       * @todo Use this to replace domain_type::GetBlockGmyIdxFromBlockCoords
+       */
+      inline site_t GetBlockIdFromBlockCoordinates(U16 blockI, U16 blockJ, U16 blockK) const
+      {
           return (site_t(blockI) * dimensionsInBlocks.y() + blockJ) * dimensionsInBlocks.z() + blockK;
-        }
+      }
 
         inline U64 GetBlockIdFromBlockCoordinates(Vec16 ijk) const {
             auto IJK = ijk.as<U64>();

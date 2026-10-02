@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# This file is part of HemeLB and is Copyright (C)
+# the HemeLB team and/or their institutions, as detailed in the
+# file AUTHORS. This software is provided under the terms of the
+# license in the file LICENSE.
+
 """Verify decomposition modes, single-read geometry I/O, and performance formulas."""
 import argparse
 import math

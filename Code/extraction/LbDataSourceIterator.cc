@@ -8,10 +8,12 @@
 
 namespace hemelb::extraction
 {
-    LbDataSourceIterator::LbDataSourceIterator(const lb::MacroscopicPropertyCache& propertyCache,
-                                               const geometry::FieldData& data, int rank_,
-                                               std::shared_ptr<util::UnitConverter> converter) :
-            propertyCache(propertyCache), data(data), rank(rank_), converter(std::move(converter)), position(-1)
+    LbDataSourceIterator::LbDataSourceIterator(const lb::MacroscopicPropertyCache &propertyCache,
+                                               const geometry::FieldData &data, int rank_,
+                                               std::shared_ptr<util::UnitConverter> converter,
+                                               double stiffness, unsigned wallTypes)
+        : propertyCache(propertyCache), data(data), rank(rank_), converter(std::move(converter)),
+          position(-1), elasticWallStiffness(stiffness), elasticWallTypes(wallTypes)
     {
     }
 
@@ -70,6 +72,14 @@ namespace hemelb::extraction
     util::Vector3D<PhysicalStress> LbDataSourceIterator::GetTangentialProjectionTraction() const
     {
       return propertyCache.tangentialProjectionTractionCache.Get(position);
+    }
+
+    FloatingType LbDataSourceIterator::GetWallExtension() const
+    {
+        if (elasticWallStiffness <= 0 || !data.GetSite(position).IsWall() ||
+            !(elasticWallTypes & (1u << data.GetSite(position).GetSiteType())))
+            return 0;
+        return (propertyCache.densityCache.Get(position) - 1) / (3 * elasticWallStiffness);
     }
 
     const distribn_t* LbDataSourceIterator::GetDistribution() const

@@ -4,193 +4,148 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-"""Poiseuille flow regression test.
+"""Generate a pipe, run low-Mach steady flow, and check its Poiseuille profile.
 
-Generates a straight pipe from resources/poiseuille_flow_test.pr2 with
-hlb-gmy-cli, runs HemeLB with a 16 mmHg pressure difference, and compares
-the velocity across the pipe with the analytical Poiseuille profile.
-
-Needs hemelb, hlb-gmy-cli (geometry tool) and the hlb Python tools. Set
-HEMELB_EXECUTABLE to choose the hemelb binary (default: hemelb on PATH) and
-MPIRUN_FLAGS for extra launcher flags (for example --oversubscribe).
-
-Run with:  python3 poiseuilleflowtest.py
+Needs hemelb, hlb-gmy-cli and the hlb Python tools. HEMELB_EXECUTABLE selects
+an alternative solver; MPIRUN_FLAGS supplies additional MPI launcher flags.
+Run with: python3 poiseuilleflowtest.py
 """
 
 import os
+from pathlib import Path
 import shlex
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
+import numpy as np
 import yaml
 
 from hlb.parsers.extraction import ExtractedProperty
 
-try:
-    import matplotlib
-
-    matplotlib.use("Agg")  # write the plot to a file; no window needed
-    from matplotlib import pyplot as plt
-except ImportError:  # plotting is optional
-    plt = None
-
-RESOURCES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")
+RESOURCES = Path(__file__).resolve().parent / "resources"
+STEPS = 6000
+DT = 1e-4
+PRESSURE_DIFF = 0.02 * 133.3223874  # Pa, matching the upstream cylinder regression
+VISCOSITY = 4e-3  # default dynamic viscosity, Pa s
+LENGTH = 0.06  # inlet-to-outlet separation, m
 
 
 def prepare_inputs(directory):
-    """Generate the geometry and XML, then add the run length and outputs.
-
-    The run length and the two line extractions are those of
-    resources/poiseuille_flow_test_master.xml, written in the current XML format.
-    """
     for name in ("poiseuille_flow_test.pr2", "poiseuille_flow_test.stl"):
-        shutil.copy(os.path.join(RESOURCES, name), directory)
-    # The sample profile's iolets (radius 0.75 mm) are no wider than the pipe,
-    # so they do not open its ends and no flow develops. Use 1.5 mm.
-    profile = os.path.join(directory, "poiseuille_flow_test.pr2")
-    with open(profile) as stream:
-        state = yaml.safe_load(stream)
+        shutil.copy(RESOURCES / name, directory)
+    profile = directory / "poiseuille_flow_test.pr2"
+    state = yaml.safe_load(profile.read_text())
+    # Open both ends: the original cutting disks are no wider than the pipe.
     for iolet in state["Iolets"]:
         iolet["Radius"] = 1.5
-    with open(profile, "w") as stream:
-        yaml.safe_dump(state, stream)
+        iolet["Pressure"]["x"] = 0.02 if iolet["Type"] == "Inlet" else 0.0
+    profile.write_text(yaml.safe_dump(state))
     subprocess.run(
-        ["hlb-gmy-cli", "poiseuille_flow_test.pr2"],
+        ["hlb-gmy-cli", profile.name],
         cwd=directory,
         check=True,
         stdout=subprocess.DEVNULL,
+        timeout=120,
     )
-    xml_path = os.path.join(directory, "poiseuille_flow_test.xml")
+    xml_path = directory / "poiseuille_flow_test.xml"
     tree = ET.parse(xml_path)
     root = tree.getroot()
-    root.find("simulation/steps").set("value", "6000")
-    root.find("simulation/step_length").set("value", "5e-06")
+    root.find("simulation/steps").set("value", str(STEPS))
+    # The former 5 microsecond step put tau very close to 0.5 and the run aborted.
+    root.find("simulation/step_length").set("value", str(DT))
     properties = ET.SubElement(root, "properties")
     for filename, field_type, field_name in (
         ("velocity_40mm_in.dat", "velocity", "velocity_40mm_in"),
         ("shear_stress_40mm_in.dat", "shearstress", "shear_stress_40mm_in"),
     ):
         output = ET.SubElement(
-            properties, "propertyoutput", file=filename, period="6000"
+            properties,
+            "propertyoutput",
+            file=filename,
+            period="1",
+            start=str(STEPS - 1),
+            stop=str(STEPS - 1),
         )
-        line = ET.SubElement(output, "geometry", type="line")
-        ET.SubElement(line, "point", value="(-0.75e-3,0.0,10e-3)", units="m")
-        ET.SubElement(line, "point", value="(0.75e-3,0.0,10e-3)", units="m")
+        if field_type == "shearstress":
+            # Wall shear stress is undefined on interior fluid sites.
+            ET.SubElement(output, "geometry", type="surface")
+        else:
+            line = ET.SubElement(output, "geometry", type="line")
+            ET.SubElement(line, "point", value="(-0.75e-3,0.0,10e-3)", units="m")
+            ET.SubElement(line, "point", value="(0.75e-3,0.0,10e-3)", units="m")
         ET.SubElement(output, "field", type=field_type, name=field_name)
     tree.write(xml_path)
 
 
 class TestPoiseuilleFlowTest(unittest.TestCase):
     @classmethod
-    def setUpClass(self):
-        self.viscosity = 4e-3  # HemeLB's default dynamic viscosity (Pa s)
-        self.pressure_diff = 16 * 133.3223874  # 16mmHg in Pa
-        self.pipe_length = 6e-2  # 60mm in m
-
-        self.temp_dir = tempfile.mkdtemp("_HemeLB_RegressionTest")
+    def setUpClass(cls):
         hemelb = os.environ.get("HEMELB_EXECUTABLE") or shutil.which("hemelb")
         if hemelb is None:
-            raise unittest.SkipTest("hemelb not found; set HEMELB_EXECUTABLE")
-        shutil.copy(hemelb, os.path.join(self.temp_dir, "hemelb"))
-        prepare_inputs(self.temp_dir)
-        os.chdir(self.temp_dir)
-
-    def test_run_simulation_and_check_output_created(self):
+            raise RuntimeError("hemelb not found; set HEMELB_EXECUTABLE")
+        cls.workspace = tempfile.TemporaryDirectory(suffix="_HemeLB_RegressionTest")
+        cls.addClassCleanup(cls.workspace.cleanup)
+        cls.directory = Path(cls.workspace.name)
+        prepare_inputs(cls.directory)
         command = (
             ["mpirun"]
             + shlex.split(os.environ.get("MPIRUN_FLAGS", ""))
-            + ["-np", "4", "./hemelb", "-in", "poiseuille_flow_test.xml", "-out", "results"]
+            + [
+                "-np",
+                "4",
+                str(Path(hemelb).resolve()),
+                "-in",
+                "poiseuille_flow_test.xml",
+                "-out",
+                "results",
+            ]
         )
-        try:
-            subprocess.call(command)
-        except OSError as e:
-            print("Call to HemeLB failed:", e, file=sys.stderr)
+        subprocess.run(command, cwd=cls.directory, check=True, timeout=600)
 
-        # Make sure the .dat files have been created
-        self.assertTrue(os.path.isfile("results/Extracted/velocity_40mm_in.dat"))
-        self.assertTrue(os.path.isfile("results/Extracted/shear_stress_40mm_in.dat"))
-
-    def compute_analytical_velocity(self, site_data):
-        x_coord = site_data[0]
-        dist_centre = abs(self.centre - x_coord)
-        analytical_vel = (
-            (1 / (4 * self.viscosity))
-            * (self.pressure_diff / self.pipe_length)
-            * (pow(self.radius, 2) - pow(dist_centre, 2))
-        )
-        return analytical_vel
+    def sample(self, filename):
+        prop = ExtractedProperty(str(self.directory / "results/Extracted" / filename))
+        self.assertGreater(prop.siteCount, 0)
+        self.assertEqual(list(prop.times), [STEPS - 1])
+        return prop.GetByTimeStep(STEPS - 1)
 
     def test_velocity_profile(self):
-        filename = "results/Extracted/velocity_40mm_in.dat"
-        propFile = ExtractedProperty(filename)
-
-        # Print some basic information about the properties extracted
-        print('# Dump of file "{}"'.format(filename))
-        print("# File has {} sites.".format(propFile.siteCount))
-        print("# File has {} fields:".format(propFile.fieldCount))
-        for name, xdrType, memType, length, offset in propFile._fieldSpec:
-            print('#     "{0}", length {1}'.format(name, length))
-        print("# Geometry origin = {} m".format(propFile.originMetres))
-        print("# Voxel size = {} m".format(propFile.voxelSizeMetres))
-
-        header = "# " + ", ".join(
-            name for name, xdrType, memType, length, offset in propFile._fieldSpec
+        sites = self.sample("velocity_40mm_in.dat")
+        velocity = sites.velocity_40mm_in[:, 2]
+        # Simple bounce-back places the wall half a voxel beyond the outermost
+        # fluid site. Use that effective radius, as in the original regression.
+        dx = ExtractedProperty(
+            str(self.directory / "results/Extracted/velocity_40mm_in.dat")
+        ).voxelSizeMetres
+        radius = (np.ptp(sites.position[:, 0]) + dx) / 2
+        centre = (np.max(sites.position[:, 0]) + np.min(sites.position[:, 0])) / 2
+        radial_distance_squared = (sites.position[:, 0] - centre) ** 2 + sites.position[
+            :, 1
+        ] ** 2
+        analytical = (
+            PRESSURE_DIFF
+            / LENGTH
+            / (4 * VISCOSITY)
+            * (radius**2 - radial_distance_squared)
         )
-        print(header)
+        self.assertTrue(np.all(np.isfinite(velocity)))
+        self.assertTrue(np.all(analytical > 0))
+        self.assertGreater(float(np.max(velocity)), 0)
+        relative_error = np.linalg.norm(velocity - analytical) / np.linalg.norm(
+            analytical
+        )
+        print(f"Poiseuille relative L2 velocity error: {relative_error:.17g}")
+        # The supplied pipe has about nine voxels across its diameter. Allow
+        # its coarse bounce-back wall discretisation error, relative to the
+        # analytical flow, so a zero or undeveloped profile cannot pass.
+        self.assertLess(relative_error, 0.1)
 
-        # Property extraction files could have info for more than one time step depending on the frequency requested
-        for t in propFile.times:
-            sites_along_line = propFile.GetByTimeStep(t)
-            print("# Timestep {:d}".format(t))
-
-            # Create a list of tuples (x_coordinate, z_velocity) for all the sites along the line
-            coord_vel_along_line = [
-                (site.position[0], site.velocity_40mm_in[2]) for site in sites_along_line
-            ]
-            coord_vel_along_line.sort()  # Sorting the lists helps with plotting
-
-            # Work out pipe radius and z coordinate of the axis
-            max_coord = max(coord_vel_along_line)[0]
-            min_coord = min(coord_vel_along_line)[0]
-            self.radius = (
-                (max_coord - min_coord) / 2 + propFile.voxelSizeMetres / 2
-            )  # With bounce back, the actual wall is half a lattice site away
-            self.centre = (max_coord + min_coord) / 2
-
-            # Compute Poiseuille flow analytical solution along the line
-            analytical_solutions = list(
-                map(self.compute_analytical_velocity, coord_vel_along_line)
-            )
-
-            # Plot analytical and simulated velocity profiles
-            [coords, vels] = zip(*coord_vel_along_line)
-            if plt is not None:
-                plt.plot(coords, vels, "o-", label="HemeLB")
-                plt.plot(coords, analytical_solutions, "o-", label="Analytical")
-                plt.xlabel("Lattice site radius")
-                plt.ylabel("Velocity along the z axis")
-                plt.legend()
-                plt.savefig("poiseuille_velocity_profile.png")
-
-            # Compare simulation results with analytical solution
-            for analytical, (z_coord, computed) in zip(
-                analytical_solutions, coord_vel_along_line
-            ):
-                self.assertAlmostEqual(
-                    analytical,
-                    computed,
-                    delta=1e-3,
-                    msg="Velocity {0} differs from analytical solution {1} at site with z coordinate {2}".format(
-                        computed, analytical, z_coord
-                    ),
-                )
-
-    def test_shear_stress_profile(self):
-        pass
+    def test_shear_stress_is_finite_and_nonzero(self):
+        stress = self.sample("shear_stress_40mm_in.dat").shear_stress_40mm_in
+        self.assertTrue(np.all(np.isfinite(stress)))
+        self.assertGreater(float(np.max(np.abs(stress))), 0)
 
 
 if __name__ == "__main__":

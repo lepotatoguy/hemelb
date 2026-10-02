@@ -10,6 +10,7 @@
 
 #include "configuration/SimConfig.h"
 #include "configuration/SimConfigWriter.h"
+#include "configuration/SimConfigReader.h"
 #include "configuration/SimBuilder.h"
 #include "lb/iolets/InOutLetFile.h"
 #include "resources/Resource.h"
@@ -21,6 +22,12 @@ namespace hemelb::tests
     using namespace configuration;
     namespace
     {
+      class SyntaxReader : public SimConfigReader
+      {
+      public:
+          using SimConfigReader::SimConfigReader;
+          void CheckIoletMatchesCMake(const io::xml::Element&, std::string_view) const override {}
+      };
       // For section XMLFileContent
       struct CfgChecker {
 	using result_type = bool;
@@ -101,6 +108,7 @@ namespace hemelb::tests
 
     TEST_CASE_METHOD(helpers::FolderTestFixture, "Legacy configs preserve pressure units and checkpoint settings", "[configuration]") {
         const unsigned version = GENERATE(3U, 5U);
+        const std::string kind = GENERATE("pressure", "yangpressure");
         io::xml::Document doc(resources::Resource("config.xml").Path());
         auto root = doc.GetRoot();
         root.SetAttribute("version", version);
@@ -114,6 +122,7 @@ namespace hemelb::tests
         auto condition = inlet.GetChildOrThrow("condition");
         for (auto name: {"amplitude", "mean", "phase", "period"}) condition.GetChildOrThrow(name).Delete();
         condition.SetAttribute("subtype", "file");
+        condition.SetAttribute("type", kind);
         condition.AddChild("path").SetAttribute("value", "pressure.txt");
         if (version == 3) {
             auto position = inlet.GetChildOrThrow("position");
@@ -123,7 +132,8 @@ namespace hemelb::tests
         checkpoint.SetAttribute("file", "old-%d.xtr"); checkpoint.SetAttribute("period", 10U);
         doc.SaveFile("legacy.xml");
         std::ofstream("pressure.txt") << "0 3\n1 4\n2 3\n";
-        auto config = SimConfig::New("legacy.xml");
+        auto config = kind == "yangpressure" ? SyntaxReader("legacy.xml").Read()
+                                             : SimConfig::New("legacy.xml");
         REQUIRE(Approx(3 * mmHg_TO_PASCAL) == std::get<EquilibriumIC>(config.GetInitialCondition()).p_Pa);
         REQUIRE(Approx(2 * mmHg_TO_PASCAL) == config.GetSimInfo().fluid.reference_pressure_Pa);
         const auto& file = std::get<FilePressureIoletConfig>(config.GetInlets()[0]);

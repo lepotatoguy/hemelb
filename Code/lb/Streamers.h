@@ -13,8 +13,10 @@
 #include "lb/streamers/SimpleBounceBack.h"
 #include "lb/streamers/BouzidiFirdaousLallemand.h"
 #include "lb/streamers/GuoZhengShi.h"
+#include "lb/streamers/GuoZhengShiElasticWall.h"
 #include "lb/streamers/JunkYang.h"
 #include "lb/streamers/NashZerothOrderPressure.h"
+#include "lb/streamers/YangPressure.h"
 #include "lb/streamers/LaddIolet.h"
 
 namespace hemelb::lb {
@@ -26,11 +28,21 @@ namespace hemelb::lb {
                 return StreamerTypeFactory < BouzidiFirdaousLallemandLink < C >, NullLink < C >> {i};
             } else if constexpr (WALL == "GZS") {
                 return StreamerTypeFactory < GuoZhengShiLink < C >, NullLink < C >> {i};
-            } else if constexpr (WALL == "SIMPLEBOUNCEBACK") {
+            }
+            else if constexpr (WALL == "GZSElastic")
+            {
+                return StreamerTypeFactory<GuoZhengShiElasticWallLink<C>, NullLink<C>>{i};
+            }
+            else if constexpr (WALL == "SIMPLEBOUNCEBACK")
+            {
                 return StreamerTypeFactory < BounceBackLink < C >, NullLink < C >> {i};
-            } else if constexpr (WALL == "JUNKYANG") {
+            }
+            else if constexpr (WALL == "JUNKYANG")
+            {
                 return JunkYangFactory<NullLink<C> >{i};
-            } else {
+            }
+            else
+            {
                 throw (Exception() << "Configured with invalid WALL_BOUNDARY");
             }
         }
@@ -42,12 +54,20 @@ namespace hemelb::lb {
                         NullLink<C>,
                         NashZerothOrderPressureLink < C >
                 >{i};
-            } else if constexpr (NAME == "LADDIOLET") {
+            }
+            else if constexpr (NAME == "YANGPRESSUREIOLET")
+            {
+                return StreamerTypeFactory<NullLink<C>, YangPressureLink<C>>{i};
+            }
+            else if constexpr (NAME == "LADDIOLET")
+            {
                 return StreamerTypeFactory<
                         NullLink<C>,
                         LaddIoletLink < C >
                 >{i};
-            } else {
+            }
+            else
+            {
                 throw (Exception() << "Configured with invalid IOLET boundary");
             }
         }
@@ -86,6 +106,15 @@ namespace hemelb::lb {
         using type = StreamerTypeFactory<WallT<C>, IoletT<C>>;
     };
 
+    // Match the source CPU configuration: Yang applies to pure iolet sites;
+    // wall/iolet intersections retain Nash pressure with the selected wall rule.
+    template <typename C, template <typename> class WallT>
+    struct CombineWallAndIoletStreamers<StreamerTypeFactory<WallT<C>, NullLink<C>>,
+                                        StreamerTypeFactory<NullLink<C>, YangPressureLink<C>>>
+    {
+        using type = StreamerTypeFactory<WallT<C>, NashZerothOrderPressureLink<C>>;
+    };
+
     // Junk Yang is different: the pure wall streamer has a special tag type for no-iolet
     template<
             typename C, // collision
@@ -97,5 +126,56 @@ namespace hemelb::lb {
     > {
         using type = JunkYangFactory<IoletT<C>>;
     };
+    template <typename C>
+    struct CombineWallAndIoletStreamers<JunkYangFactory<NullLink<C>>,
+                                        StreamerTypeFactory<NullLink<C>, YangPressureLink<C>>>
+    {
+        using type = JunkYangFactory<NashZerothOrderPressureLink<C>>;
+    };
+    namespace detail
+    {
+        template <ct_string NAME, typename WS, typename IS>
+        auto get_corner_streamer(InitParams &init)
+        {
+            using C = typename WS::CollisionType;
+            if constexpr (NAME == "AUTO")
+                return typename CombineWallAndIoletStreamers<WS, IS>::type{init};
+            else if constexpr (NAME == "NASHZEROTHORDERPRESSURESBB")
+                return StreamerTypeFactory<BounceBackLink<C>, NashZerothOrderPressureLink<C>>{init};
+            else if constexpr (NAME == "NASHZEROTHORDERPRESSUREBFL")
+                return StreamerTypeFactory<BouzidiFirdaousLallemandLink<C>,
+                                           NashZerothOrderPressureLink<C>>{init};
+            else if constexpr (NAME == "NASHZEROTHORDERPRESSUREGZS")
+                return StreamerTypeFactory<GuoZhengShiLink<C>, NashZerothOrderPressureLink<C>>{
+                    init};
+            else if constexpr (NAME == "NASHZEROTHORDERPRESSUREGZSE")
+                return StreamerTypeFactory<GuoZhengShiElasticWallLink<C>,
+                                           NashZerothOrderPressureLink<C>>{init};
+            else if constexpr (NAME == "YANGPRESSURESBB")
+                return StreamerTypeFactory<BounceBackLink<C>, YangPressureLink<C>>{init};
+            else if constexpr (NAME == "YANGPRESSUREBFL")
+                return StreamerTypeFactory<BouzidiFirdaousLallemandLink<C>, YangPressureLink<C>>{
+                    init};
+            else if constexpr (NAME == "YANGPRESSUREGZS")
+                return StreamerTypeFactory<GuoZhengShiLink<C>, YangPressureLink<C>>{init};
+            else if constexpr (NAME == "YANGPRESSUREGZSE")
+                return StreamerTypeFactory<GuoZhengShiElasticWallLink<C>, YangPressureLink<C>>{
+                    init};
+            else if constexpr (NAME == "LADDIOLETSBB")
+                return StreamerTypeFactory<BounceBackLink<C>, LaddIoletLink<C>>{init};
+            else if constexpr (NAME == "LADDIOLETBFL")
+                return StreamerTypeFactory<BouzidiFirdaousLallemandLink<C>, LaddIoletLink<C>>{init};
+            else if constexpr (NAME == "LADDIOLETGZS")
+                return StreamerTypeFactory<GuoZhengShiLink<C>, LaddIoletLink<C>>{init};
+            else if constexpr (NAME == "LADDIOLETGZSE")
+                return StreamerTypeFactory<GuoZhengShiElasticWallLink<C>, LaddIoletLink<C>>{init};
+            else
+                static_assert(NAME == "AUTO", "Invalid wall/iolet boundary choice");
+        }
+    } // namespace detail
+
+    template <ct_string NAME, typename WS, typename IS>
+    using SelectedCornerStreamer =
+        decltype(detail::get_corner_streamer<NAME, WS, IS>(std::declval<InitParams &>()));
 }
 #endif /* HEMELB_LB_STREAMERS_H */

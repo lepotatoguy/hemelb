@@ -5,12 +5,12 @@ tool and Python tools. It supports macOS (Apple Silicon and Intel) and
 Debian/Ubuntu Linux.
 
 ```sh
-git clone -b fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
+git clone -b feat/scalability-input-improvements https://github.com/lepotatoguy/hemelb.git
 cd hemelb
 Scripts/install_hemelb.sh
 ```
 
-The script is on the `fix/hemelb-improvements` branch; the `-b` option
+The script is on the `feat/scalability-input-improvements` branch; the `-b` option
 selects it. You need `git` and an internet connection. On macOS, running
 `git` for the first time offers to install the Xcode Command Line Tools,
 which the build also needs. The script builds from the checkout you run it in.
@@ -21,7 +21,7 @@ The script does not ask questions. By default it:
 1. Installs system packages: Homebrew packages on macOS (and Homebrew
    itself if it is missing), or apt packages on Linux (using `sudo`).
 2. Builds HemeLB and the dependencies it cannot find (for example ParMETIS
-   and TinyXML) into `~/.local/hemelb`, then runs `hemelb-tests`.
+   and TinyXML2) into `~/.local/hemelb`, then runs `hemelb-tests`.
 3. Creates a conda environment called `gmy-tool` with exactly the tested
    package versions (from `geometry-tool/conda-lock/`) and installs the
    geometry tool and the Python tools into it. If conda is not installed, Miniforge is
@@ -78,8 +78,9 @@ can repeat them.
   `CMAKE_POLICY_VERSION_MINIMUM=3.5`, because its own CMake files declare a
   minimum version that CMake 4 no longer accepts.
 - **One CMake pass.** Dependencies that the super build compiles itself
-  (such as TinyXML) are found by the main build in the same run, so a
-  second `cmake` pass is not needed.
+  (such as TinyXML2) are found by the main build in the same run, so a
+  second `cmake` pass is not needed. This branch uses TinyXML2; the older
+  `fix/hemelb-improvements` branch uses TinyXML 2.x.
 - **VMTK on Apple Silicon.** VMTK 1.5 is only published for `osx-64` and
   `linux-64`. On Apple Silicon the conda environment is created with
   `CONDA_SUBDIR=osx-64` and runs under Rosetta 2, which the script installs
@@ -128,7 +129,7 @@ hlb-dump-extracted-properties --help
 Optional: `command -v hemelb-confcheck` confirms that the XML-checking tool is available.
 
 Substitute your environment name if customized. The installer runs the C++ unit
-executable; to run the MPI restart test too, use the CTest command in
+executable; to run the MPI compatibility, model, geometry, and restart tests too, use the CTest command in
 [build and run](main-application.md#test). Continue with
 [getting started](getting-started.md), or consult
 [troubleshooting](troubleshooting.md) if installation fails.

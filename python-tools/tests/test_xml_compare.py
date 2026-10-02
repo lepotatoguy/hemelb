@@ -122,3 +122,20 @@ def test_xmlchecker():
     assert ex.value.args[0].startswith(
         "Unexpected child element(s) of 'root': 'child', 'branch'"
     )
+
+
+@pytest.mark.parametrize("value", ["1.25", "(1,2)", "1,2,3)", "(1,2,3", "(1,2,3,4)"])
+def test_vector_rejects_scalar_or_malformed_values(value):
+    from hlb.utils.xml_compare import val_to_vec3
+
+    with pytest.raises(ValueError):
+        val_to_vec3(value)
+
+
+@pytest.mark.parametrize("value", ["1.25", "(1,2,3)"])
+def test_quantity_comparison_rejects_different_units(value):
+    checker = XmlChecker.from_string(
+        f'<root><quantity value="{value}" units="m" /></root>'
+    )
+    with pytest.raises(AssertionError, match="Units differ"):
+        checker.check_string(f'<root><quantity value="{value}" units="s" /></root>')

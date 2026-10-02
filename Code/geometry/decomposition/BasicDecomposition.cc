@@ -78,16 +78,25 @@ namespace hemelb::geometry::decomposition
                    << " running on " << comm_size << " MPI processes. Each process needs at least one"
                    << " such block: run with at most " << n_nonsolid << " processes (mpirun -n "
                    << n_nonsolid << "), or regenerate the geometry with a smaller voxel size.");
+        if (std::accumulate(nonsolid_block_fluid_site_counts.begin(),
+                            nonsolid_block_fluid_site_counts.end(), U64{0}) != total_sites)
+            throw(Exception() << "Octree is inconsistent");
         std::vector<U64> cumulative_fluid_sites(n_nonsolid + 1, 0);
         for (std::size_t i = 0; i < n_nonsolid; ++i) {
-            const U64 count = nonsolid_block_fluid_site_counts[i];
+            U64 count = nonsolid_block_fluid_site_counts[i];
+            if (!geometry.computationalWeights.empty())
+            {
+                auto ijk = octree::oct_to_ijk(tree.levels[tree.n_levels].node_ids[i]);
+                auto dims = geometry.GetBlockDimensions();
+                U64 id = (U64(ijk[0]) * dims[1] + ijk[1]) * dims[2] + ijk[2];
+                count = geometry.computationalWeights.at(id);
+                if (!count)
+                    throw Exception() << "Computational weight must be positive";
+            }
             if (count > std::numeric_limits<U64>::max() - cumulative_fluid_sites[i])
                 throw (Exception() << "Fluid site count exceeds 64-bit range");
             cumulative_fluid_sites[i + 1] = cumulative_fluid_sites[i] + count;
         }
-
-        if (cumulative_fluid_sites.back() != total_sites)
-            throw (Exception() << "Octree is inconsistent");
 
         // Going to divide the blocks amongst the ranks. Start with them all assigned to rank 0
         std::vector<int> rank_for_block(n_nonsolid, 0);

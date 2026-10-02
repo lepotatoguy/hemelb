@@ -55,6 +55,9 @@ yourself, with a *weights file*.
 The outlets still use pressure conditions, so they need `type="pressure"` in
 the XML.
 
+For a coupled `subtype="readWrite"` inlet, use runtime `weightsFilePath`
+instead of this compile-time file-waveform option; see [coupling](coupling.md).
+
 ## Making the weights file
 
 `geometry-tool/InletProcessing/CreateEmptyWeightsFile.py` lists the inlet

@@ -15,7 +15,7 @@ modules. Run commands from the repository root unless stated otherwise.
 | :--- | :--- | :--- |
 | Boost headers | At least 1.77 | 1.77.0 |
 | ParMETIS | 4.x, with METIS | 4.0.2 |
-| TinyXML | 2.x, not TinyXML2 | 2.6.2 |
+| TinyXML2 | CMake package `tinyxml2` | 9.0.0 |
 | CTemplate | Required | 2.4 |
 | zlib | Required | 1.2.6 |
 | Catch2 | 2.x, when tests are enabled | 2.13.9 |
@@ -38,7 +38,7 @@ platforms. The geometry tool has a separate Python/VTK environment; see its
 ### Super build
 
 ```sh
-git clone --branch fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
+git clone --branch feat/scalability-input-improvements https://github.com/lepotatoguy/hemelb.git
 cd hemelb
 
 cmake -S . -B build -G "Unix Makefiles" \
@@ -102,12 +102,16 @@ hemelb-confcheck input.xml
 
 `hemelb-confcheck` checks XML parsing, units, and compiled boundary choices.
 It does not load geometry or check that referenced input files are available.
-The simulation checks those during setup. Relative input paths are relative
+Use `hemelb-confcheck --syntax-only input.xml` to inspect an input independently
+of the executable's boundary selection. This skips the compiled-boundary check;
+the actual run still requires a matching build. The simulation checks files and
+geometry during setup. Relative input paths are relative
 to the XML; the `-out` argument is relative to the shell's current directory.
 
-The run writes `report.txt` and `report.xml`. Extracted fields and checkpoints
-appear under `Extracted/` when requested in `<properties>`. Pressure is in mmHg
-on this branch. Follow [getting started](getting-started.md) for a configuration
+The run writes `report.txt` and `report.xml`. Extracted fields appear under `Extracted/` when requested in `<properties>`.
+`<simulation><checkpoint period="..." /></simulation>` creates checkpoints
+and saved restart XML under `Checkpoints/<step>/`. The version 6 reader returns
+pressure in Pa, including for runs started from legacy XML. Follow [getting started](getting-started.md) for a configuration
 with output enabled and [checkpoints](checkpoints.md) for restart instructions.
 
 Ranks cannot outnumber blocks containing fluid; the solver reports the limit
@@ -133,6 +137,7 @@ If your CTest does not accept `--test-dir`, change into the indicated build
 folder and run `ctest --output-on-failure` there.
 
 CTest includes `hemelb-tests` and, when Python is found during configuration,
-`checkpoint-restart-mpi`. The installed `hemelb-tests` command runs only the
+CPU-feature, Windkessel, legacy-compatibility, geometry-setup, and
+checkpoint-restart MPI tests. The installed `hemelb-tests` command runs only the
 unit-test executable. See the [developer guide](../dev/README.md#how-to-run-the-tests)
 for Python, geometry, regression, and optional RBC tests.

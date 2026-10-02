@@ -28,3 +28,7 @@ number, is `data[n_ranks] - data[0]`. These offsets describe the first record;
 subsequent records use the same stride. For single-timestep file patterns,
 HemeLB removes `%d` before choosing the shared offset filename, so
 `checkpoint_%d.xtr` uses `checkpoint_.off`.
+
+For modern checkpoints, `Checkpoints/distributions.off` is shared by the
+`Checkpoints/<step>/distributions.xtr` files. The generated restart XML names
+the matching offsets explicitly.

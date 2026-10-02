@@ -1,17 +1,17 @@
 # Restarting a checkpoint with a different MPI process count
 
 A fluid checkpoint can be restarted with a different number of MPI
-processes from the run that saved it. The checkpoint file format is
-unchanged: version 5, one double-precision distributions field, no field offsets.
-The [user workflow](../user/checkpoints.md) explains saving files and configuring
-a restart.
+processes from the run that saved it. The loader accepts extraction versions
+4, 5, and 6, restores stored distribution offsets, and promotes legacy floats
+to double precision. New checkpoints use version 6 and a saved restart XML;
+see the [user workflow](../user/checkpoints.md).
 
 ## How the reader works
 
 The reader (`Code/extraction/LocalDistributionInput.cc`) treats the saved
 grid position as the identity of a site:
 
-1. It checks the checkpoint header, offset file, site count, and
+1. It checks the supported checkpoint version, header, offset file, site count, and
    distribution field against the current run.
 2. Current processes divide the saved site records evenly between them for
    reading, regardless of how many processes wrote the file.
@@ -38,10 +38,18 @@ keeps this true.
   number of distributions per site. Both are checked.
 - The voxel size and origin in the checkpoint header must match the current
   geometry (to within 1e-9 of a voxel). `SimBuilder` passes them to
-  `CheckpointInitialCondition`, and a mismatch is an error,
+  `CheckpointInitialCondition`, and a mismatch stops the run on every rank,
   so a checkpoint cannot be loaded into a different geometry that happens to
   have the same site coordinates.
 - A checkpoint and its offset file must come from the same run.
+
+## Saved model state
+
+`Checkpoints/<step>/restart.xml` retains supported Windkessel, file-coupling,
+and passive tracer state. The `.xtr` alone contains fluid distributions.
+Legacy fluid-only checkpoints cannot reconstruct missing boundary or particle
+history. Reader count/spacing and the bounded owner-lookup cache are described
+in [scalability and inputs](../user/scalability-and-inputs.md).
 
 ## Testing
 
@@ -49,7 +57,7 @@ keeps this true.
 case for four timesteps, restarts from timestep 2 with a different process
 count, and compares the distributions at timestep 4 by grid position. It
 also checks that a checkpoint is rejected by a run with a different voxel
-size or origin (these rejection cases run on one rank):
+size or origin:
 
 ```sh
 python3 Code/tests/checkpoint_restart_mpi.py --hemelb /path/to/hemelb

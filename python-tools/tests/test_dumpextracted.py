@@ -117,7 +117,8 @@ def _reference_rows(fields, field_spec):
     writer = csv.writer(out, lineterminator="\n")
     for row in fields:
         values = []
-        for name, xdrType, memType, length, offset in field_spec:
+        for specification in field_spec:
+            name, xdrType, memType, length, offset = specification[:5]
             value = row[name]
             width = length[0] if isinstance(length, tuple) and length else 1
             if width == 1:

@@ -36,39 +36,32 @@ namespace hemelb::extraction
                 {
                     // Set the cache to calculate each required field.
                     overload_visit(
-                            fieldSpec.src,
-                            [&](source::Pressure) {
-                                propertyCache.densityCache.SetRefreshFlag();
-                            },
-                            [&](source::Velocity) {
-                                propertyCache.velocityCache.SetRefreshFlag();
-                            },
-                            [&](source::ShearStress) {
-                                propertyCache.wallShearStressMagnitudeCache.SetRefreshFlag();
-                            },
-                            [&](source::VonMisesStress) {
-                                propertyCache.vonMisesStressCache.SetRefreshFlag();
-                            },
-                            [&](source::ShearRate) {
-                                propertyCache.shearRateCache.SetRefreshFlag();
-                            },
-                            [&](source::StressTensor) {
-                                propertyCache.stressTensorCache.SetRefreshFlag();
-                            },
-                            [&](source::Traction) {
-                                propertyCache.tractionCache.SetRefreshFlag();
-                            },
-                            [&](source::TangentialProjectionTraction) {
-                                propertyCache.tangentialProjectionTractionCache.SetRefreshFlag();
-                            },
-                            [](source::Distributions) {
-                                // We don't actually have to cache anything to get the distribution.
-                            },
-                            [](source::MpiRank) {
-                                // We don't actually have to cache anything to get the rank.
-                            }
-                    );
-
+                        fieldSpec.src, [&](source::Pressure)
+                        { propertyCache.densityCache.SetRefreshFlag(); }, [&](source::Velocity)
+                        { propertyCache.velocityCache.SetRefreshFlag(); }, [&](source::ShearStress)
+                        { propertyCache.wallShearStressMagnitudeCache.SetRefreshFlag(); },
+                        [&](source::VonMisesStress)
+                        { propertyCache.vonMisesStressCache.SetRefreshFlag(); },
+                        [&](source::ShearRate) { propertyCache.shearRateCache.SetRefreshFlag(); },
+                        [&](source::StressTensor)
+                        { propertyCache.stressTensorCache.SetRefreshFlag(); },
+                        [&](source::Traction) { propertyCache.tractionCache.SetRefreshFlag(); },
+                        [&](source::TangentialProjectionTraction)
+                        { propertyCache.tangentialProjectionTractionCache.SetRefreshFlag(); },
+                        [&](source::NormalProjectionTraction)
+                        {
+                            propertyCache.tractionCache.SetRefreshFlag();
+                            propertyCache.tangentialProjectionTractionCache.SetRefreshFlag();
+                        },
+                        [&](source::WallExtension) { propertyCache.densityCache.SetRefreshFlag(); },
+                        [](source::Distributions)
+                        {
+                            // We don't actually have to cache anything to get the distribution.
+                        },
+                        [](source::MpiRank)
+                        {
+                            // We don't actually have to cache anything to get the rank.
+                        });
                 }
             }
         }

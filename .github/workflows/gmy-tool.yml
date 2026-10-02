@@ -5,10 +5,14 @@ on:
       - main
       - 'fix/**'
       - 'feature/**'
+      - 'feat/**'
     paths:
       - '.github/workflows/gmy-*'
       - 'geometry-tool/**'
       - Code/util/Vector3D.cc
+      - Code/util/Vector3D.h
+      - Code/util/ReadFloatingPoint.h
+      - python-tools/hlb/utils/xml_compare.py
       - Code/geometry/SiteDataBare.cc
       - Code/lb/lattices/D3Q27.cc
       - Code/io/formats/geometry.cc
@@ -173,7 +177,7 @@ jobs:
 
       - name: Compare XML
         working-directory: hemelb-tests/diffTest
-        run: python compare_xml.py config.xml test/config.xml
+        run: python "$GITHUB_WORKSPACE/geometry-tool/tests/compare_generated_xml.py" config.xml test/config.xml
 
       - name: Compare GMY
         working-directory: hemelb-tests/diffTest

@@ -15,6 +15,7 @@
 #include "lb/kernels/MRT.h"
 #include "lb/kernels/GuoForcingLBGK.h"
 #include "lb/kernels/TRT.h"
+#include "lb/kernels/Sponge.h"
 #include "lb/kernels/MomentBases.h"
 #include "lb/kernels/RheologyModels.h"
 
@@ -37,19 +38,45 @@ namespace hemelb::lb {
                 } else {
                     throw (Exception() << "No MRT basis for lattice");
                 }
-            } else if constexpr (KERN == "TRT") {
+            }
+            else if constexpr (KERN == "LBGKSL")
+            {
+                return LBGKSL<L>{i};
+            }
+            else if constexpr (KERN == "TRTSL")
+            {
+                return TRTSL<L>{i};
+            }
+            else if constexpr (KERN == "LBGKLESSL")
+            {
+                return LBGKLESSL<L>{i};
+            }
+            else if constexpr (KERN == "TRT")
+            {
                 return TRT<L>{i};
-            } else if constexpr (KERN == "NNCY") {
+            }
+            else if constexpr (KERN == "NNCY")
+            {
                 return LBGKNN<CarreauYasudaRheologyModelHumanFit, L>{i};
-            } else if constexpr (KERN == "NNCYMOUSE") {
+            }
+            else if constexpr (KERN == "NNCYMOUSE")
+            {
                 return LBGKNN<CarreauYasudaRheologyModelMouseFit, L>{i};
-            } else if constexpr (KERN == "NNC") {
+            }
+            else if constexpr (KERN == "NNC")
+            {
                 return LBGKNN<CassonRheologyModel, L>{i};
-            } else if constexpr (KERN == "NNTPL") {
+            }
+            else if constexpr (KERN == "NNTPL")
+            {
                 return LBGKNN<TruncatedPowerLawRheologyModel, L>{i};
-            } else if constexpr (KERN == "GuoForcingLBGK") {
+            }
+            else if constexpr (KERN == "GuoForcingLBGK")
+            {
                 return GuoForcingLBGK<L>{i};
-            } else {
+            }
+            else
+            {
                 throw (Exception() << "Configured with invalid KERNEL");
             }
         }

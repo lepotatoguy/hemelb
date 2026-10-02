@@ -32,10 +32,9 @@ Limit: each compressed block must fit the 64 MiB block buffer
 (`MAX_GMY_BUFFER_SIZE`). Larger blocks are rejected with an error; reading
 them would need a change to the buffering strategy.
 
-The block lookup tree (`LookupTree.cc`) uses a 32-bit node counter and 16-bit
-block coordinates. These type widths are not a guarantee that every such domain
-can be loaded: dense block storage, header limits, and available memory also
-bound this branch's reader.
+The block lookup tree (`LookupTree.cc`) sizes itself with a 32-bit counter,
+with 16-bit block coordinates. Memory, header scanning, and per-block limits
+still bound the domains that can be loaded.
 
 ## Writing (geometry tool)
 
@@ -58,6 +57,17 @@ and assigned reader ranks distribute cached compressed blocks. See
 Because of that rule, a run cannot use more MPI processes than there are
 blocks containing fluid. HemeLB then stops with a message giving both
 numbers and the largest `mpirun -n` that will work.
+
+## GMY+ and reader controls
+
+Files with the `.gmy+` extension carry a fourth block-header integer containing
+a computational weight. Positive weights guide the initial split and the
+ParMETIS per-site cost; zero weights fall back to site counts. The solver scans
+header records but stores metadata and parsed data for active blocks. Assigned
+reader ranks fetch compressed blocks and redistribute cached bytes before
+releasing the setup cache. Runtime `reader_count` and `reader_spacing` select
+those ranks. See [scalability and inputs](../user/scalability-and-inputs.md) for
+tuning, quantisation, restart restrictions, and report definitions.
 
 ## Checks after the domain is built
 

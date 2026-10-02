@@ -73,9 +73,11 @@ namespace hemelb::geometry
             gmy::WallNormalAvailability::NOT_AVAILABLE,
             gmy::WallNormalAvailability::AVAILABLE>;
 
-    GeometryReader::GeometryReader(const lb::LatticeInfo& latticeInfo,
-                                   reporting::Timers &atimings, net::IOCommunicator ioComm, bool optimise) :
-            latticeInfo(latticeInfo), computeComms(std::move(ioComm)), timings(atimings), optimise(optimise)
+    GeometryReader::GeometryReader(const lb::LatticeInfo &latticeInfo, reporting::Timers &atimings,
+                                   net::IOCommunicator ioComm, bool optimise, unsigned readerCount,
+                                   unsigned readerSpacing)
+        : latticeInfo(latticeInfo), computeComms(std::move(ioComm)), timings(atimings),
+          optimise(optimise), readerCount(readerCount), readerSpacing(readerSpacing)
     {
     }
 
@@ -89,6 +91,14 @@ namespace hemelb::geometry
         headerRecordLength = std::filesystem::path(dataFilePath).extension() == ".gmy+" ? 16 : gmy::HeaderRecordLength;
         file = net::MpiFile::Open(computeComms, dataFilePath, MPI_MODE_RDONLY, MPI_INFO_NULL);
         fluidSitesOnEachBlock.clear();
+        computationalWeights.clear();
+        if (readerSpacing == 0)
+            throw Exception() << "Geometry reader spacing must be positive";
+        unsigned available = (computeComms.Size() - 1) / readerSpacing + 1;
+        if (readerCount == 0)
+            readerCount = available;
+        if (readerCount > available)
+            throw Exception() << "Geometry reader_count and reader_spacing exceed MPI rank count";
         blockMetadata.clear();
         compressedCache.clear();
         timings.geometryBlocksRead = 0;
@@ -98,6 +108,7 @@ namespace hemelb::geometry
 
         log::Logger::Log<log::Debug, log::OnePerCore>("Reading file header");
         ReadHeader(geometry.GetBlockCount(), geometry.GetSitesPerBlock());
+        geometry.computationalWeights = computationalWeights;
         timings.fileRead().Stop();
 
         {
@@ -281,7 +292,7 @@ namespace hemelb::geometry
         for (U64 i = 0; i < count; ++i) {
           unsigned sites, bytes, uncompressed;
           reader.read(sites);
-          if (headerRecordLength == 16) reader.read<unsigned>();
+          unsigned weight = headerRecordLength == 16 ? reader.read<unsigned>() : 0;
           reader.read(bytes); reader.read(uncompressed);
           auto id = first + i;
           if (sites > sitesPerBlock) throw Exception() << "Geometry block " << id << " has more fluid sites than sites per block";
@@ -292,7 +303,10 @@ namespace hemelb::geometry
               throw Exception() << "Geometry block " << id << " declares too much uncompressed data";
           if (sites) {
             fluidSitesOnEachBlock.emplace(id, sites);
-            blockMetadata.emplace(id, BlockMetadata{bytes, uncompressed, offset, int(active % computeComms.Size())});
+            if (headerRecordLength == 16)
+                computationalWeights.emplace(id, weight == 0 ? sites : weight);
+            blockMetadata.emplace(id, BlockMetadata{bytes, uncompressed, offset,
+                                                    int((active % readerCount) * readerSpacing)});
             ++active;
           }
           offset += bytes;

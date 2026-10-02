@@ -54,6 +54,16 @@ namespace hemelb
       static const int hemelbSiteWeightsNASHZEROTHORDERPRESSUREIOLET_ISBFILEVELOCITYINLET = 16;
       static const int hemelbSiteWeightsLADDIOLET_ISBFILEVELOCITYINLET = 48;
 
+      // Conservative proxies until architecture-specific costs are measured.
+      static const int hemelbSiteWeightsGZSElastic_AMDBULLDOZER = hemelbSiteWeightsGZS_AMDBULLDOZER;
+      static const int hemelbSiteWeightsYANGPRESSUREIOLET_AMDBULLDOZER = hemelbSiteWeightsNASHZEROTHORDERPRESSUREIOLET_AMDBULLDOZER;
+      static const int hemelbSiteWeightsGZSElastic_INTELSANDYBRIDGE = hemelbSiteWeightsGZS_INTELSANDYBRIDGE;
+      static const int hemelbSiteWeightsYANGPRESSUREIOLET_INTELSANDYBRIDGE = hemelbSiteWeightsNASHZEROTHORDERPRESSUREIOLET_INTELSANDYBRIDGE;
+      static const int hemelbSiteWeightsGZSElastic_NEUTRAL = hemelbSiteWeightsGZS_NEUTRAL;
+      static const int hemelbSiteWeightsYANGPRESSUREIOLET_NEUTRAL = hemelbSiteWeightsNASHZEROTHORDERPRESSUREIOLET_NEUTRAL;
+      static const int hemelbSiteWeightsGZSElastic_ISBFILEVELOCITYINLET = hemelbSiteWeightsGZS_ISBFILEVELOCITYINLET;
+      static const int hemelbSiteWeightsYANGPRESSUREIOLET_ISBFILEVELOCITYINLET = hemelbSiteWeightsNASHZEROTHORDERPRESSUREIOLET_ISBFILEVELOCITYINLET;
+
       static const int hemelbSiteWeights[6] = { hemelbSiteWeights@HEMELB_COMPUTE_ARCHITECTURE@, 
                                                 hemelbSiteWeights@HEMELB_WALL_BOUNDARY@_@HEMELB_COMPUTE_ARCHITECTURE@, 
                                                 hemelbSiteWeights@HEMELB_INLET_BOUNDARY@_@HEMELB_COMPUTE_ARCHITECTURE@, 

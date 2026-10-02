@@ -8,6 +8,7 @@ add_library(hemelb_lb OBJECT
   iolets/InOutLet.cc
   iolets/InOutLetCosine.cc iolets/InOutLetFile.cc
   iolets/InOutLetMultiscale.cc
+  iolets/InOutLetWomersleyElasticVelocity.cc
   iolets/InOutLetVelocity.cc
   iolets/InOutLetParabolicVelocity.cc iolets/InOutLetWomersleyVelocity.cc iolets/InOutLetFileVelocity.cc
   IncompressibilityChecker.cc

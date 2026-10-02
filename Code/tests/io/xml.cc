@@ -190,4 +190,27 @@ namespace hemelb::tests
       }
     }
 
+    TEST_CASE("XML floating attributes accept decimal and hexadecimal notation", "[xml]") {
+        xml::Document doc;
+        doc.LoadString("<root/>");
+        auto root = doc.GetRoot();
+        const char* number = GENERATE("0.0001", "0x1.a36e2eb1c432dp-14", "-0X1P-3", "+0x1p+2");
+        const double expected = std::strtod(number, nullptr);
+        root.SetAttribute("value", number);
+        REQUIRE(root.GetAttributeOrThrow<double>("value") == expected);
+        REQUIRE(root.GetAttributeOrThrow<float>("value") == static_cast<float>(expected));
+        root.SetAttribute("value", "(-0x1p-3,0x0p+0,0x1.8p+2)");
+        REQUIRE(root.GetAttributeOrThrow<util::Vector3D<double>>("value") == util::Vector3D<double>(-0.125, 0, 6));
+    }
+
+    TEST_CASE("XML floating attributes reject malformed and nonfinite values", "[xml]") {
+        xml::Document doc;
+        doc.LoadString("<root/>");
+        auto root = doc.GetRoot();
+        const char* value = GENERATE("0x1p-3junk", "0x1p", " 0x1p0", "0x1p0 ", "nan", "inf", "1e9999", "1e-9999");
+        root.SetAttribute("value", value);
+        REQUIRE_THROWS_AS(root.GetAttributeOrThrow<double>("value"), xml::DeserialisationError);
+        REQUIRE_THROWS_AS(root.GetAttributeOrThrow<float>("value"), xml::DeserialisationError);
+    }
+
 }

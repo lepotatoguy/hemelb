@@ -15,25 +15,51 @@
 #include "geometry/GeometryReader.h"
 #include "geometry/LookupTree.h"
 #include "geometry/decomposition/BasicDecomposition.h"
+#include "geometry/decomposition/ComputationalWeight.h"
 #include "lb/lattices/D3Q15.h"
 #include "reporting/Timers.h"
 #include "tests/helpers/FolderTestFixture.h"
 
 namespace hemelb::tests {
     namespace {
-        std::vector<int> DecomposeCounts(const std::vector<U64>& counts, U64 total, int ranks) {
+        std::vector<int> DecomposeCounts(const std::vector<U64> &counts, U64 total, int ranks,
+                                         std::vector<U64> weights = {})
+        {
             geometry::GmyReadResult geometry({static_cast<U16>(counts.size()), 1, 1}, 1);
+            for (std::size_t i = 0; i < weights.size(); ++i)
+                geometry.computationalWeights[i] = weights[i];
             geometry::octree::LookupTree tree(3);
             tree.levels[0].node_ids.push_back(0);
             tree.levels[0].sites_per_node.push_back(total);
-            for (std::size_t i = 0; i < counts.size(); ++i) {
+            for (std::size_t i = 0; i < counts.size(); ++i)
+            {
                 tree.levels[3].node_ids.push_back(
                     geometry::octree::ijk_to_oct({static_cast<U16>(i), 0, 0}));
                 tree.levels[3].sites_per_node.push_back(counts[i]);
             }
             std::vector<proc_t> owners(counts.size());
-            return geometry::decomposition::BasicDecomposition(geometry, ranks).Decompose(tree, owners);
+            return geometry::decomposition::BasicDecomposition(geometry, ranks)
+                .Decompose(tree, owners);
         }
+    } // namespace
+
+    TEST_CASE("Computational site costs preserve ratios within ParMETIS integer precision",
+              "[geometry]")
+    {
+        using geometry::decomposition::ComputationalSiteWeight;
+        REQUIRE(ComputationalSiteWeight(9, 9) == 1000000);
+        REQUIRE(ComputationalSiteWeight(1, 9) == 111111);
+        REQUIRE(ComputationalSiteWeight(1e-20, 9) == 1);
+        REQUIRE_THROWS(ComputationalSiteWeight(0, 9));
+    }
+
+    TEST_CASE("Computational block costs change the initial split without changing fluid counts",
+              "[geometry]")
+    {
+        REQUIRE((DecomposeCounts({1, 1, 1, 1}, 4, 2) == std::vector<int>{0, 0, 1, 1}));
+        REQUIRE(
+            (DecomposeCounts({1, 1, 1, 1}, 4, 2, {9, 1, 1, 1}) == std::vector<int>{0, 1, 1, 1}));
+        REQUIRE_THROWS(DecomposeCounts({1, 1, 1, 1}, 4, 2, {0, 1, 1, 1}));
     }
 
     TEST_CASE("Basic decomposition keeps 64-bit site count precision", "[geometry]") {

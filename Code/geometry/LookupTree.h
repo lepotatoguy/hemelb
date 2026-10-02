@@ -281,7 +281,7 @@ namespace hemelb::geometry::octree
         // access where possible. Particularly useful since a block
         // may be stored on a rank that doesn't own it.
         //
-        // Reset
+        static constexpr std::size_t cacheBudgetBytes = 64U * 1024U * 1024U;
         mutable boost::container::flat_map<std::size_t, std::vector<SiteRankIndex>> cache;
 
         // Compute the index within a partition's array where a block lives (block given by its flat index).

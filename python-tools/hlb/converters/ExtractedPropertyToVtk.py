@@ -45,7 +45,8 @@ def _voxel_grid(coordinates, voxel_size, origin):
 def export(input_file, output_prefix=None, step_length=None):
     """Write ASCII VTU files and return the PVD path. Existing outputs are refused.
 
-    Collection times are lattice timesteps unless step_length (seconds) is given.
+    Collection times use v6 timestep metadata or an explicit step_length in seconds.
+    Legacy files without either use lattice timesteps.
     Six-component fields follow HemeLB's symmetric tensor convention.
     """
     source = Path(input_file)
@@ -60,6 +61,8 @@ def export(input_file, output_prefix=None, step_length=None):
         raise ValueError("extraction voxel size must be finite and positive")
     if not np.all(np.isfinite(extraction.originMetres)):
         raise ValueError("extraction origin must be finite")
+    if step_length is None and extraction.version >= 6:
+        step_length = extraction.timeStepSeconds
     times = [int(time) for time in extraction.times]
     if len(set(times)) != len(times):
         raise ValueError("extraction has duplicate timesteps")
@@ -96,7 +99,15 @@ def export(input_file, output_prefix=None, step_length=None):
             raise ValueError("extracted site set changed at timestep {}".format(time))
         order = np.asarray([row_indices[coordinate] for coordinate in coordinates])
         grid.GetCellData().Initialize()
-        for name, xdr_type, mem_type, length, offset in extraction.GetFieldSpec():
+        for (
+            name,
+            xdr_type,
+            mem_type,
+            length,
+            offset,
+            data_offset,
+            scale,
+        ) in extraction.GetFieldSpec():
             values = data[name][order]
             if length == (6,):
                 # HemeLB: XX XY XZ YY YZ ZZ. VTK: XX YY ZZ XY YZ XZ.
@@ -135,7 +146,7 @@ def main(argv=None):
     parser.add_argument(
         "--step-length",
         type=float,
-        help="seconds per lattice timestep; omit to use lattice timesteps in the PVD",
+        help="seconds per lattice timestep; v6 uses embedded metadata, legacy files otherwise use lattice steps",
     )
     args = parser.parse_args(argv)
     try:

@@ -5,6 +5,7 @@
 
 #include "configuration/SimConfigReader.h"
 
+#include <set>
 #include <cmath>
 #include <algorithm>
 #include <array>
@@ -147,6 +148,10 @@ namespace hemelb::configuration {
             if (root.GetName() != "hemelbsettings") return;
             const auto version = root.GetAttributeOrThrow<unsigned>("version");
             if (version != 3 && version != 5) return;
+            // Legacy geometry tools emitted camera settings for the retired
+            // in-solver renderer. They do not change the numerical simulation.
+            if (auto view = root.GetChildOrNull("visualisation"))
+                view.Delete();
             auto simulation = root.GetChildOrThrow("simulation");
             if (auto stress = simulation.GetChildOrNull("stresstype")) {
                 if (stress.GetAttributeOrThrow<unsigned>("value") > 2)
@@ -155,8 +160,7 @@ namespace hemelb::configuration {
             }
             for (auto tag: {"particles", "bodyForces", "boundaryConditions"})
                 if (root.GetChildOrNull(tag)) throw Exception() << "Unsupported legacy feature: " << tag;
-            for (auto tag: {"sponge_layer", "elastic_wall_stiffness"})
-                if (simulation.GetChildOrNull(tag)) throw Exception() << "Unsupported legacy feature: " << tag;
+
             const auto dx = simulation.GetChildOrThrow("voxel_size").GetAttributeOrThrow<double>("value");
             const auto origin = simulation.GetChildOrThrow("origin").GetAttributeOrThrow<PhysicalPosition>("value");
             for (auto group: {"inlets", "outlets"}) {
@@ -169,8 +173,11 @@ namespace hemelb::configuration {
                     auto condition = iolet.GetChildOrThrow("condition");
                     const auto type = condition.GetAttributeOrThrow("type");
                     const auto subtype = condition.GetAttributeOrThrow("subtype");
-                    if (type == "pressure" && subtype == "file") condition.SetAttribute("units", "mmHg");
-                    if (type == "pressure" && subtype == "cosine") {
+                    if ((type == "pressure" || type == "yangpressure") && subtype == "file")
+                        condition.SetAttribute("units", "mmHg");
+                    if (type == "velocity" && subtype == "readWrite")
+                        condition.SetAttribute("pressure_units", "mmHg");
+                    if ((type == "pressure" || type == "yangpressure") && subtype == "cosine") {
                         for (auto tag: {"radius", "area"})
                             if (auto unused = condition.GetChildOrNull(tag)) unused.Delete();
                     }
@@ -257,12 +264,164 @@ namespace hemelb::configuration {
 
         ans.dataFilePath = DoIOForGeometry(*topNode.PopChildOrThrow("geometry"));
 
-        if (topNode.PopChildOrNull("colloids") != Element::Missing())
+        auto readTracers = [&](Element &el)
         {
-            ans.colloid_xml_path = xmlFilePath;
+            tracers::TracerConfig c;
+            auto dimensional = [&](Element &node, char const *units)
+            {
+                if (node.PopAttributeOrThrow("units") != units)
+                    throw Exception() << "Tracer units must be " << units;
+            };
+            auto vector = [&](Element &node)
+            {
+                dimensional(node, "lattice");
+                LatticePosition x{node.PopAttributeOrThrow<double>("x"),
+                                  node.PopAttributeOrThrow<double>("y"),
+                                  node.PopAttributeOrThrow<double>("z")};
+                for (int i = 0; i < 3; ++i)
+                    if (!std::isfinite(x[i]))
+                        throw Exception() << "Tracer coordinates must be finite";
+                CheckEmpty(node);
+                return x;
+            };
+            c.outputPeriod = el.PopAttributeMaybe<LatticeTimeStep>("output_period").value_or(1);
+            c.seed = el.PopAttributeMaybe<std::uint64_t>("seed").value_or(0);
+            c.nextId = el.PopAttributeMaybe<std::uint64_t>("next_id").value_or(0);
+            c.nextEmission = el.PopAttributeMaybe<LatticeTimeStep>("next_emission").value_or(1);
+            c.particleRadius = el.PopAttributeMaybe<double>("particle_radius").value_or(0);
+            {
+                auto particles = el.PopChildOrThrow("particles");
+                std::set<std::uint64_t> ids;
+                for (auto particle : particles->PopChildren("subgridParticle"))
+                {
+                    tracers::Particle p;
+                    dimensional(particle, "lattice");
+                    p.id = particle.PopAttributeOrThrow<std::uint64_t>("ParticleId");
+                    p.radius = particle.PopAttributeOrThrow<double>("Radius");
+                    p.created = particle.PopAttributeMaybe<LatticeTimeStep>("created").value_or(0);
+                    p.active = particle.PopAttributeMaybe<unsigned>("active").value_or(1) != 0;
+                    p.position = vector(*particle.PopChildOrThrow("initialPosition"));
+                    if (auto velocity = particle.PopChildOrNull("velocity"))
+                        p.velocity = vector(*velocity);
+                    if (!std::isfinite(p.radius) || p.radius < 0 || !ids.insert(p.id).second ||
+                        p.id == UINT64_MAX)
+                        throw Exception()
+                            << "Tracer radii must be nonnegative and particle IDs unique";
+                    c.nextId = std::max(c.nextId, p.id + 1);
+                    c.particles.push_back(p);
+                    CheckEmpty(particle);
+                }
+                if (auto centre = particles->PopChildOrNull("sphereCentre"))
+                    c.sphereCentre = vector(*centre);
+                if (auto radius = particles->PopChildOrNull("sphereRadius"))
+                    c.sphereRadius = PopDimensionalValue<double>(*radius, "lattice");
+                if (auto count = particles->PopChildOrNull("emissionCount"))
+                    c.emissionCount = PopDimensionalValue<unsigned>(*count, "dimensionless");
+                if (auto interval = particles->PopChildOrNull("emissionItrvl"))
+                    c.emissionInterval =
+                        PopDimensionalValue<LatticeTimeStep>(*interval, "dimensionless");
+                CheckEmpty(*particles);
+            }
+            if (c.particleRadius == 0 && !c.particles.empty())
+                c.particleRadius = c.particles.front().radius;
+            // Explicit tracer mode permits old force declarations, which the source
+            // tracer build also ignored. Unmarked force-coupled inputs are rejected.
+            auto mode = el.PopAttributeMaybe("mode").value_or("passive");
+            if (mode != "passive" && mode != "tracer")
+                throw Exception() << "Only passive tracer mode is supported";
+            if (auto forces = el.PopChildOrNull("bodyForces"))
+            {
+                if (mode != "tracer")
+                    CheckEmpty(*forces);
+                else
+                {
+                    std::vector<Element> ignored;
+                    for (auto child : forces->Children())
+                        ignored.push_back(child);
+                    for (auto child : ignored)
+                        child.Delete();
+                    CheckEmpty(*forces);
+                }
+            }
+            if (auto rules = el.PopChildOrNull("boundaryConditions"))
+            {
+                for (auto const *kind : {"lubrication", "deletion", "spherical"})
+                    for (auto node : rules->PopChildren(kind))
+                    {
+                        tracers::BoundaryRule rule;
+                        rule.kind = kind;
+                        rule.appliesTo = node.PopAttributeOrThrow("appliesTo");
+                        if (rule.appliesTo != "Wall" && rule.appliesTo != "Ilet" &&
+                            rule.appliesTo != "Olet" && rule.appliesTo != "Sphr")
+                            throw Exception() << "Invalid tracer boundary appliesTo";
+                        if (rule.kind == "spherical")
+                        {
+                            if (rule.appliesTo != "Sphr")
+                                throw Exception() << "Spherical tracer boundary requires Sphr";
+                            rule.radius = PopDimensionalValue<double>(
+                                *node.PopChildOrThrow("sphereRadius"), "lattice");
+                            rule.centre = vector(*node.PopChildOrThrow("sphereCentre"));
+                            if (!std::isfinite(rule.radius) || rule.radius < 0)
+                                throw Exception() << "Invalid tracer boundary sphere radius";
+                        }
+                        else
+                        {
+                            rule.range = node.PopAttributeOrThrow<double>("effectiveRange");
+                            if (!std::isfinite(rule.range) || rule.range <= 0)
+                                throw Exception() << "Tracer boundary range must be positive";
+                            if (rule.appliesTo == "Sphr")
+                                throw Exception() << "Sphr requires a spherical tracer boundary";
+                        }
+                        CheckEmpty(node);
+                        c.boundaries.push_back(rule);
+                    }
+                CheckEmpty(*rules);
+            }
+            if (el.GetName() == "colloids" && !c.particles.empty())
+            {
+                c.particleRadius = c.particles.front().radius;
+                c.particles.erase(c.particles.begin());
+                c.nextEmission = c.emissionInterval;
+            }
+            if (!c.emissionInterval)
+            {
+                c.emissionCount = 0;
+                c.emissionInterval = 1;
+            }
+            if (!c.outputPeriod || !std::isfinite(c.sphereRadius) || c.sphereRadius < 0 ||
+                !std::isfinite(c.particleRadius) || c.particleRadius < 0)
+                throw Exception() << "Invalid tracer emission parameters";
+            CheckEmpty(el);
+            return c;
+        };
+        if (auto tracers = topNode.PopChildOrNull("tracers"))
+            ans.tracers = readTracers(*tracers);
+        if (auto colloids = topNode.PopChildOrNull("colloids"))
+        {
+            if (ans.tracers)
+                throw Exception() << "Specify tracers or passive colloids, not both";
+            ans.tracers = readTracers(*colloids);
         }
 
-        ans.initial_condition = DoIOForInitialConditions(*topNode.PopChildOrThrow("initialconditions"));
+        {
+            auto initial = topNode.PopChildOrThrow("initialconditions");
+            if (auto sponge = initial->PopChildOrNull("sponge_layer"))
+            {
+                SpongeInfo sp;
+                sp.viscosity_ratio = PopDimensionalValue<double>(
+                    *sponge->PopChildOrThrow("viscosity_ratio"), "dimensionless");
+                sp.width_m = PopDimensionalValue<double>(*sponge->PopChildOrThrow("width"), "m");
+                sp.lifetime = PopDimensionalValue<LatticeTimeStep>(
+                    *sponge->PopChildOrThrow("lifetime"), "lattice");
+                if (!std::isfinite(sp.viscosity_ratio) || sp.viscosity_ratio < 1 ||
+                    !std::isfinite(sp.width_m) || sp.width_m <= 0 || sp.lifetime == 0)
+                    throw Exception()
+                        << "Sponge ratio must be at least one, width positive and lifetime nonzero";
+                CheckEmpty(*sponge);
+                ans.sim_info.sponge = sp;
+            }
+            ans.initial_condition = DoIOForInitialConditions(*initial);
+        }
 
         ans.inlets = DoIOForInOutlets(ans.sim_info, *topNode.PopChildOrThrow("inlets"));
         ans.outlets = DoIOForInOutlets(ans.sim_info, *topNode.PopChildOrThrow("outlets"));
@@ -287,6 +446,11 @@ namespace hemelb::configuration {
         }
         if (auto el = topNode.PopChildOrNull("decomposition")) {
             ans.decompositionMethod = el->PopAttributeOrThrow("method");
+            ans.geometryReaderCount = el->PopAttributeMaybe<unsigned>("reader_count").value_or(0);
+            ans.geometryReaderSpacing =
+                el->PopAttributeMaybe<unsigned>("reader_spacing").value_or(1);
+            if (!ans.geometryReaderSpacing)
+                throw Exception() << "reader_spacing must be positive";
             if (ans.decompositionMethod != "octree" && ans.decompositionMethod != "parmetis")
                 throw Exception() << "Unknown decomposition method: " << ans.decompositionMethod;
             CheckEmpty(*el);
@@ -357,6 +521,18 @@ namespace hemelb::configuration {
                     }
             );
         }
+        if (auto el = simEl.PopChildOrNull("smagorinsky_constant"))
+            ans.smagorinsky = PopDimensionalValue<double>(*el, "dimensionless");
+        if (auto el = simEl.PopChildOrNull("elastic_wall_stiffness"))
+            ans.elastic_wall_stiffness = PopDimensionalValue<double>(*el, "lattice");
+        if (auto el = simEl.PopChildOrNull("boundary_velocity_ratio"))
+            ans.boundary_velocity_ratio = PopDimensionalValue<double>(*el, "lattice");
+        if (!std::isfinite(ans.smagorinsky) || ans.smagorinsky < 0 || ans.smagorinsky > 1 ||
+            !std::isfinite(ans.elastic_wall_stiffness) || ans.elastic_wall_stiffness < 0 ||
+            !std::isfinite(ans.boundary_velocity_ratio) || ans.boundary_velocity_ratio < 0 ||
+            ans.boundary_velocity_ratio > 1)
+            throw Exception()
+                << "Invalid LES coefficient, elastic stiffness or boundary velocity ratio";
         CheckEmpty(simEl);
         return ans;
     }
@@ -420,11 +596,20 @@ namespace hemelb::configuration {
 
             IoletConfig newIolet;
 
-            if (conditionType == "pressure") {
+            if (conditionType == "yangpressure")
+            {
+                CheckIoletMatchesCMake(currentIoletNode, "YANGPRESSUREIOLET");
+            }
+            if (conditionType == "pressure" || conditionType == "yangpressure")
+            {
                 newIolet = DoIOForPressureInOutlet(currentIoletNode);
-            } else if (conditionType == "velocity") {
+            }
+            else if (conditionType == "velocity")
+            {
                 newIolet = DoIOForVelocityInOutlet(currentIoletNode);
-            } else {
+            }
+            else
+            {
                 throw Exception() << "Invalid boundary condition type '" << conditionType << "' in "
                                   << conditionEl.GetFullPath();
             }
@@ -444,7 +629,12 @@ namespace hemelb::configuration {
 
     auto SimConfigReader::DoIOForPressureInOutlet(Element& ioletEl) const -> IoletConfig
     {
-        CheckIoletMatchesCMake(ioletEl, "NASHZEROTHORDERPRESSUREIOLET");
+        constexpr auto inlet = build_info::INLET_BOUNDARY;
+        constexpr auto outlet = build_info::OUTLET_BOUNDARY;
+        bool isInlet = ioletEl.GetName() == "inlet";
+        bool yang = (isInlet ? inlet : outlet) == "YANGPRESSUREIOLET";
+        CheckIoletMatchesCMake(ioletEl,
+                               yang ? "YANGPRESSUREIOLET" : "NASHZEROTHORDERPRESSUREIOLET");
         auto conditionEl = ioletEl.PopChildOrThrow("condition");
         auto conditionSubtype = conditionEl->PopAttributeOrThrow("subtype");
 
@@ -455,6 +645,50 @@ namespace hemelb::configuration {
         else if (conditionSubtype == "file")
         {
             return DoIOForFilePressureInOutlet(*conditionEl);
+        }
+        else if (conditionSubtype == "WK2" || conditionSubtype == "WK3" ||
+                 conditionSubtype == "fileWK")
+        {
+            WindkesselPressureIoletConfig c;
+            c.model = conditionSubtype;
+            auto value = [&](char const *name, char const *units)
+            { return PopDimensionalValue<double>(*conditionEl->PopChildOrThrow(name), units); };
+            if (conditionSubtype == "WK3")
+            {
+                c.characteristic_resistance = value("Rc", "kg/m^4*s");
+                c.peripheral_resistance = value("Rp", "kg/m^4*s");
+                c.capacitance = value("Cp", "m^4*s^2/kg");
+            }
+            else
+            {
+                c.peripheral_resistance = value("R", "kg/m^4*s");
+                c.capacitance = value("C", "m^4*s^2/kg");
+            }
+            c.area_m2 = value("area", "m^2");
+            if (conditionSubtype != "fileWK")
+                c.radius_m = value("radius", "m");
+            else
+                c.weights_path = std::filesystem::absolute(
+                    xmlFilePath.parent_path() /
+                    conditionEl->PopChildOrThrow("path")->PopAttributeOrThrow("value"));
+            if (auto state = conditionEl->PopChildOrNull("state"))
+            {
+                c.pressure_Pa = state->PopAttributeOrThrow<double>("pressure_Pa");
+                c.flow_m3s = state->PopAttributeOrThrow<double>("flow_m3s");
+                c.previous_flow_m3s = state->PopAttributeOrThrow<double>("previous_flow_m3s");
+                CheckEmpty(*state);
+            }
+            for (auto x : {c.peripheral_resistance, c.capacitance, c.area_m2})
+                if (!std::isfinite(x) || x <= 0)
+                    throw Exception() << "Windkessel R, C and area must be finite and positive";
+            if (!std::isfinite(c.characteristic_resistance) || c.characteristic_resistance < 0 ||
+                (conditionSubtype != "fileWK" && (!std::isfinite(c.radius_m) || c.radius_m <= 0)))
+                throw Exception() << "Invalid Windkessel characteristic resistance or radius";
+            for (auto x : {c.pressure_Pa, c.flow_m3s, c.previous_flow_m3s})
+                if (!std::isfinite(x))
+                    throw Exception() << "Windkessel state must be finite";
+            CheckEmpty(*conditionEl);
+            return c;
         }
         else if (conditionSubtype == "multiscale")
         {
@@ -480,6 +714,81 @@ namespace hemelb::configuration {
         else if (conditionSubtype == "womersley")
         {
             return DoIOForWomersleyVelocityInOutlet(*conditionEl);
+        }
+        else if (conditionSubtype == "womersleyElastic")
+        {
+            ElasticWomersleyVelocityIoletConfig c;
+            c.radius_m = PopDimensionalValue<double>(*conditionEl->PopChildOrThrow("radius"), "m");
+            c.pgrad_amp_Pam = PopDimensionalValue<double>(
+                *conditionEl->PopChildOrThrow("pressure_gradient_amplitude"), "Pa/m");
+            c.period_s = PopDimensionalValue<double>(*conditionEl->PopChildOrThrow("period"), "s");
+            c.womersley = PopDimensionalValue<double>(
+                *conditionEl->PopChildOrThrow("womersley_number"), "dimensionless");
+            c.poisson_ratio = PopDimensionalValue<double>(
+                *conditionEl->PopChildOrThrow("poisson_ratio"), "dimensionless");
+            c.youngs_modulus_Pa =
+                PopDimensionalValue<double>(*conditionEl->PopChildOrThrow("youngs_modulus"), "Pa");
+            c.axial_position_m =
+                PopDimensionalValue<double>(*conditionEl->PopChildOrThrow("axial_position"), "m");
+            for (double x : {c.radius_m, c.period_s, c.womersley, c.youngs_modulus_Pa})
+                if (!std::isfinite(x) || x <= 0)
+                    throw Exception() << "Elastic Womersley radius, period, alpha and Young "
+                                         "modulus must be positive";
+            if (!std::isfinite(c.pgrad_amp_Pam) || !std::isfinite(c.axial_position_m) ||
+                !std::isfinite(c.poisson_ratio) || c.poisson_ratio <= -1 || c.poisson_ratio >= 0.5)
+                throw Exception() << "Invalid elastic Womersley profile parameters";
+            CheckEmpty(*conditionEl);
+            return c;
+        }
+        else if (conditionSubtype == "readWrite")
+        {
+            ReadWriteVelocityIoletConfig c;
+            auto value = [&](char const *name, char const *units)
+            { return PopDimensionalValue<double>(*conditionEl->PopChildOrThrow(name), units); };
+            auto path = [&](char const *name)
+            {
+                return std::filesystem::absolute(
+                    xmlFilePath.parent_path() /
+                    conditionEl->PopChildOrThrow(name)->PopAttributeOrThrow("value"));
+            };
+            c.radius_m = value("radius", "m");
+            c.area_m2 = value("area", "m^2");
+            c.frequency = PopDimensionalValue<LatticeTimeStep>(
+                *conditionEl->PopChildOrThrow("frequency"), "lattice");
+            c.flow_path = path("flowRateFilePath");
+            c.pressure_path = path("pressureFilePath");
+            if (conditionEl->GetChildOrNull("weightsFilePath"))
+                c.weights_path = path("weightsFilePath");
+            c.flow_conversion = value("flowRateConversionFactor", "dimensionless");
+            c.pressure_conversion = value("pressureConversionFactor", "dimensionless");
+            c.smoothing = value("smoothingFactor", "dimensionless");
+            auto pressureUnits = conditionEl->PopAttributeMaybe("pressure_units").value_or("Pa");
+            if (pressureUnits != "Pa" && pressureUnits != "mmHg")
+                throw Exception() << "readWrite pressure_units must be Pa or mmHg";
+            c.pressure_mmHg = pressureUnits == "mmHg";
+            if (auto timeout = conditionEl->PopAttributeMaybe<double>("timeout_s"))
+                c.timeout_s = *timeout;
+            if (auto state = conditionEl->PopChildOrNull("state"))
+            {
+                c.max_speed_ms = state->PopAttributeOrThrow<double>("max_speed_ms");
+                c.next_exchange = state->PopAttributeOrThrow<LatticeTimeStep>("next_exchange");
+                c.average_density = state->PopAttributeMaybe<double>("average_density").value_or(1);
+                c.start_time_s = state->PopAttributeMaybe<double>("start_time_s").value_or(0);
+                CheckEmpty(*state);
+            }
+            for (double x : {c.radius_m, c.area_m2, c.timeout_s})
+                if (!std::isfinite(x) || x <= 0)
+                    throw Exception() << "readWrite radius, area and timeout must be positive";
+            for (double x : {c.flow_conversion, c.pressure_conversion, c.smoothing, c.max_speed_ms,
+                             c.average_density})
+                if (!std::isfinite(x))
+                    throw Exception() << "readWrite factors and state must be finite";
+            if (c.start_time_s && !std::isfinite(*c.start_time_s))
+                throw Exception() << "readWrite initial time must be finite";
+            if (c.frequency == 0 || c.smoothing < 0 || c.smoothing > 1 || c.next_exchange < 2)
+                throw Exception() << "Invalid readWrite frequency, smoothing or state";
+            CheckEmpty(*conditionEl);
+            return c;
         }
         else if (conditionSubtype == "file")
         {
@@ -529,6 +838,11 @@ namespace hemelb::configuration {
         }
 
         propertyoutputEl.PopAttributeOrThrow("period", file.frequency);
+        file.start = propertyoutputEl.PopAttributeMaybe<unsigned long>("start").value_or(0);
+        file.stop = propertyoutputEl.PopAttributeMaybe<unsigned long>("stop").value_or(
+            std::numeric_limits<unsigned long>::max());
+        if (file.frequency == 0 || file.stop < file.start)
+            throw Exception() << "Property output requires a positive period and stop >= start";
 
         auto geometryEl = propertyoutputEl.PopChildOrThrow("geometry");
         auto type = geometryEl->PopAttributeOrThrow("type");
@@ -540,6 +854,15 @@ namespace hemelb::configuration {
         else if (type == "line")
         {
             file.geometry.reset(DoIOForLineGeometry(*geometryEl));
+        }
+        else if (type == "sphere" || type == "surfaceWithinSphere")
+        {
+            auto point =
+                PopDimensionalValue<PhysicalPosition>(*geometryEl->PopChildOrThrow("point"), "m");
+            auto radius =
+                PopDimensionalValue<PhysicalDistance>(*geometryEl->PopChildOrThrow("radius"), "m");
+            file.geometry.reset(new extraction::SphereGeometrySelector(
+                point, radius, type == "surfaceWithinSphere"));
         }
         else if (type == "whole")
         {
@@ -659,6 +982,14 @@ namespace hemelb::configuration {
         else if (type == "tangentialprojectiontraction")
         {
             field.src = extraction::source::TangentialProjectionTraction{};
+        }
+        else if (type == "normalprojectiontraction")
+        {
+            field.src = extraction::source::NormalProjectionTraction{};
+        }
+        else if (type == "wallextension")
+        {
+            field.src = extraction::source::WallExtension{};
         }
         else if (type == "distributions")
         {
@@ -841,6 +1172,10 @@ namespace hemelb::configuration {
         const auto units = conditionEl.PopAttributeMaybe("units").value_or("Pa");
         if (units != "Pa" && units != "mmHg") throw Exception() << "Invalid pressure file units: " << units;
         newIolet.file_mmHg = units == "mmHg";
+        auto timing = conditionEl.PopAttributeMaybe("timing").value_or("stretch");
+        if (timing != "stretch" && timing != "periodic")
+            throw Exception() << "Pressure file timing must be stretch or periodic";
+        newIolet.periodic = timing == "periodic";
         CheckEmpty(*pathEl);
         return newIolet;
     }
@@ -886,6 +1221,10 @@ namespace hemelb::configuration {
     auto SimConfigReader::DoIOForFileVelocityInOutlet(Element& conditionEl) const -> IoletConfig
     {
         FileVelocityIoletConfig newIolet;
+        auto timing = conditionEl.PopAttributeMaybe("timing").value_or("legacy");
+        if (timing != "legacy" && timing != "periodic")
+            throw Exception() << "Velocity file timing must be legacy or periodic";
+        newIolet.periodic = timing == "periodic";
 
         newIolet.file_path = RelPathToFullPath(conditionEl.PopChildOrThrow("path")->PopAttributeOrThrow("value"));
         PopDimensionalValue(*conditionEl.PopChildOrThrow("radius"), "m", newIolet.radius_m);

@@ -10,27 +10,40 @@
 
 namespace hemelb::util
 {
-
-    std::complex<double> BesselJ0ComplexArgument(const std::complex<double>& z, double tolSq)
+    std::complex<double> BesselJ1ComplexArgument(std::complex<double> const &z, double tolSq)
     {
-      // Zeroth term is 1
-      std::complex<double> sum(1.0, 0.0);
-      double fact = 1;
-      std::complex<double> zSqOver4_pow(1.0, 0.0);
-      std::complex<double> term(1.0, 0.0);
+        if (!std::isfinite(z.real()) || !std::isfinite(z.imag()) || !std::isfinite(tolSq) ||
+            tolSq <= 0)
+            throw Exception() << "Bessel J1 requires finite argument and positive tolerance";
+        auto term = 0.5 * z;
+        auto sum = term;
+        for (unsigned k = 1; k < 10000; ++k)
+        {
+            term *= -0.25 * z * z / (double(k) * (k + 1));
+            sum += term;
+            if (!std::isfinite(sum.real()) || !std::isfinite(sum.imag()))
+                throw Exception() << "Bessel J1 series overflow";
+            if (std::norm(term) <= tolSq)
+                return sum;
+        }
+        throw Exception() << "Bessel J1 series did not converge";
+    }
 
-      unsigned i;
-      for (i = 1; term.real() * term.real() + term.imag() * term.imag() > tolSq; ++i)
-      {
-        fact *= i;
-        zSqOver4_pow *= -0.25 * z * z;
-        term = zSqOver4_pow / (fact * fact);
-        sum += term;
-      }
-
-      // If this assertion trips, it is likely that the zSqOver4_pow / (fact * fact) has become inf / inf
-      HASSERT(!std::isnan(real(sum)) && !std::isnan(imag(sum)));
-
-      return sum;
+    std::complex<double> BesselJ0ComplexArgument(const std::complex<double> &z, double tolSq)
+    {
+        if (!std::isfinite(z.real()) || !std::isfinite(z.imag()) || !std::isfinite(tolSq) ||
+            tolSq <= 0)
+            throw Exception() << "Bessel J0 requires finite argument and positive tolerance";
+        std::complex<double> sum{1, 0}, term{1, 0};
+        for (unsigned k = 1; k < 10000; ++k)
+        {
+            term *= -0.25 * z * z / (double(k) * k);
+            sum += term;
+            if (!std::isfinite(sum.real()) || !std::isfinite(sum.imag()))
+                throw Exception() << "Bessel J0 series overflow";
+            if (std::norm(term) <= tolSq)
+                return sum;
+        }
+        throw Exception() << "Bessel J0 series did not converge";
     }
 }

@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# This file is part of HemeLB and is Copyright (C)
+# the HemeLB team and/or their institutions, as detailed in the
+# file AUTHORS. This software is provided under the terms of the
+# license in the file LICENSE.
+
 """Check direct legacy XML loading and rank-portable extraction v4/v5 restarts."""
 import argparse
 import hashlib
@@ -17,6 +22,7 @@ MMHG_TO_PA = 133.3223874
 def legacy_xml(tree, version):
     root = tree.getroot()
     root.set('version', str(version))
+    ET.SubElement(ET.SubElement(root, 'visualisation'), 'display', zoom='1.0')
     sim = root.find('simulation')
     ET.SubElement(sim, 'stresstype', value='1')
     for el in root.iter():

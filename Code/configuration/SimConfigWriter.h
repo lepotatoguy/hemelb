@@ -48,6 +48,8 @@ namespace hemelb::configuration
 
         void DoIOForCosinePressureInOutlet(Element&, CosinePressureIoletConfig const&) const;
         void DoIOForFilePressureInOutlet(Element&, FilePressureIoletConfig const&) const;
+        void DoIOForWindkesselPressureInOutlet(Element &,
+                                               WindkesselPressureIoletConfig const &) const;
         void DoIOForMultiscalePressureInOutlet(Element&, MultiscalePressureIoletConfig const&) const;
         void DoIOForParabolicVelocityInOutlet(Element&, ParabolicVelocityIoletConfig const&) const;
         void DoIOForWomersleyVelocityInOutlet(Element&, WomersleyVelocityIoletConfig const&) const;

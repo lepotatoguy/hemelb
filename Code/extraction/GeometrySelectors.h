@@ -12,5 +12,6 @@
 #include "extraction/GeometrySurfaceSelector.h"
 #include "extraction/SurfacePointSelector.h"
 #include "extraction/IoletGeometrySelector.h"
+#include "extraction/SphereGeometrySelector.h"
 
 #endif /* HEMELB_EXTRACTION_GEOMETRYSELECTORS_H */

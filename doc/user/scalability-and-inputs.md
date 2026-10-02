@@ -6,8 +6,8 @@ pressure-file values. Version 6 uses Pa by default. Legacy lattice iolet
 positions are converted in memory using voxel size and origin. Source XML and
 pressure files are preserved; no preprocessing command is required.
 
-Check and run an existing input with `hemelb-confcheck input.xml` and
-`hemelb -in input.xml -out results`. Available boundary physics and the lattice
+Run an existing input with `hemelb -in input.xml -out results`. Optionally
+check its configuration first with `hemelb-confcheck input.xml`. Available boundary physics and the lattice
 still depend on the executable's build configuration.
 
 ## Optionally save a converted configuration
@@ -16,7 +16,7 @@ Install the Python tools, then run:
 
 ```sh
 hlb-convert-config old/input.xml converted/input.xml
-hemelb-confcheck converted/input.xml
+hemelb-confcheck converted/input.xml  # optional
 hemelb -in converted/input.xml -out results
 ```
 
@@ -36,13 +36,13 @@ Pressure and velocity boundary choices still depend on the executable's CMake
 configuration. `hemelb-confcheck --syntax-only input.xml` checks the XML schema
 without checking those build choices. It does not establish that a case can run.
 
-Unsupported legacy features produce a named error: Windkessel boundaries,
-sponge layers, elastic walls, particles, and sphere extraction selectors. RBC
-and colloid inputs require their corresponding build options; those builds
-were not validated here. The optional converter conservatively rejects RBC
-and colloid sections. Conversion does not supply missing geometry or repair
-malformed XML. A parabolic boundary whose
-radius does not cover its geometry is rejected when the solver reaches that site.
+The supported outlet, sponge, and elastic-wall options are described in
+[CPU models](cpu-models.md). Separate guides cover [coupling](coupling.md),
+[passive tracers](tracers.md), [field extraction](extraction.md), and
+[checkpoint continuation](checkpoints.md). Unsupported physics and malformed XML produce a
+named error. Force-coupled colloids remain unsupported; passive tracers use a
+separate path. RBC configurations require an RBC build. A velocity boundary
+whose radius does not cover its geometry is rejected during the run.
 
 ## Select decomposition
 
@@ -56,6 +56,14 @@ Add this child of `<hemelbsettings>`:
 that split and remains the default when the element is absent. The selection is
 saved in generated restart XML. Both modes require at least one active block per
 MPI rank.
+
+Optional `reader_count` and `reader_spacing` attributes on `decomposition`
+limit geometry readers. Count zero uses all eligible ranks; spacing one uses
+consecutive ranks. For example, `reader_count="2" reader_spacing="2"` assigns
+payload reads to ranks 0 and 2. The combination must fit the current rank count,
+including after restart. Header broadcasts still use the I/O rank. Owner lookup
+caching uses a 64 MiB budget with a minimum of one whole block; a block larger
+than that budget can exceed it.
 
 ## Sparse geometry setup
 
@@ -71,8 +79,10 @@ and scan time grow with the box. Block coordinates retain the format's 16-bit
 limit. Each compressed block must fit the existing 64 MiB limit.
 
 The solver accepts `.gmy+` files with four header integers per block: fluid-site
-count, weight, compressed length, and uncompressed length. It ignores the weight
-and uses fluid-site counts for splitting. The extension selects this layout;
+count, weight, compressed length, and uncompressed length. It uses positive computational weights for the initial block split and
+ParMETIS vertex costs. Zero block weights fall back to the fluid-site count.
+ParMETIS converts average per-site costs to positive integers using a common
+scale, with rounding to one part in a million of the largest per-site cost. The extension selects this layout;
 keep `.gmy+` rather than renaming the file to `.gmy`.
 
 ## Read the performance report
@@ -123,5 +133,7 @@ reinterpreting a legacy file when restarting. Optional field `datatype` values
 saved XML so double-precision legacy checkpoint outputs retain their precision.
 
 Local validation covers legacy XML and checkpoint loading, geometry setup, and
-rank-portable restarts through the CTest targets. Optional RBC/colloid builds
-and remote CI remain unverified.
+rank-portable restarts through the CTest targets. The optional multiscale build
+passes its fluid regression suite locally. File read/write coupling has separate
+mock-peer tests; these do not exercise MPWide. External MPWide peer exchange,
+RBC/active-colloid builds, and remote CI remain unverified.

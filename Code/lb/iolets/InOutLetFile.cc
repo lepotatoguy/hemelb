@@ -89,6 +89,11 @@ namespace hemelb::lb
         // point of a new cycle for a continuous trace.
         void InOutLetFile::Reset(SimulationState &state)
         {
+            if (periodic)
+            {
+                densityTable.clear();
+                return;
+            }
             auto totalTimeSteps = state.GetEndTimeStep();
             // If the time values in the input file end BEFORE the planned
             // end of the simulation, then loop the profile afterwards

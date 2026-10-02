@@ -15,12 +15,18 @@
 #include <vector>
 
 #include "constants.h"
+#include "tracers/TracerConfig.h"
 #include "quantity.h"
 #include "units.h"
 #include "configuration/MonitoringConfig.h"
 #include "lb/LbmParameters.h"
 #include "util/Vector3D.h"
 #include "extraction/PropertyOutputFile.h"
+
+namespace hemelb
+{
+    class SimulationController;
+}
 
 namespace hemelb::io {
     class Checkpointer;
@@ -76,11 +82,22 @@ namespace hemelb::configuration
         LatticeTimeStep period;
     };
 
+    struct SpongeInfo
+    {
+        double viscosity_ratio = 1;
+        PhysicalDistance width_m = 0;
+        LatticeTimeStep lifetime = 0;
+    };
+
     struct GlobalSimInfo {
         TimeInfo time;
         SpaceInfo space;
         FluidInfo fluid;
         std::optional<CheckpointInfo> checkpoint;
+        std::optional<SpongeInfo> sponge;
+        double smagorinsky = 0.1;
+        double elastic_wall_stiffness = 0;
+        double boundary_velocity_ratio = 0;
     };
 
     struct FlowExtensionConfig {
@@ -133,6 +150,21 @@ namespace hemelb::configuration
     struct FilePressureIoletConfig : PressureIoletConfig {
         std::filesystem::path file_path;
         bool file_mmHg = false;
+        bool periodic = false;
+    };
+
+    struct WindkesselPressureIoletConfig : PressureIoletConfig
+    {
+        std::string model = "WK2";
+        double characteristic_resistance = 0;
+        double peripheral_resistance = 0;
+        double capacitance = 0;
+        PhysicalDistance radius_m = 0;
+        double area_m2 = 0;
+        std::optional<std::filesystem::path> weights_path;
+        PhysicalPressure pressure_Pa = 0;
+        double flow_m3s = 0;
+        double previous_flow_m3s = 0;
     };
 
     struct MultiscalePressureIoletConfig : PressureIoletConfig {
@@ -156,15 +188,41 @@ namespace hemelb::configuration
         double womersley;
     };
 
+    struct ElasticWomersleyVelocityIoletConfig : WomersleyVelocityIoletConfig
+    {
+        double poisson_ratio = 0;
+        PhysicalPressure youngs_modulus_Pa = 0;
+        PhysicalDistance axial_position_m = 0;
+    };
+
+    struct ReadWriteVelocityIoletConfig : VelocityIoletConfig
+    {
+        PhysicalDistance radius_m = 0;
+        double area_m2 = 0;
+        LatticeTimeStep frequency = 1;
+        std::filesystem::path flow_path, pressure_path;
+        std::optional<std::filesystem::path> weights_path;
+        std::optional<PhysicalTime> start_time_s;
+        double flow_conversion = 1, pressure_conversion = 1, smoothing = 1;
+        bool pressure_mmHg = false;
+        PhysicalTime timeout_s = 60;
+        PhysicalSpeed max_speed_ms = 0;
+        LatticeTimeStep next_exchange = 2;
+        double average_density = 1;
+    };
+
     struct FileVelocityIoletConfig : VelocityIoletConfig {
         std::filesystem::path file_path;
+        bool periodic = false;
         PhysicalDistance radius_m;
     };
 
-    using IoletConfig = std::variant<std::monostate,
-            CosinePressureIoletConfig, FilePressureIoletConfig, MultiscalePressureIoletConfig,
-            ParabolicVelocityIoletConfig, WomersleyVelocityIoletConfig, FileVelocityIoletConfig
-    >;
+    using IoletConfig =
+        std::variant<std::monostate, CosinePressureIoletConfig, FilePressureIoletConfig,
+                     MultiscalePressureIoletConfig, WindkesselPressureIoletConfig,
+                     ParabolicVelocityIoletConfig, WomersleyVelocityIoletConfig,
+                     ElasticWomersleyVelocityIoletConfig, ReadWriteVelocityIoletConfig,
+                     FileVelocityIoletConfig>;
 
     struct VTKMeshFormat {};
     struct KruegerMeshFormat {};
@@ -218,55 +276,30 @@ namespace hemelb::configuration
         friend class SimBuilder;
         friend class SimConfigReader;
 friend class io::Checkpointer;
-    public:
-        using path = std::filesystem::path;
-        static SimConfig New(const path& p);
-        std::string const& GetDecompositionMethod() const { return decompositionMethod; }
+friend class hemelb::SimulationController;
 
-        inline GlobalSimInfo const& GetSimInfo() const {
-            return sim_info;
-        }
+public:
+using path = std::filesystem::path;
+static SimConfig New(const path &p);
+std::string const &GetDecompositionMethod() const { return decompositionMethod; }
+unsigned GetGeometryReaderCount() const { return geometryReaderCount; }
+unsigned GetGeometryReaderSpacing() const { return geometryReaderSpacing; }
 
-        const std::vector<IoletConfig> & GetInlets() const
-        {
-          return inlets;
-        }
-        const std::vector<IoletConfig> & GetOutlets() const
-        {
-          return outlets;
-        }
-        const path& GetDataFilePath() const
-        {
-          return dataFilePath;
-        }
-        LatticeTimeStep GetTotalTimeSteps() const
-        {
-          return sim_info.time.total_steps;
-        }
-        LatticeTimeStep GetWarmUpSteps() const
-        {
-          return sim_info.time.warmup_steps;
-        }
-        PhysicalTime GetTimeStepLength() const
-        {
-          return sim_info.time.step_s;
-        }
-        PhysicalDistance GetVoxelSize() const
-        {
-          return sim_info.space.step_m;
-        }
-        PhysicalPosition GetGeometryOrigin() const
-        {
-          return sim_info.space.geometry_origin_m;
-        }
-        unsigned int PropertyOutputCount() const
-        {
-          return propertyOutputs.size();
-        }
-        extraction::PropertyOutputFile& GetPropertyOutput(unsigned int index)
-        {
-          return propertyOutputs[index];
-        }
+inline GlobalSimInfo const &GetSimInfo() const { return sim_info; }
+
+const std::vector<IoletConfig> &GetInlets() const { return inlets; }
+const std::vector<IoletConfig> &GetOutlets() const { return outlets; }
+const path &GetDataFilePath() const { return dataFilePath; }
+LatticeTimeStep GetTotalTimeSteps() const { return sim_info.time.total_steps; }
+LatticeTimeStep GetWarmUpSteps() const { return sim_info.time.warmup_steps; }
+PhysicalTime GetTimeStepLength() const { return sim_info.time.step_s; }
+PhysicalDistance GetVoxelSize() const { return sim_info.space.step_m; }
+PhysicalPosition GetGeometryOrigin() const { return sim_info.space.geometry_origin_m; }
+unsigned int PropertyOutputCount() const { return propertyOutputs.size(); }
+extraction::PropertyOutputFile &GetPropertyOutput(unsigned int index)
+{
+    return propertyOutputs[index];
+}
         std::vector<extraction::PropertyOutputFile> const& GetPropertyOutputs() const
         {
           return propertyOutputs;
@@ -280,6 +313,8 @@ friend class io::Checkpointer;
         inline bool HasColloidSection() const {
             return colloid_xml_path.has_value();
         }
+
+        auto const &GetTracers() const { return tracers; }
 
         // Get the initial condtion config
         inline const ICConfig& GetInitialCondition() const {
@@ -317,8 +352,10 @@ friend class io::Checkpointer;
         MonitoringConfig monitoringConfig; ///< Configuration of various checks/tests
 
         std::optional<RBCConfig> rbcConf;
+        std::optional<tracers::TracerConfig> tracers;
 
         std::string decompositionMethod = "parmetis";
+        unsigned geometryReaderCount = 0, geometryReaderSpacing = 1;
         GlobalSimInfo sim_info;
         ICConfig initial_condition;
         std::vector<IoletConfig> inlets;

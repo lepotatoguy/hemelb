@@ -21,7 +21,7 @@ class FieldSpec:
     Fields are the point id, position in metres, index position and the fields
     specified in the extraction file.
 
-    The specification of a single element is a five element tuple of:
+    The specification of a single element is a seven element tuple of:
         (field name,
          XDR data type,
          in-memory dtype,
@@ -206,7 +206,15 @@ class ExtractedPropertyV4Parser(xtr_parser_base, xtr_common_4_5):
 
     def ParseTimeStep(self, memoryMappedData):
         result = np.recarray(self.siteCount, dtype=self._fieldSpec.GetMem())
-        for name, xdrType, memType, length, offset, dataOffset, scale in self._fieldSpec:
+        for (
+            name,
+            xdrType,
+            memType,
+            length,
+            offset,
+            dataOffset,
+            scale,
+        ) in self._fieldSpec:
             data = memoryMappedData.getfield((xdrType, length), offset)
             result[name] = data
             if dataOffset is not None:

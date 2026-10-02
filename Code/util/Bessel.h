@@ -10,6 +10,8 @@
 
 namespace hemelb::util
 {
+    std::complex<double> BesselJ1ComplexArgument(const std::complex<double> &z,
+                                                 double tolSq = 1e-24);
 
     /**
      * Evaluates the Bessel function of the first kind order 0 at z. The solution is approximated
@@ -29,8 +31,8 @@ namespace hemelb::util
      * @param tolSq the square of the tolerance used to terminate the expansion.
      * @return J0(z)
      */
-    std::complex<double>
-    BesselJ0ComplexArgument(const std::complex<double>& z, double tolSq = 1e-12);
+    std::complex<double> BesselJ0ComplexArgument(const std::complex<double> &z,
+                                                 double tolSq = 1e-12);
 }
 
 #endif // HEMELB_UTIL_BESSEL_H

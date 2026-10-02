@@ -23,7 +23,7 @@ def _string(value):
 
 def _extraction(path, version=5, changed_sites=False):
     fields = [("pressure", 1), ("custom_velocity", 3), ("stress", 6)]
-    if version == 5:
+    if version >= 5:
         fields.append(("large_integer", 1))
     headers = []
     for name, width in fields:
@@ -35,24 +35,32 @@ def _extraction(path, version=5, changed_sites=False):
             offsets = [100.0] if name == "pressure" else []
             header += struct.pack(">II", typecode, len(offsets))
             header += b"".join(struct.pack(">f", value) for value in offsets)
+        if version == 6:
+            header += struct.pack(
+                ">f" if typecode == 0 else ">Q", 2 if typecode == 0 else 0
+            )
         headers.append(header)
     field_header = b"".join(headers)
-    output = (
-        struct.pack(
-            ">IIIddddQII",
-            HemeLbMagicNumber,
-            ExtractionMagicNumber,
-            version,
+    output = struct.pack(">III", HemeLbMagicNumber, ExtractionMagicNumber, version)
+    if version == 6:
+        output += struct.pack(
+            ">7dQII",
             0.2,
+            0.025,
+            1.0,
             1.0,
             -2.0,
             3.0,
+            0.0,
             2,
             len(fields),
             len(field_header),
         )
-        + field_header
-    )
+    else:
+        output += struct.pack(
+            ">4dQII", 0.2, 1.0, -2.0, 3.0, 2, len(fields), len(field_header)
+        )
+    output += field_header
     for time, coordinates in [
         (7, [(2, 3, 4), (3, 3, 4)]),
         (11, [(3, 3, 4), (2, 3, 4)]),
@@ -80,7 +88,7 @@ def _extraction(path, version=5, changed_sites=False):
     return path
 
 
-@pytest.mark.parametrize("version", [4, 5])
+@pytest.mark.parametrize("version", [4, 5, 6])
 @pytest.mark.parametrize("step_length", [None, 0.01])
 def test_roundtrip_fields_positions_and_row_order(tmp_path, version, step_length):
     source = _extraction(tmp_path / "source.xtr", version)
@@ -88,7 +96,12 @@ def test_roundtrip_fields_positions_and_row_order(tmp_path, version, step_length
     pvd = export(source, tmp_path / "nested/series.pvd", step_length)
     datasets = ET.parse(pvd).getroot().findall("Collection/DataSet")
     assert [float(node.get("timestep")) for node in datasets] == [
-        time if step_length is None else time * step_length for time in parsed.times
+        (
+            time * (0.025 if version == 6 else 1)
+            if step_length is None
+            else time * step_length
+        )
+        for time in parsed.times
     ]
     for timestep, node in zip(parsed.times, datasets):
         path = pvd.parent / node.get("file")
@@ -115,13 +128,13 @@ def test_roundtrip_fields_positions_and_row_order(tmp_path, version, step_length
         coordinates = vtk_to_numpy(grid.GetCellData().GetArray("grid"))
         order = [rows[tuple(coordinate)] for coordinate in coordinates]
         np.testing.assert_allclose(positions, data.position[order], rtol=1e-6)
-        for name, _, _, length, _ in parsed.GetFieldSpec():
+        for name, _, _, length, _, _, _ in parsed.GetFieldSpec():
             actual = vtk_to_numpy(grid.GetCellData().GetArray(name))
             expected = data[name][order]
             if length == (6,):
                 expected = expected[:, [0, 3, 5, 1, 4, 2]]
             np.testing.assert_array_equal(actual, expected)
-        if version == 5:
+        if version >= 5:
             assert (
                 vtk_to_numpy(grid.GetCellData().GetArray("large_integer")).dtype
                 == np.uint64

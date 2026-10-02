@@ -1,26 +1,25 @@
 # HemeLB: haemodynamic simulation with lattice Boltzmann
 
-[![Main application](https://github.com/lepotatoguy/hemelb/actions/workflows/main-app.yml/badge.svg?branch=fix%2Fhemelb-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/main-app.yml)
-[![Python tools](https://github.com/lepotatoguy/hemelb/actions/workflows/py-hemetools.yml/badge.svg?branch=fix%2Fhemelb-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/py-hemetools.yml)
-[![Geometry tool](https://github.com/lepotatoguy/hemelb/actions/workflows/gmy-tool.yml/badge.svg?branch=fix%2Fhemelb-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/gmy-tool.yml)
+[![Main application](https://github.com/lepotatoguy/hemelb/actions/workflows/main-app.yml/badge.svg?branch=feat%2Fscalability-input-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/main-app.yml)
+[![Python tools](https://github.com/lepotatoguy/hemelb/actions/workflows/py-hemetools.yml/badge.svg?branch=feat%2Fscalability-input-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/py-hemetools.yml)
+[![Geometry tool](https://github.com/lepotatoguy/hemelb/actions/workflows/gmy-tool.yml/badge.svg?branch=feat%2Fscalability-input-improvements)](https://github.com/lepotatoguy/hemelb/actions/workflows/gmy-tool.yml)
 
 HemeLB simulates fluid flow through complex geometries, including vessel
 networks, using the lattice Boltzmann method and MPI. The geometry tool turns
 an STL surface into solver inputs; the Python tools read and convert results.
 
-This fork's `fix/hemelb-improvements` branch includes installation, geometry
-validation, and checkpoint restart improvements. Its solver reads XML version
-5 and uses mmHg for pressure. See the [changelog](CHANGELOG.md) for changes and
-the [format reference](doc/dev/file-formats/extraction.md) for output details.
-Use the documentation from the branch you build: configuration and file-format
-versions can differ between branches.
+This branch adds CPU boundary models, sparse geometry setup, runtime
+decomposition, coupling, and passive tracers. It reads existing HemePure XML3
+and HemeLB XML5 inputs and extraction/checkpoint versions 4, 5, and 6. New XML
+and output use version 6, with pressure in Pa. See the
+[changelog](CHANGELOG.md) and [compatibility guide](doc/user/scalability-and-inputs.md).
 
 ## Install
 
 On macOS or Debian/Ubuntu Linux, from a terminal:
 
 ```sh
-git clone --branch fix/hemelb-improvements https://github.com/lepotatoguy/hemelb.git
+git clone --branch feat/scalability-input-improvements https://github.com/lepotatoguy/hemelb.git
 cd hemelb
 Scripts/install_hemelb.sh
 ```
@@ -36,7 +35,8 @@ conda activate gmy-tool
 ```
 
 Follow the [first-run walkthrough](doc/user/getting-started.md) to run a bundled
-cylinder case and inspect its results. It includes a ready-to-use configuration.
+example and inspect its results. The root-level [examples folder](examples/README.md)
+contains the matching STL, geometry-tool profile, GMY, and XML configuration.
 
 ## Documentation
 
@@ -49,6 +49,11 @@ cylinder case and inspect its results. It includes a ready-to-use configuration.
 | Build manually or on a cluster | [Build and run](doc/user/main-application.md), [CMake options](doc/user/CMakeOptions.md) |
 | Restart from saved fluid distributions | [Checkpoint workflow](doc/user/checkpoints.md) |
 | Read results in Python or export them for ParaView | [Python tools](doc/user/python-tools.md) |
+| Tune geometry loading or use existing inputs | [Scalability and compatibility](doc/user/scalability-and-inputs.md) |
+| Select CPU boundaries and collision models | [CPU models](doc/user/cpu-models.md) |
+| Exchange flow and pressure with a peer | [Coupling](doc/user/coupling.md) |
+| Track passive particles | [Tracers](doc/user/tracers.md) |
+| Select fields, regions, and sample times | [Field extraction](doc/user/extraction.md) |
 | Run tests or understand the implementation | [Developer guide](doc/dev/README.md) |
 
 The [documentation index](doc/README.md) lists the guides and defines common
@@ -60,7 +65,8 @@ may use different installation steps or formats.
 
 HemeLB began at University College London. Contributors and institutions are
 listed in [AUTHORS](AUTHORS); the code is licensed under the
-[LGPL](LICENSE). The upstream repository is
+[LGPL](LICENSE). HemePure-derived components retain the notices in
+[COPYING.HemePure](COPYING.HemePure). The upstream repository is
 [hemelb-codes/hemelb](https://github.com/hemelb-codes/hemelb).
 
 ## Publications

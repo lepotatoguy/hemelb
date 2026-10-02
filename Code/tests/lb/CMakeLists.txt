@@ -6,6 +6,9 @@ add_test_lib(test_lb
   BroadcastMocks.cc
   CollisionTests.cc
   IncompressibilityCheckerTests.cc
+  SpongeTests.cc
+  WindkesselTests.cc
+  AdditionalBoundaryTests.cc
   KernelTests.cc
   LatticeTests.cc
   RheologyModelTests.cc

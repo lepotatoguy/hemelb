@@ -79,11 +79,29 @@ namespace hemelb::lb
 
         std::ifstream datafile(velocityFilePath);
         log::Logger::Log<log::Debug, log::OnePerCore>("Reading iolet values from file:");
-        while (datafile.good())
+        while (datafile >> std::ws && datafile.peek() != std::char_traits<char>::eof())
         {
-          datafile >> timeTemp >> valueTemp;
-          log::Logger::Log<log::Trace, log::OnePerCore>("Time: %f Value: %f", timeTemp, valueTemp);
-          timeValuePairs[timeTemp] = valueTemp;
+            if (!(datafile >> timeTemp >> valueTemp))
+                throw Exception() << "Invalid velocity profile record in " << velocityFilePath;
+            if (!std::isfinite(timeTemp) || !std::isfinite(valueTemp))
+                throw Exception() << "Non-finite velocity profile record in " << velocityFilePath;
+            timeValuePairs[timeTemp] = valueTemp;
+        }
+        if (timeValuePairs.size() < 2)
+            throw Exception() << "Velocity profile needs at least two distinct times";
+        if (periodic)
+        {
+            if (timeValuePairs.begin()->second != timeValuePairs.rbegin()->second)
+                throw Exception() << "Periodic velocity endpoints must match";
+            profile.assign(timeValuePairs.begin(), timeValuePairs.end());
+            velocityTable.clear();
+            return;
+        }
+        if (endTS == 0)
+        {
+            velocityTable.assign(1,
+                                 units->ConvertSpeedToLatticeUnits(timeValuePairs.begin()->second));
+            return;
         }
 
         datafile.close();
@@ -97,7 +115,8 @@ namespace hemelb::lb
         for (auto& [time, speed]: timeValuePairs)
         {
             /* If the time value in the input file stretches BEYOND the end of the simulation, then insert an interpolated end value and exit the loop. */
-            if (time > t_max) {
+            if (time > t_max && !times.empty())
+            {
                 PhysicalTime time_diff = t_max - times.back();
 
                 PhysicalTime time_diff_ratio = time_diff / (time - times.back());
@@ -117,6 +136,9 @@ namespace hemelb::lb
         /* If the time values in the input file end BEFORE the planned end of the simulation, then loop the profile afterwards (using %TimeStepsInInletVelocityProfile). */
         PhysicalTime duration = (times.back() - times.front());
         int TimeStepsInInletVelocityProfile = duration / timeStepLength;
+        if (TimeStepsInInletVelocityProfile <= 0)
+            throw Exception()
+                << "Legacy velocity profile is shorter than a timestep; use timing=periodic";
 
         // Check if last point's value matches the first
         if (values.back() != values.front())
@@ -139,6 +161,19 @@ namespace hemelb::lb
 
       }
 
+      double InOutLetFileVelocity::SpeedAt(LatticeTimeStep step) const
+      {
+          if (!periodic)
+              return velocityTable.at(step);
+          double duration = profile.back().first - profile.front().first;
+          double time = profile.front().first + std::fmod(step * units->GetTimeStep(), duration);
+          auto upper = std::upper_bound(profile.begin(), profile.end(), time,
+                                        [](double t, auto const &p) { return t < p.first; });
+          auto lower = upper - 1;
+          return units->ConvertSpeedToLatticeUnits(std::lerp(
+              lower->second, upper->second, (time - lower->first) / (upper->first - lower->first)));
+      }
+
     LatticeVelocity InOutLetFileVelocity::GetVelocity(const LatticePosition& x,
                                                       const LatticeTimeStep t) const
     {
@@ -152,7 +187,7 @@ namespace hemelb::lb
           HASSERT(rSqOverASq <= 1.0);
 
           // Get the max velocity
-          LatticeSpeed max = velocityTable[t];
+          LatticeSpeed max = SpeedAt(t);
 
           // Brackets to ensure that the scalar multiplies are done before vector * scalar.
           return normal * (max * (1. - rSqOverASq));
@@ -166,7 +201,7 @@ namespace hemelb::lb
 
           /* Prevent division by 0 errors if the normals are 0.0. */
           for (auto& comp: abs_normal) {
-              comp = std::max(comp, 0.0000001);
+              comp = std::max(std::abs(comp), 0.0000001);
           }
 
           /*bool logging = false;
@@ -196,7 +231,7 @@ namespace hemelb::lb
               if (normal[i] < 0.0) {
                   xyz_directions[i] = -1;
                   xyz[i] = floor(x[i]);
-                  abs_normal[i] = -abs_normal[i];
+
                   /* Start with a negative residual because we already moved partially in this direction. */
                   xyz_residual[i] = -(x[i] - floor(x[i]));
               } else {
@@ -212,12 +247,12 @@ namespace hemelb::lb
           {
             if (weights_table.count(xyz) > 0)
             {
-              v_tot = normal * weights_table.at(xyz) * velocityTable[t];
-              //log::Logger::Log<log::Warning, log::OnePerCore>("%f %f %f %f",
-              //                                                              x.x,
-              //                                                              x.y,
-              //                                                              x.z, v_tot);
-              return v_tot;
+                v_tot = normal * weights_table.at(xyz) * SpeedAt(t);
+                // log::Logger::Log<log::Warning, log::OnePerCore>("%f %f %f %f",
+                //                                                               x.x,
+                //                                                               x.y,
+                //                                                               x.z, v_tot);
+                return v_tot;
             }
 
             /*if (logging)
@@ -318,24 +353,18 @@ namespace hemelb::lb
            * coord_x coord_y coord_z weights_value
            *
            * */
-          while (myfile.good()) //(std::getline(myfile, input_line))
+          weights_table.clear();
+          while (myfile >> std::ws && myfile.peek() != std::char_traits<char>::eof())
           {
-            int x, y, z;
-            double v;
-            myfile >> x >> y >> z >> v;
-
-            std::vector<int> xyz;
-            xyz.push_back(x);
-            xyz.push_back(y);
-            xyz.push_back(z);
-            weights_table[xyz] = v;
-
-            log::Logger::Log<log::Trace, log::OnePerCore>("%lld %lld %lld %f",
-            x,
-            y,
-            z,
-            weights_table[xyz]);
+              int x, y, z;
+              double value;
+              if (!(myfile >> x >> y >> z >> value) || !std::isfinite(value) || value < 0)
+                  throw Exception() << "Invalid velocity weights record in " << in_name;
+              weights_table[{x, y, z}] = value;
           }
+          if (weights_table.empty())
+              throw Exception() << "Empty velocity weights file: " << in_name;
+
           myfile.close();
         }
       }

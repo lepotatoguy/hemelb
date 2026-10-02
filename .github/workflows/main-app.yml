@@ -5,8 +5,10 @@ on:
       - main
       - 'fix/**'
       - 'feature/**'
+      - 'feat/**'
     paths:
       - Code/**
+      - examples/**
       - dependencies/**
       # CMake modules are loaded by Code/CMakeLists.txt; the super build
       # (CMakeLists.txt) is also run end to end by install-script.yml.
@@ -116,7 +118,7 @@ jobs:
         MPIRUN_FLAGS: --oversubscribe
         NUMPROCS: 2
         OFFSET_CHECK: light
-      run: ./diffTest.sh
+      run: python "$GITHUB_WORKSPACE/Code/tests/upstream_regression.py" --hemelb "$(command -v hemelb)" --fixture . --mode diff
 
     - name: Store results on error
       if: failure()
@@ -129,7 +131,7 @@ jobs:
       working-directory: hemelb-tests/fluid-checkpoint
       env:
         MPIRUN_FLAGS: --oversubscribe
-      run: ./run.sh
+      run: python "$GITHUB_WORKSPACE/Code/tests/upstream_regression.py" --hemelb "$(command -v hemelb)" --fixture . --mode checkpoint
 
     - name: Restart checkpoints on different process counts
       env:
@@ -201,3 +203,65 @@ jobs:
       with:
         name: rbc-failed-build-tree
         path: build
+
+  cpu_model_build:
+    name: CPU model (${{ matrix.name }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: sponge, kernel: LBGKSL, wall: BFL, inlet: NASHZEROTHORDERPRESSUREIOLET, outlet: NASHZEROTHORDERPRESSUREIOLET}
+          - {name: trt-sponge, kernel: TRTSL, wall: BFL, inlet: NASHZEROTHORDERPRESSUREIOLET, outlet: NASHZEROTHORDERPRESSUREIOLET}
+          - {name: les-sponge, kernel: LBGKLESSL, wall: BFL, inlet: NASHZEROTHORDERPRESSUREIOLET, outlet: NASHZEROTHORDERPRESSUREIOLET}
+          - {name: elastic, kernel: LBGK, wall: GZSElastic, inlet: NASHZEROTHORDERPRESSUREIOLET, outlet: NASHZEROTHORDERPRESSUREIOLET}
+          - {name: yang, kernel: LBGK, wall: BFL, inlet: YANGPRESSUREIOLET, outlet: YANGPRESSUREIOLET}
+          - {name: yang-corners, kernel: LBGK, wall: BFL, inlet: NASHZEROTHORDERPRESSUREIOLET, outlet: NASHZEROTHORDERPRESSUREIOLET, wall_inlet: YANGPRESSUREBFL, wall_outlet: YANGPRESSUREBFL}
+          - {name: velocity, kernel: LBGK, wall: BFL, inlet: LADDIOLET, outlet: NASHZEROTHORDERPRESSUREIOLET}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-compilers
+        with:
+          compiler: gnu-13
+      - uses: ./.github/actions/install-hemelb-deps
+        with:
+          name: cpu-models
+      - name: Configure CPU model
+        run: >-
+          cmake -S Code -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DHEMELB_DEPENDENCIES_INSTALL_PREFIX=${{ env.deps_install_prefix }}
+          -DHEMELB_BUILD_RBC=OFF -DHEMELB_BUILD_TESTS=OFF
+          -DHEMELB_LATTICE=D3Q19 -DHEMELB_USE_SSE3=OFF
+          -DHEMELB_KERNEL=${{ matrix.kernel }}
+          -DHEMELB_WALL_BOUNDARY=${{ matrix.wall }}
+          -DHEMELB_INLET_BOUNDARY=${{ matrix.inlet }}
+          -DHEMELB_OUTLET_BOUNDARY=${{ matrix.outlet }}
+          -DHEMELB_WALL_INLET_BOUNDARY=${{ matrix.wall_inlet || 'AUTO' }}
+          -DHEMELB_WALL_OUTLET_BOUNDARY=${{ matrix.wall_outlet || 'AUTO' }}
+      - name: Build CPU model
+        run: cmake --build build
+      - name: Check model and portable restart
+        env:
+          MPIRUN_FLAGS: --oversubscribe
+        run: |
+          if [ '${{ matrix.name }}' = velocity ]; then
+            python3 Code/tests/cpu_boundary_models_mpi.py --hemelb "$PWD/build/hemelb" --model womersleyElastic
+            python3 Code/tests/cpu_boundary_models_mpi.py --hemelb "$PWD/build/hemelb" --model readWrite
+            python3 Code/tests/cpu_boundary_models_mpi.py --hemelb "$PWD/build/hemelb" --model weightedReadWrite
+            python3 Code/tests/cpu_boundary_models_mpi.py --hemelb "$PWD/build/hemelb" --model periodicVelocity
+          else
+            python3 Code/tests/cpu_boundary_models_mpi.py --hemelb "$PWD/build/hemelb" --model '${{ matrix.name }}'
+          fi
+      - name: Compile and verify x86 vector paths
+        if: matrix.name == 'yang'
+        shell: bash
+        run: |
+          for variant in 'AVX2:avx2' 'AVX512:avx512f'; do
+            macro=${variant%:*}
+            flag=${variant#*:}
+            c++ -std=c++20 -O2 -m"$flag" -DHEMELB_USE_"$macro" -ICode -Ibuild Code/tests/lb/simd_verification.cc -o "simd-$macro"
+            status=0
+            ./"simd-$macro" || status=$?
+            test "$status" = 0 || test "$status" = 77
+          done

@@ -26,10 +26,7 @@ namespace hemelb
     struct MPWideRuntimeType
     {
         typedef MPI_Datatype RuntimeType;
-        template<class T> static RuntimeType GetType()
-        {
-          return net::MpiDataTypeTraits<T>::GetMpiDataType();
-        }
+        template <class T> static RuntimeType GetType() { return net::MpiDataType<T>(); }
     };
 
     /**

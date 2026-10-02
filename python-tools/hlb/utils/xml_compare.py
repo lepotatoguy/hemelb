@@ -27,9 +27,11 @@ def val_to_float(val_txt):
 
 def val_to_vec3(txt):
     """Convert a serialised hemelb::util::Vector3D<double> to numpy array."""
-    if not txt.startswith("(") and txt.endswith(")"):
+    if not (txt.startswith("(") and txt.endswith(")")):
         raise ValueError("invalid format for HemeLB Vector3D")
     vals = [val_to_float(x) for x in txt[1:-1].split(",")]
+    if len(vals) != 3:
+        raise ValueError("HemeLB Vector3D must have three coordinates")
     return np.array(vals, dtype=float)
 
 
@@ -92,6 +94,7 @@ class ScalarQuantityCheck(QuantityCheck):
 
 class VectorQuantityCheck(QuantityCheck):
     def __call__(self, checker, ref, test):
+        super().__call__(checker, ref, test)
         rval = val_to_vec3(ref["value"])
         tval = val_to_vec3(test["value"])
         assert np.all(

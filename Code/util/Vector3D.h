@@ -14,6 +14,7 @@
 #include <numeric>
 #include <limits>
 #include "util/numerical.h"
+#include "util/ReadFloatingPoint.h"
 
 #ifdef HEMELB_CODE
 #include "net/MpiDataType.h"
@@ -613,15 +614,19 @@ namespace hemelb::util
     template<Arithmetic T>
     std::istream& operator>>(std::istream& i, Vector3D<T>& v3)
     {
+      auto read = [&i](T& value) {
+          if constexpr (std::is_floating_point_v<T>) ReadFloatingPoint(i, value);
+          else i >> value;
+      };
       if (detail::CheckNextChar(i, '('))
       {
-        i >> v3.x();
+        read(v3.x());
         if (detail::CheckNextChar(i, ','))
         {
-          i >> v3.y();
+          read(v3.y());
           if (detail::CheckNextChar(i, ','))
           {
-            i >> v3.z();
+            read(v3.z());
             detail::CheckNextChar(i, ')');
           }
         }

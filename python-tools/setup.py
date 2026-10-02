@@ -52,8 +52,8 @@ setup(
         "console_scripts": [
             "hlb-gmy-compress = hlb.parsers.geometry.compression:compress_main",
             "hlb-gmy-decompress = hlb.parsers.geometry.compression:decompress_main",
-            "hlb-dump-extracted-properties = hlb.converters.ExtractedPropertyTextDump:main",
             "hlb-extracted-to-vtk = hlb.converters.ExtractedPropertyToVtk:main",
+            "hlb-dump-extracted-properties = hlb.converters.ExtractedPropertyTextDump:main",
             "hlb-gmy-selfconsistent = hlb.parsers.geometry.self_consistency:main",
             "hlb-gmy-countsites = hlb.parsers.geometry.count_sites:main",
             "hlb-convert-config = hlb.converters.Config:main",

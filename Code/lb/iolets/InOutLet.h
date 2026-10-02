@@ -142,6 +142,12 @@ namespace hemelb::lb
           /// @todo: #632 Is this method ever implemented not empty?
           virtual void Reset(SimulationState& state) = 0;
 
+          virtual void ObserveVelocity(LatticeVelocity const &) {}
+          virtual void ObserveSite(LatticeDensity, LatticeVelocity const &velocity)
+          {
+              ObserveVelocity(velocity);
+          }
+
           const LatticePosition& GetPosition() const
           {
             return position;

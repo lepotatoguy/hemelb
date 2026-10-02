@@ -26,10 +26,38 @@ if (HEMELB_USE_ALL_WARNINGS_GNU)
   set( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall")
 endif()
 
+if ((HEMELB_INLET_BOUNDARY STREQUAL "YANGPRESSUREIOLET" OR HEMELB_OUTLET_BOUNDARY STREQUAL "YANGPRESSUREIOLET" OR HEMELB_WALL_INLET_BOUNDARY MATCHES "^YANGPRESSURE" OR HEMELB_WALL_OUTLET_BOUNDARY MATCHES "^YANGPRESSURE") AND NOT HEMELB_KERNEL STREQUAL "LBGK")
+  message(FATAL_ERROR "Yang pressure currently requires the LBGK kernel")
+endif()
+
+foreach(side IN ITEMS INLET OUTLET)
+  set(corner "${HEMELB_WALL_${side}_BOUNDARY}")
+  if(NOT corner STREQUAL "AUTO")
+    if((HEMELB_${side}_BOUNDARY STREQUAL "LADDIOLET" AND NOT corner MATCHES "^LADDIOLET") OR
+       (NOT HEMELB_${side}_BOUNDARY STREQUAL "LADDIOLET" AND corner MATCHES "^LADDIOLET"))
+      message(FATAL_ERROR "Wall/${side} boundary must use the same pressure/velocity family as its iolet")
+    endif()
+  endif()
+endforeach()
+
 # Definitions that are should be globally available
 add_definitions(-DHEMELB_CODE)
 
-if (HEMELB_USE_SSE3)
+if (HEMELB_USE_AVX2 AND HEMELB_USE_AVX512)
+  message(FATAL_ERROR "Choose only one of AVX2 and AVX512")
+endif()
+if (HEMELB_USE_AVX2 OR HEMELB_USE_AVX512)
+  if (NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i.86)$")
+    message(FATAL_ERROR "AVX options require an x86 target CPU")
+  endif()
+  if (HEMELB_USE_AVX512)
+    add_compile_definitions(HEMELB_USE_AVX512)
+    add_compile_options(-mavx512f)
+  else()
+    add_compile_definitions(HEMELB_USE_AVX2)
+    add_compile_options(-mavx2)
+  endif()
+elseif (HEMELB_USE_SSE3)
   add_definitions(-DHEMELB_USE_SSE3)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse3")
 endif()
@@ -163,6 +191,7 @@ target_link_libraries(${HEMELB_EXECUTABLE}-confcheck
   ${heme_libraries} ${heme_libraries}
   )
 
+install(FILES ${PROJECT_SOURCE_DIR}/../COPYING.HemePure DESTINATION share/hemelb/licenses)
 INSTALL(TARGETS ${HEMELB_EXECUTABLE} ${HEMELB_EXECUTABLE}-confcheck RUNTIME DESTINATION bin)
 add_to_resources(resources/report.txt.ctp resources/report.xml.ctp)
 

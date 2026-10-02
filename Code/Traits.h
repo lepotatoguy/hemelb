@@ -33,8 +33,10 @@ namespace hemelb
         using WallBoundary = WALL_BOUNDARY<Collision>;
         using InletBoundary = INLET_BOUNDARY<Collision>;
         using OutletBoundary = OUTLET_BOUNDARY<Collision>;
-        using WallInletBoundary = typename lb::CombineWallAndIoletStreamers<WallBoundary, InletBoundary>::type;
-        using WallOutletBoundary = typename lb::CombineWallAndIoletStreamers<WallBoundary, OutletBoundary>::type;
+        using WallInletBoundary = lb::SelectedCornerStreamer<build_info::WALL_INLET_BOUNDARY,
+                                                             WallBoundary, InletBoundary>;
+        using WallOutletBoundary = lb::SelectedCornerStreamer<build_info::WALL_OUTLET_BOUNDARY,
+                                                              WallBoundary, OutletBoundary>;
         using Stencil = STENCIL;
     };
 }

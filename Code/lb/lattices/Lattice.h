@@ -8,6 +8,9 @@
 
 #include <cmath>
 #include <span>
+#if defined(HEMELB_USE_AVX2) || defined(HEMELB_USE_AVX512)
+#include "lb/lattices/WideSimd.h"
+#endif
 #ifdef HEMELB_USE_SSE3
 #include <immintrin.h>
 #endif
@@ -96,7 +99,30 @@ namespace hemelb::lb
         using mut_span = MutDistSpan<Q>;
         using const_span = ConstDistSpan<Q>;
 
-#ifdef HEMELB_USE_SSE3
+#if defined(HEMELB_USE_AVX2) || defined(HEMELB_USE_AVX512)
+        inline static void CalculateDensityAndMomentum(const_span f, distribn_t &density,
+                                                       LatticeMomentum &momentum)
+        {
+            using S = detail::WideSimd;
+            auto rho = S::zero(), x = S::zero(), y = S::zero(), z = S::zero();
+            Direction i = 0;
+            for (; i + S::lanes <= NUMVECTORS; i += S::lanes)
+            {
+                auto values = S::load(f.data() + i);
+                rho = S::add(rho, values);
+                x = S::add(x, S::mul(values, S::load(CXD.data() + i)));
+                y = S::add(y, S::mul(values, S::load(CYD.data() + i)));
+                z = S::add(z, S::mul(values, S::load(CZD.data() + i)));
+            }
+            density = detail::Sum(rho);
+            momentum = {detail::Sum(x), detail::Sum(y), detail::Sum(z)};
+            for (; i < NUMVECTORS; ++i)
+            {
+                density += f[i];
+                momentum += VECTORS[i] * f[i];
+            }
+        }
+#elif defined(HEMELB_USE_SSE3)
         inline static void CalculateDensityAndMomentum(const_span f,
                                                        distribn_t &density,
                                                        util::Vector3D<distribn_t>& momentum) {
@@ -190,149 +216,168 @@ namespace hemelb::lb
             }
         }
 
-#endif                   
+#endif
 
-          /**
-           * Calculates density and momentum, including Guo forcing
-           * @param f
-           * @param density
-           * @param momentum_x
-           * @param momentum_y
-           * @param momentum_z
-           * @param force_x
-           * @param force_y
-           * @param force_z
-           */
-          inline static void CalculateDensityAndMomentum(const_span f,
-                                                         const LatticeForceVector& force,
-                                                         distribn_t &density,
-                                                         LatticeMomentum& momentum)
-          {
+        /**
+         * Calculates density and momentum, including Guo forcing
+         * @param f
+         * @param density
+         * @param momentum_x
+         * @param momentum_y
+         * @param momentum_z
+         * @param force_x
+         * @param force_y
+         * @param force_z
+         */
+        inline static void CalculateDensityAndMomentum(const_span f,
+                                                       const LatticeForceVector &force,
+                                                       distribn_t &density,
+                                                       LatticeMomentum &momentum)
+        {
             CalculateDensityAndMomentum(f, density, momentum);
             // Assumes Delta t is equal to one
             momentum += 0.5 * force;
-          }
+        }
 
         inline static void CalculateFeq(const distribn_t density, const LatticeMomentum& momentum,
                                         mut_span f_eq) {
             CalculateFeq(density, momentum.x(), momentum.y(), momentum.z(), f_eq);
         }
 
-#ifdef HEMELB_USE_SSE3
-        /**
-           * Calculates Feq using SSE3 intrinsics.
-           * If the lattice has an odd number of vectors (directions), 
-           * the last element is processed using scalar arithmetics
-           * 
-           * The reductions are calculated in two streams (the loop is virtually 
-           * twice unrolled). Some invariants are merged together
-           * 
-           * @param density
-           * @param momentum_x
-           * @param momentum_y
-           * @param momentum_z
-           * @param f_eq
-           */
-        static void CalculateFeq(const distribn_t &density,
-                                 const distribn_t &momentum_x,
-                                 const distribn_t &momentum_y,
-                                 const distribn_t &momentum_z,
-                                 mut_span f_eq)
+#if defined(HEMELB_USE_AVX2) || defined(HEMELB_USE_AVX512)
+        inline static void CalculateFeq(distribn_t const &density, distribn_t const &mx,
+                                        distribn_t const &my, distribn_t const &mz, mut_span out)
         {
-            // f_eq[i] = EQMWEIGHTS[i]
-            //            * (density - (3. / 2.) * momentumMagnitudeSquared/ DENSITY // Note this line invariant over i loop
-            //               + (9. / 2. * DENSITY) * mom_dot_ei * mom_dot_ei + 3. * mom_dot_ei);
-            // Where DENSITY = (constexpr COMPRESSIBLE) ? density : 1
-
-            // merge some constants and invariants and populate SSE registers by them
-            // want f_eq[i] = weight[i] * (tmp1 + tmp2 + tmp3)
-            const distribn_t threeHalvesOfMomentumMagnitudeSquared = (3./2.) * (momentum_x * momentum_x + momentum_y * momentum_y
-                + momentum_z * momentum_z);
-            distribn_t tmp1_scalar;
-            if constexpr (COMPRESSIBLE)
-                tmp1_scalar = density - threeHalvesOfMomentumMagnitudeSquared / density;
-            else
-                tmp1_scalar = density - threeHalvesOfMomentumMagnitudeSquared;
-
-            //const __m128d threeHalvesOfMomentumMagnitudeSquared_SSE2 = _mm_set1_pd(tmp0);
-
-            const distribn_t density_1 = 1. / density;
-
-            const __m128d momentum_x_SSE2 = _mm_set1_pd(momentum_x);
-            const __m128d momentum_y_SSE2 = _mm_set1_pd(momentum_y);
-            const __m128d momentum_z_SSE2 = _mm_set1_pd(momentum_z);
-
-            distribn_t nineHalvesOfDensity_1 = (9. / 2.);
-            if constexpr (COMPRESSIBLE)
-                nineHalvesOfDensity_1 *= density_1;
-            const __m128d nineOnTwoDensity_1_SSE2 = _mm_set1_pd(nineHalvesOfDensity_1);
-            const __m128d three_SSE2 = _mm_set1_pd(3.);
-
-            // sse loop (the loop is virtually twice unrolled)
-            Direction numVect2 = ((NUMVECTORS >> 1) << 1);
-            for (Direction i = 0; i < numVect2; i+=2)
+            using S = detail::WideSimd;
+            double inverse = COMPRESSIBLE ? 1 / density : 1;
+            double base = density - 1.5 * (mx * mx + my * my + mz * mz) * inverse;
+            auto vx = S::splat(mx), vy = S::splat(my), vz = S::splat(mz);
+            auto b = S::splat(base), q = S::splat(4.5 * inverse), three = S::splat(3);
+            Direction i = 0;
+            for (; i + S::lanes <= NUMVECTORS; i += S::lanes)
             {
-              // mom_dot_ei = CX[i] * momentum_x + CY[i] * momentum_y + CZ[i] * momentum_z;
-              const __m128d CXD_momentum_x_SSE2 = _mm_mul_pd(_mm_load_pd(&CXD[i]), momentum_x_SSE2);
-              const __m128d CYD_momentum_y_SSE2 = _mm_mul_pd(_mm_load_pd(&CYD[i]), momentum_y_SSE2);
-              const __m128d CZD_momentum_z_SSE2 = _mm_mul_pd(_mm_load_pd(&CZD[i]), momentum_z_SSE2);
-
-              const __m128d EQMWEIGHTS_SSE2 = _mm_load_pd(&EQMWEIGHTS[i]);
-
-              const __m128d mom_dot_ei_SSE2 = _mm_add_pd(
-                  _mm_add_pd(CXD_momentum_x_SSE2, CYD_momentum_y_SSE2),
-                  CZD_momentum_z_SSE2
-              );
-
-              //  (density - (3. / 2.) * momentumMagnitudeSquared * density_1
-              const __m128d tmp1 = _mm_set1_pd(tmp1_scalar);
-
-              // (9. / 2.) * density_1 * mom_dot_ei * mom_dot_ei
-              const __m128d tmp2 = (_mm_mul_pd(
-                      nineOnTwoDensity_1_SSE2,
-                      _mm_mul_pd(mom_dot_ei_SSE2, mom_dot_ei_SSE2)
-                  )
-              );
-              // 3. * mom_dot_ei);
-              const __m128d tmp3 = _mm_mul_pd(three_SSE2, mom_dot_ei_SSE2);
-
-              __m128d tmp4 = _mm_add_pd(tmp1, tmp2);
-              tmp4 = _mm_add_pd(tmp4, tmp3);
-
-              // f_eq is not 16B aligned
-              _mm_storeu_pd(&f_eq[i], _mm_mul_pd(EQMWEIGHTS_SSE2,tmp4));
+                auto dot = S::add(S::add(S::mul(S::load(CXD.data() + i), vx),
+                                         S::mul(S::load(CYD.data() + i), vy)),
+                                  S::mul(S::load(CZD.data() + i), vz));
+                auto value = S::add(S::add(b, S::mul(q, S::mul(dot, dot))), S::mul(three, dot));
+                S::store(out.data() + i, S::mul(S::load(EQMWEIGHTS.data() + i), value));
             }
-
-            // do the odd element (15/19/27) 
-            if (NUMVECTORS != numVect2)// constants are reduced
+            for (; i < NUMVECTORS; ++i)
             {
-                constexpr auto i = NUMVECTORS - 1;
-
-                const distribn_t mom_dot_ei = CXD[i] * momentum_x
-                                              + CYD[i] * momentum_y
-                                              + CZD[i] * momentum_z;
-
-                f_eq[i] = EQMWEIGHTS[i]
-                          * (tmp1_scalar
-                             + nineHalvesOfDensity_1 * (mom_dot_ei * mom_dot_ei)
-                             + 3. * mom_dot_ei);
-
+                double dot = CXD[i] * mx + CYD[i] * my + CZD[i] * mz;
+                out[i] = EQMWEIGHTS[i] * (base + 4.5 * inverse * dot * dot + 3 * dot);
             }
         }
-#else
-
+#elif defined(HEMELB_USE_SSE3)
           /**
-           * Calculate Feq, the orginal version
+           * Calculates Feq using SSE3 intrinsics.
+           * If the lattice has an odd number of vectors (directions),
+           * the last element is processed using scalar arithmetics
+           *
+           * The reductions are calculated in two streams (the loop is virtually
+           * twice unrolled). Some invariants are merged together
+           *
            * @param density
            * @param momentum_x
            * @param momentum_y
            * @param momentum_z
            * @param f_eq
            */
-          inline static void CalculateFeq(const distribn_t &density, const distribn_t &momentum_x,
-                                          const distribn_t &momentum_y,
-                                          const distribn_t &momentum_z, mut_span f_eq)
+          static void CalculateFeq(const distribn_t &density, const distribn_t &momentum_x,
+                                   const distribn_t &momentum_y, const distribn_t &momentum_z,
+                                   mut_span f_eq)
           {
+              // f_eq[i] = EQMWEIGHTS[i]
+              //            * (density - (3. / 2.) * momentumMagnitudeSquared/ DENSITY // Note this
+              //            line invariant over i loop
+              //               + (9. / 2. * DENSITY) * mom_dot_ei * mom_dot_ei + 3. * mom_dot_ei);
+              // Where DENSITY = (constexpr COMPRESSIBLE) ? density : 1
+
+              // merge some constants and invariants and populate SSE registers by them
+              // want f_eq[i] = weight[i] * (tmp1 + tmp2 + tmp3)
+              const distribn_t threeHalvesOfMomentumMagnitudeSquared =
+                  (3. / 2.) *
+                  (momentum_x * momentum_x + momentum_y * momentum_y + momentum_z * momentum_z);
+              distribn_t tmp1_scalar;
+              if constexpr (COMPRESSIBLE)
+                  tmp1_scalar = density - threeHalvesOfMomentumMagnitudeSquared / density;
+              else
+                  tmp1_scalar = density - threeHalvesOfMomentumMagnitudeSquared;
+
+              // const __m128d threeHalvesOfMomentumMagnitudeSquared_SSE2 = _mm_set1_pd(tmp0);
+
+              const distribn_t density_1 = 1. / density;
+
+              const __m128d momentum_x_SSE2 = _mm_set1_pd(momentum_x);
+              const __m128d momentum_y_SSE2 = _mm_set1_pd(momentum_y);
+              const __m128d momentum_z_SSE2 = _mm_set1_pd(momentum_z);
+
+              distribn_t nineHalvesOfDensity_1 = (9. / 2.);
+              if constexpr (COMPRESSIBLE)
+                  nineHalvesOfDensity_1 *= density_1;
+              const __m128d nineOnTwoDensity_1_SSE2 = _mm_set1_pd(nineHalvesOfDensity_1);
+              const __m128d three_SSE2 = _mm_set1_pd(3.);
+
+              // sse loop (the loop is virtually twice unrolled)
+              Direction numVect2 = ((NUMVECTORS >> 1) << 1);
+              for (Direction i = 0; i < numVect2; i += 2)
+              {
+                  // mom_dot_ei = CX[i] * momentum_x + CY[i] * momentum_y + CZ[i] * momentum_z;
+                  const __m128d CXD_momentum_x_SSE2 =
+                      _mm_mul_pd(_mm_load_pd(&CXD[i]), momentum_x_SSE2);
+                  const __m128d CYD_momentum_y_SSE2 =
+                      _mm_mul_pd(_mm_load_pd(&CYD[i]), momentum_y_SSE2);
+                  const __m128d CZD_momentum_z_SSE2 =
+                      _mm_mul_pd(_mm_load_pd(&CZD[i]), momentum_z_SSE2);
+
+                  const __m128d EQMWEIGHTS_SSE2 = _mm_load_pd(&EQMWEIGHTS[i]);
+
+                  const __m128d mom_dot_ei_SSE2 = _mm_add_pd(
+                      _mm_add_pd(CXD_momentum_x_SSE2, CYD_momentum_y_SSE2), CZD_momentum_z_SSE2);
+
+                  //  (density - (3. / 2.) * momentumMagnitudeSquared * density_1
+                  const __m128d tmp1 = _mm_set1_pd(tmp1_scalar);
+
+                  // (9. / 2.) * density_1 * mom_dot_ei * mom_dot_ei
+                  const __m128d tmp2 = (_mm_mul_pd(nineOnTwoDensity_1_SSE2,
+                                                   _mm_mul_pd(mom_dot_ei_SSE2, mom_dot_ei_SSE2)));
+                  // 3. * mom_dot_ei);
+                  const __m128d tmp3 = _mm_mul_pd(three_SSE2, mom_dot_ei_SSE2);
+
+                  __m128d tmp4 = _mm_add_pd(tmp1, tmp2);
+                  tmp4 = _mm_add_pd(tmp4, tmp3);
+
+                  // f_eq is not 16B aligned
+                  _mm_storeu_pd(&f_eq[i], _mm_mul_pd(EQMWEIGHTS_SSE2, tmp4));
+              }
+
+              // do the odd element (15/19/27)
+              if (NUMVECTORS != numVect2) // constants are reduced
+              {
+                  constexpr auto i = NUMVECTORS - 1;
+
+                  const distribn_t mom_dot_ei =
+                      CXD[i] * momentum_x + CYD[i] * momentum_y + CZD[i] * momentum_z;
+
+                  f_eq[i] = EQMWEIGHTS[i] *
+                            (tmp1_scalar + nineHalvesOfDensity_1 * (mom_dot_ei * mom_dot_ei) +
+                             3. * mom_dot_ei);
+              }
+          }
+#else
+
+        /**
+         * Calculate Feq, the orginal version
+         * @param density
+         * @param momentum_x
+         * @param momentum_y
+         * @param momentum_z
+         * @param f_eq
+         */
+        inline static void CalculateFeq(const distribn_t &density, const distribn_t &momentum_x,
+                                        const distribn_t &momentum_y, const distribn_t &momentum_z,
+                                        mut_span f_eq)
+        {
             const distribn_t density_1 = 1. / density;
             const distribn_t momentumMagnitudeSquared = momentum_x * momentum_x
                 + momentum_y * momentum_y + momentum_z * momentum_z;
@@ -352,7 +397,7 @@ namespace hemelb::lb
                                + (9. / 2.) * mom_dot_ei * mom_dot_ei + 3. * mom_dot_ei);
               }
             }
-          }
+        }
 #endif
 
 #ifdef HEMELB_USE_SSE3

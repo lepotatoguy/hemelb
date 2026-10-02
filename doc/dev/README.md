@@ -2,7 +2,7 @@
 
 Start with the [manual build guide](../user/main-application.md) and
 [CMake options](../user/CMakeOptions.md). These notes describe
-`fix/hemelb-improvements`; keep configuration units and binary formats aligned
+`feat/scalability-input-improvements`; keep configuration units and binary formats aligned
 with the branch under test.
 
 ## Repository layout
@@ -18,6 +18,8 @@ with the branch under test.
 
 ## Implementation references
 
+- [CPU verification commands and model restrictions](cpu-verification.md)
+- [CPU comparison and validation record](comparison-and-roadmap.md)
 - [Geometry reading, validation, and decomposition](geometry-reading.md)
 - [Checkpoint loading across rank counts](checkpoint-restart.md)
 - File formats: [geometry](file-formats/geometry.md),
@@ -42,7 +44,9 @@ For a top-level super build, use its inner code build folder:
 ctest --test-dir build/hemelb-prefix/src/hemelb-build --output-on-failure
 ```
 
-CTest registers `hemelb-tests` and, if Python is found, `checkpoint-restart-mpi`.
+CTest registers `hemelb-tests` and, if Python is found, five MPI regressions:
+`cpu-features-mpi`, `windkessel-mpi`, `legacy-compatibility-mpi`,
+`geometry-setup-mpi`, and `checkpoint-restart-mpi`.
 The installed `hemelb-tests` executable runs only the C++ unit suite. Run the
 portable-restart test separately when using an installed executable:
 
@@ -96,14 +100,14 @@ requires that checkout; missing fixtures are not a successful full test run.
 
 ## CI coverage and triggers
 
-The workflows select pushes to `main`, `fix/**`, and `feature/**`, with path
+The workflows select pushes to `main`, `fix/**`, `feature/**`, and `feat/**`, with path
 filters. A documentation-only push does not automatically run all suites.
 Pull requests, scheduled runs, and manual dispatch are also configured.
 Read each workflow before inferring coverage from a push or status badge.
 
 | Workflow | Configured coverage |
 | :--- | :--- |
-| [Main application](../../.github/workflows/main-app.yml) | GCC 11/12/13; fluid and RBC builds; unit, regression, and MPI tests |
+| [Main application](../../.github/workflows/main-app.yml) | GCC 11/12/13; fluid and RBC builds; unit, regression, and MPI tests; optional CPU-model matrix and x86 vector checks |
 | [Geometry tool](../../.github/workflows/gmy-tool.yml) | Python 3.8 through 3.11; generation and profile tests; Python/C++ formatting |
 | [Python tools](../../.github/workflows/py-hemetools.yml) | Python 3.8 through 3.13; tox and Python formatting |
 | [Install script](../../.github/workflows/install-script.yml) | Ubuntu 24.04, macOS 14, macOS 15 Intel; install and end-to-end flow test |

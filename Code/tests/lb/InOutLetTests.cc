@@ -347,5 +347,51 @@ namespace hemelb::tests
         REQUIRE_THROWS_WITH(iolet.Initialise(&units), Catch::Matchers::Contains("at least two"));
     }
 
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "Periodic pressure uses physical time through restart", "[iolet]")
+    {
+        MoveToTempdir();
+        std::ofstream("periodic.txt") << "0 0\n0.2 20\n0.4 0\n";
+        util::UnitConverter units(0.1, 1, PhysicalPosition::Zero(), 1000, 0);
+        lb::InOutLetFile inlet;
+        inlet.SetFilePath("periodic.txt");
+        inlet.SetPeriodic(true);
+        inlet.Initialise(&units);
+        lb::SimulationState shortRun(0.1, 2), longRun(0.1, 20);
+        inlet.Reset(shortRun);
+        auto pressure = [&](unsigned n)
+        { return units.ConvertPressureToPhysicalUnits(inlet.GetDensity(n) * Cs2); };
+        REQUIRE(pressure(1) == Approx(10));
+        REQUIRE(pressure(2) == Approx(20));
+        REQUIRE(pressure(3) == Approx(10));
+        REQUIRE(pressure(4) == Approx(0).margin(1e-8));
+        REQUIRE(pressure(9) == Approx(10));
+        auto saved = inlet.GetDensity(9);
+        inlet.Reset(longRun);
+        REQUIRE(inlet.GetDensity(9) == saved);
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture,
+                     "Periodic velocity uses timestamps and rejects malformed files", "[iolet]")
+    {
+        MoveToTempdir();
+        std::ofstream("velocity.txt") << "0 0\n0.2 0.2\n0.4 0\n";
+        util::UnitConverter units(0.1, 1, PhysicalPosition::Zero(), 1000, 0);
+        lb::InOutLetFileVelocity inlet;
+        inlet.SetFilePath("velocity.txt");
+        inlet.SetRadius(1);
+        inlet.SetPosition({0, 0, 0});
+        inlet.SetNormal({0, 0, 1});
+        inlet.SetPeriodic(true);
+        inlet.Initialise(&units);
+        lb::SimulationState state(0.1, 1);
+        inlet.Reset(state);
+        REQUIRE(inlet.GetVelocity({0, 0, 0}, 1).z() == Approx(0.01));
+        REQUIRE(inlet.GetVelocity({0, 0, 0}, 2).z() == Approx(0.02));
+        REQUIRE(inlet.GetVelocity({0, 0, 0}, 9).z() == Approx(0.01));
+        std::ofstream("velocity.txt") << "0 0\n0.2";
+        REQUIRE_THROWS_WITH(inlet.Reset(state),
+                            Catch::Matchers::Contains("Invalid velocity profile"));
+    }
 }
 

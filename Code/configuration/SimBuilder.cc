@@ -4,6 +4,7 @@
 // license in the file LICENSE.
 
 #include "configuration/SimBuilder.h"
+#include "build_info.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -13,6 +14,9 @@
 #include "geometry/GeometryReader.h"
 #include "lb/InitialCondition.h"
 #include "lb/iolets/InOutLets.h"
+#include "lb/iolets/InOutLetWomersleyElasticVelocity.h"
+#include "lb/iolets/InOutLetReadWriteVelocity.h"
+#include "lb/iolets/InOutLetWindkessel.h"
 #include "redblood/FlowExtension.h"
 #include "reporting/Reporter.h"
 #include "util/variant.h"
@@ -51,15 +55,44 @@ namespace hemelb::configuration {
                               << " does not exist or is not a file. Check the path in"
                               << " <geometry><datafile path=\"...\"/> in the XML file;"
                               << " a relative path is relative to the XML file.";
-        geometry::GeometryReader reader(lat_info,
-                                        timings,
-                                        ioComms, config.decompositionMethod == "parmetis");
+        geometry::GeometryReader reader(lat_info, timings, ioComms,
+                                        config.decompositionMethod == "parmetis",
+                                        config.geometryReaderCount, config.geometryReaderSpacing);
         return reader.LoadAndDecompose(gmy);
     }
 
     lb::LbmParameters SimBuilder::BuildLbmParams() const {
         auto&& i = config.sim_info;
         lb::LbmParameters ans(i.time.step_s, i.space.step_m, i.fluid.density_kgm3, i.fluid.viscosity_Pas);
+        if (i.sponge)
+        {
+            if (build_info::KERNEL != "LBGKSL" && build_info::KERNEL != "TRTSL" &&
+                build_info::KERNEL != "LBGKLESSL")
+                throw Exception() << "sponge_layer requires LBGKSL, TRTSL or LBGKLESSL";
+            ans.spongeRatio = i.sponge->viscosity_ratio;
+            ans.spongeWidth = i.sponge->width_m / i.space.step_m;
+            ans.spongeLifetime = i.sponge->lifetime;
+        }
+        if ((build_info::INLET_BOUNDARY == "YANGPRESSUREIOLET" ||
+             build_info::OUTLET_BOUNDARY == "YANGPRESSUREIOLET" ||
+             build_info::WALL_INLET_BOUNDARY.view().starts_with("YANGPRESSURE") ||
+             build_info::WALL_OUTLET_BOUNDARY.view().starts_with("YANGPRESSURE")) &&
+            ans.GetTau() + 1e-12 < 0.8)
+            throw Exception()
+                << "Yang pressure requires tau >= 0.8 in the validated CPU implementation; "
+                << "increase dt/dx^2 or use Nash pressure boundaries";
+        ans.smagorinsky = i.smagorinsky;
+        ans.elasticWallStiffness = i.elastic_wall_stiffness;
+        ans.boundaryVelocityRatio = i.boundary_velocity_ratio;
+        for (auto const &iolet : config.outlets)
+            std::visit(
+                [&](auto const &c)
+                {
+                    if constexpr (!std::is_same_v<std::decay_t<decltype(c)>, std::monostate>)
+                        ans.outletPositions.push_back(
+                            unit_converter->ConvertPositionToLatticeUnits(c.position));
+                },
+                iolet);
         return ans;
     }
 
@@ -100,16 +133,45 @@ namespace hemelb::configuration {
 
     auto SimBuilder::BuildIolet(const IoletConfig& ic) const -> IoletPtr {
         return overload_visit(
-                ic,
-                [] (std::monostate) -> IoletPtr { throw Exception() << "Invalid IoletConfig"; },
-                [&](CosinePressureIoletConfig const& _) { return BuildCosinePressureIolet(_); },
-                [&](FilePressureIoletConfig const& _) { return BuildFilePressureIolet(_); },
-                [&](MultiscalePressureIoletConfig const& _) { return BuildMultiscalePressureIolet(_); },
-                [&](ParabolicVelocityIoletConfig const& _) { return BuildParabolicVelocityIolet(_); },
-                [&](WomersleyVelocityIoletConfig const& _) { return BuildWomersleyVelocityIolet(_); },
-                [&](FileVelocityIoletConfig const& _) { return BuildFileVelocityIolet(_); }
-        );
+            ic, [](std::monostate) -> IoletPtr { throw Exception() << "Invalid IoletConfig"; },
+            [&](CosinePressureIoletConfig const &_) { return BuildCosinePressureIolet(_); },
+            [&](FilePressureIoletConfig const &_) { return BuildFilePressureIolet(_); },
+            [&](MultiscalePressureIoletConfig const &_) { return BuildMultiscalePressureIolet(_); },
+            [&](ParabolicVelocityIoletConfig const &_) { return BuildParabolicVelocityIolet(_); },
+            [&](WomersleyVelocityIoletConfig const &_) { return BuildWomersleyVelocityIolet(_); },
+            [&](ElasticWomersleyVelocityIoletConfig const &c) -> IoletPtr
+            {
+                auto obj = util::make_clone_ptr<lb::InOutLetWomersleyElasticVelocity>();
+                BuildBaseIolet(c, obj.get());
+                obj->SetRadius(unit_converter->ConvertDistanceToLatticeUnits(c.radius_m));
+                obj->SetPeriod(unit_converter->ConvertTimeToLatticeUnits(c.period_s));
+                obj->SetPressureGradientAmplitude(
+                    unit_converter->ConvertPressureGradientToLatticeUnits(c.pgrad_amp_Pam));
+                obj->SetWomersleyNumber(c.womersley);
+                obj->SetPoissonRatio(c.poisson_ratio);
+                obj->SetWallYoungsModulus(
+                    unit_converter->ConvertPressureDifferenceToLatticeUnits(c.youngs_modulus_Pa));
+                obj->SetAxialPosition(
+                    unit_converter->ConvertDistanceToLatticeUnits(c.axial_position_m));
+                return obj;
+            },
+            [&](WindkesselPressureIoletConfig const &_) { return BuildWindkesselPressureIolet(_); },
+            [&](ReadWriteVelocityIoletConfig const &c) -> IoletPtr
+            {
+                auto obj = util::make_clone_ptr<lb::InOutLetReadWriteVelocity>(c);
+                BuildBaseIolet(c, obj.get());
+                return obj;
+            },
+            [&](FileVelocityIoletConfig const &_) { return BuildFileVelocityIolet(_); });
     }
+    auto SimBuilder::BuildWindkesselPressureIolet(WindkesselPressureIoletConfig const &ic) const
+        -> IoletPtr
+    {
+        auto ans = util::make_clone_ptr<lb::InOutLetWindkessel>(ic);
+        BuildBaseIolet(ic, ans.get());
+        return ans;
+    }
+
     auto SimBuilder::BuildCosinePressureIolet(const CosinePressureIoletConfig& ic) const -> IoletPtr {
         auto ans = util::make_clone_ptr<lb::InOutLetCosine>();
         BuildBaseIolet(ic, ans.get());
@@ -128,6 +190,7 @@ namespace hemelb::configuration {
         BuildBaseIolet(ic, ans.get());
         ans->SetFilePath(ic.file_path);
         ans->SetPressureScale(ic.file_mmHg ? mmHg_TO_PASCAL : 1.0);
+        ans->SetPeriodic(ic.periodic);
         return ans;
     }
 
@@ -162,6 +225,7 @@ namespace hemelb::configuration {
         auto ans = util::make_clone_ptr<lb::InOutLetFileVelocity>();
         BuildBaseIolet(ic, ans.get());
         ans->SetFilePath(ic.file_path);
+        ans->SetPeriodic(ic.periodic);
         ans->SetRadius(unit_converter->ConvertDistanceToLatticeUnits(ic.radius_m));
         return ans;
     }

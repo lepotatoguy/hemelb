@@ -1,5 +1,10 @@
-# Simulation of subgrid colloidal particles
+# Legacy subgrid colloidal particles
 
-This module was never fully commissioned and is now defunct.
+This force-coupled module remains unmaintained and is not covered by the current
+CPU-feature validation. `HEMELB_BUILD_COLLOIDS` is off by default.
 
-We keep it in the tree as it may be possible to bring it into operation in the future, but it is not built or tested in CI.
+For passive particles, use the separate tracer controller in `Code/tracers` and
+the [tracer guide](../../doc/user/tracers.md). It works in the fluid build and
+accepts supported legacy colloid particle spellings. Nonempty legacy body-force
+sections require explicit `mode="tracer"` to discard the forces; they do not
+enable active force coupling.

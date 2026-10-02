@@ -5,6 +5,7 @@ on:
       - main
       - 'fix/**'
       - 'feature/**'
+      - 'feat/**'
     paths:
       - '.github/workflows/install-script.yml'
       - 'Scripts/install_hemelb.sh'

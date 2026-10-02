@@ -40,12 +40,23 @@ runs:
       id: deps-cache
       with:
         path: ${{ env.deps_install_prefix }}
-        key: deps-${{ inputs.name }}-${{ runner.os }}-${{ hashFiles('dependencies') }}
+        key: deps-${{ inputs.name }}-${{ runner.os }}-${{ hashFiles('dependencies/**', '.github/actions/install-hemelb-deps/action.yml') }}
 
     - name: "Deps: make build dir"
       shell: bash
       if: steps.deps-cache.outputs.cache-hit != 'true'
       run: mkdir -p ${{ github.workspace }}/deps-build ${{ env.deps_install_prefix }}
+
+    - name: Download Boost with retries
+      shell: bash
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p "${{ github.workspace }}/dependencies/distributions"
+        cd "${{ github.workspace }}/dependencies/distributions"
+        curl --http1.1 --fail --location --retry 5 --retry-all-errors \
+          https://archives.boost.io/release/1.77.0/source/boost_1_77_0.tar.gz \
+          --output boost_1_77_0.tar.gz
+        echo '5347464af5b14ac54bb945dc68f1dd7c56f0dad7262816b956138fc53bcc0131  boost_1_77_0.tar.gz' | sha256sum --check
 
     - name: Deps configure
       shell: bash

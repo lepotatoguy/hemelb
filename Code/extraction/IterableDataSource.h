@@ -89,6 +89,14 @@ namespace hemelb::extraction
          */
         [[nodiscard]] virtual util::Vector3D<LatticeStress> GetTangentialProjectionTraction() const = 0;
 
+        [[nodiscard]] virtual util::Vector3D<LatticeStress> GetNormalProjectionTraction() const
+        {
+            return GetTraction() - GetTangentialProjectionTraction();
+        }
+
+        // Elastic extension in lattice lengths; rigid walls have zero extension.
+        [[nodiscard]] virtual FloatingType GetWallExtension() const { return 0; }
+
         /**
          * Returns a pointer to the velocity distribution at a site.
          * @return pointer to velocity distribution

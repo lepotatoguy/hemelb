@@ -1,28 +1,117 @@
-# Unreleased scalability and input improvements
-
-Merged upstream/checkpoint. New simulation XML uses version 6 and Pa. Existing
-HemePure version 3 and HemeLB version 5 XML load directly with their legacy mmHg
-units. Checkpoints in extraction versions 4, 5, and 6 load across MPI rank counts.
-Legacy pressure-file units and double-precision output settings survive saved
-restart XML; source inputs remain unchanged.
-Extraction output now uses version 6 with lattice-to-physical conversion metadata.
-Checkpoint output moves to Checkpoints/<step>/ with restart.xml and distributions.xtr.
-Rank-portable restart and geometry validation are retained. TinyXML-2 replaces TinyXML.
-Pressure-file loading handles trailing newlines and unsorted, duplicate times safely.
-
-Sparse geometry setup reads active compressed blocks once across ranks and caches
-them through redistribution. Runtime decomposition selects octree or ParMETIS.
-Reports include MLUPS, load imbalance, halo volume, and per-rank peak RSS.
-`hlb-convert-config` converts XML versions 3 and 5 to version 6; `.gmy+` block
-weights are ignored. Python extraction reads versions 4, 5, and 6. Inlet/outlet
-extraction selectors are supported. Pressure extraction preserves nonzero
-reference pressure. See [the guide](doc/user/scalability-and-inputs.md).
-
 # Changelog
 
-Changes in this fork relative to upstream `hemelb-codes/hemelb` commit
-`432d3386`. Design notes for these changes live in [doc/dev](doc/dev);
-this file records what changed and how it was checked at the time.
+## Unreleased (`feat/scalability-input-improvements`)
+
+### Added
+
+- Sparse geometry setup stores metadata by active block, reads requested
+  compressed blocks once across MPI ranks, and caches them through
+  redistribution. Reader count and spacing can be configured at runtime.
+- Runtime selection of octree or ParMETIS decomposition, with `.gmy+`
+  computational block weights used by both methods. Owner lookup uses a
+  bounded cache during setup and restart.
+- Performance reports include completed updates, loop time, MLUPS, MLUPS per
+  rank, load imbalance, halo distributions and bytes, and per-rank setup and
+  lifetime peak memory in bytes.
+- [WK2, WK3/RCR, and fileWK Windkessel outlets](doc/user/cpu-models.md),
+  with pressure and flow history retained in checkpoints.
+- Yang pressure inlet/outlet boundaries for LBGK and straight iolets with valid
+  interior stencils. Yang requires `tau >= 0.8`. Optional wall/inlet and
+  wall/outlet build settings select explicit corner rules; `AUTO` preserves
+  the existing combinations, including Nash pressure at Yang corners.
+- GZS elastic-wall and elastic Womersley inlet models. The elastic-wall model
+  applies a compliant-wall velocity rule on fixed geometry.
+- LBGK and TRT sponge kernels, plus a Smagorinsky LES sponge kernel with a
+  configurable coefficient. Sponge viscosity varies with outlet distance
+  and decays over its configured lifetime.
+- File-based read/write flow-pressure coupling, including unit conversion,
+  smoothing, peer time origin, bounded waits, atomic pressure-file updates,
+  and optional spatial velocity weights for noncircular openings.
+- Passive tracers with four-point velocity interpolation, deterministic
+  emission, boundary rules, trajectory CSV output in physical units, and
+  checkpointed particle state. Passive legacy colloid inputs are accepted;
+  tracers exert no force on the fluid.
+- Inlet, outlet, sphere, and surface-within-sphere extraction selectors,
+  inclusive timestep windows, normal traction, and elastic wall-extension
+  fields. Output precision and field datatypes are configurable.
+- Optional physical-time periodic interpolation for pressure and velocity
+  file waveforms. The phase continues across restart; legacy timing remains
+  the default when periodic mode is absent.
+- Optional AVX2 and AVX512 CPU build paths with unaligned access and scalar
+  tails. Existing scalar and SSE3 defaults are retained.
+- `hlb-convert-config` optionally converts XML3/5 to XML6, converts pressure
+  quantities to Pa, maps lattice iolet positions to metres, rebases paths,
+  and writes converted pressure-file sidecars without overwriting inputs.
+- [Scripts/compare-cpu-solvers.py](Scripts/compare-cpu-solvers.py) compares CPU
+  runs with matched inputs and either equal worker counts or equal allocated
+  MPI rank counts, with optional peak-memory recording.
+
+### Changed
+
+- Integrated the upstream checkpoint implementation. New solver and geometry
+  configurations use XML6 and Pa; extraction output uses version 6 with
+  timestep duration, reference pressure, and lattice-to-physical conversion
+  metadata. TinyXML-2 replaces TinyXML.
+- Modern fluid checkpoints save double-precision distributions and matching
+  restart XML under `Checkpoints/<step>/`. Saved configurations retain
+  supported boundary, coupling, waveform, tracer, output, and decomposition
+  settings. Checkpoint folder names count completed updates; field samples
+  use global timesteps starting at zero.
+- Python extraction readers accept versions 4, 5, and 6. Version 6 fields are
+  returned in physical units by default, including pressure in Pa. Legacy
+  files retain their stored physical units, including mmHg pressure.
+- `hlb-extracted-to-vtk` handles version 6 fields and automatically uses the
+  embedded timestep duration for ParaView collection times in seconds.
+  Normal traction and wall-extension fields are exported with their scales.
+- Adapted the optional MPWide multiscale module to the current configuration
+  builder and MPI datatype API.
+- Boost source builds verify the version 1.77 archive checksum before
+  extracting it.
+- HemePure attribution is retained in `COPYING.HemePure` and installed with
+  the solver.
+
+### Compatibility
+
+- Existing HemePure XML3 and HemeLB XML5 configurations load directly,
+  preserving legacy pressure units, pressure-file values, and iolet
+  coordinates. Conversion is optional and source files are unchanged.
+- Fluid checkpoints in extraction versions 4, 5, and 6 can restart with a
+  different MPI rank count. Legacy float distributions are promoted to
+  double and stored offsets are restored. Geometry and lattice metadata
+  must match the new run.
+- Legacy nested checkpoint initial conditions and checkpoint output paths
+  remain supported. Saved restart XML preserves legacy pressure-file units
+  and double-precision output settings.
+
+### Fixed
+
+- XML scalar and vector readers accept decimal and C99 hexadecimal floats
+  consistently with GNU and Clang standard libraries. Malformed and
+  non-finite numeric values are rejected, allowing geometry-generated and
+  saved restart configurations to load on Linux.
+- Configuration writing accepts a filename in the current directory and
+  correctly rebases its referenced paths on Linux.
+- Pressure and velocity waveform loading handles trailing newlines and
+  unsorted records; the last record at a duplicate timestamp wins.
+- Pressure extraction restores nonzero reference pressure.
+
+### Documentation and examples
+
+- Moved the bundled example to the root-level `examples/` folder and updated
+  the walkthrough, documentation links, and example paths.
+- Updated the installation, simulation, and analysis guides for XML6 units,
+  modern checkpoints, and the CPU options. Added dedicated guides for
+  [coupling](doc/user/coupling.md), [tracers](doc/user/tracers.md),
+  [field extraction](doc/user/extraction.md), and
+  [geometry setup and legacy inputs](doc/user/scalability-and-inputs.md).
+- Bundled matching STL, geometry-tool profile, GMY, and XML6 inputs in
+  [examples](examples/README.md), with an end-to-end walkthrough
+  through simulation, checkpoint continuation, CSV output, and ParaView
+  export. [Scripts/gmy-to-stl.py](Scripts/gmy-to-stl.py) is an optional helper
+  for inspecting voxel geometry when the original STL is unavailable.
+
+Changes in this fork are relative to upstream `hemelb-codes/hemelb` commit
+`432d3386`. Design notes are in [doc/dev](doc/dev).
 
 ## Unreleased (`fix/hemelb-improvements`)
 
@@ -36,7 +125,7 @@ this file records what changed and how it was checked at the time.
 ### Documentation
 
 - Bundled matching cylinder STL, geometry-tool profile, GMY, and version 5 XML
-  in [doc/examples](doc/examples/README.md), with a walkthrough from surface
+  in [examples](examples/README.md), with a walkthrough from surface
   generation to simulation and CSV output. Regeneration reproduced the supplied
   GMY; two-rank runs and a four-rank restart matched final distributions exactly.
 - Optional [Scripts/gmy-to-stl.py](Scripts/gmy-to-stl.py) exports GMY voxel boundaries as STL for visual inspection.

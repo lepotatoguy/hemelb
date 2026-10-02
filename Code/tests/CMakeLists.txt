@@ -50,6 +50,14 @@ add_test(NAME hemelb-tests COMMAND hemelb-tests)
 # results match; also check mismatched geometries are rejected.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
+  add_test(NAME cpu-features-mpi
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cpu_features_mpi.py
+            --hemelb $<TARGET_FILE:${HEMELB_EXECUTABLE}> --launcher ${MPIEXEC_EXECUTABLE})
+  set_tests_properties(cpu-features-mpi PROPERTIES TIMEOUT 120)
+  add_test(NAME windkessel-mpi
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/windkessel_mpi.py
+            --hemelb $<TARGET_FILE:${HEMELB_EXECUTABLE}> --launcher ${MPIEXEC_EXECUTABLE})
+  set_tests_properties(windkessel-mpi PROPERTIES TIMEOUT 120)
   add_test(NAME legacy-compatibility-mpi
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/legacy_compatibility_mpi.py
             --hemelb $<TARGET_FILE:${HEMELB_EXECUTABLE}> --mpirun ${MPIEXEC_EXECUTABLE})

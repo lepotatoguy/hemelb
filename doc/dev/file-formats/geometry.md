@@ -3,7 +3,9 @@
 This page describes the file format used to describe HemeLB lattice
 geometries.
 
-The files should have the extension .gmy
+Standard files use the extension `.gmy` and geometry format version 4.
+The solver also accepts `.gmy+` files with computational weights; their block
+headers differ as described below.
 
 This file describes the problem domain as a series of blocks, each
 block being an identically sized cubic subsection of the problem
@@ -63,6 +65,21 @@ Each triple is:
 	index).
 * An unsigned integer giving the total length, in bytes, of the
   _uncompressed_ data representing a given block
+
+## Weighted GMY+ headers
+
+The `.gmy+` extension selects a four-integer header for each block, in order:
+fluid-site count, computational weight, compressed byte length, and expanded
+byte length. The preamble and compressed site records are otherwise the same
+as standard GMY. Use the extension to distinguish the layouts; renaming a
+standard GMY to `.gmy+` does not convert it.
+
+A positive weight guides the initial cumulative block split. ParMETIS receives
+a quantised per-site cost from that block weight divided by its fluid-site
+count. Zero weights fall back to the site count. See
+[scalability and inputs](../../user/scalability-and-inputs.md) for decomposition
+and reader controls. The geometry tool emits standard GMY; weighted headers
+must be supplied by a compatible external producer.
 
 ## Block data
 

@@ -237,15 +237,17 @@ hlb-gmy-cli PROFILE [--stl PATH] [--stl-units {m,mm,um}] [--seed X Y Z]
 
 ### What the XML contains
 
+This branch writes XML version 6. The GUI and profile retain mmHg pressure
+inputs; the writer converts them to Pa in XML. Reinstall the geometry package
+after switching branches so the installed writer matches this reference.
+
 | Element | Source |
 | --- | --- |
 | `simulation/step_length`, `steps` | `TimeStepSeconds`, `round(DurationSeconds / TimeStepSeconds)` |
 | `simulation/voxel_size`, `origin` | Voxel size and domain origin, in metres |
-| `simulation/stresstype` | Always 1 |
 | `geometry/datafile` | Path of the `.gmy`, relative to the XML |
-| `inlets/inlet`, `outlets/outlet` | One per iolet: a `pressure`/`cosine` condition with `mean` = Pressure.x (mmHg), `amplitude` = Pressure.y (mmHg), `phase` = Pressure.z (rad), `period` = `PulsePeriodSeconds` (1 s if not set); the iolet `normal`; its centre in metres as `position` |
-| `visualisation` | Fixed defaults |
-| `initialconditions` | Uniform pressure 0 mmHg |
+| `inlets/inlet`, `outlets/outlet` | One per iolet: a `pressure`/`cosine` condition with `mean` = Pressure.x × 133.3223874 (Pa), `amplitude` = Pressure.y × 133.3223874 (Pa), `phase` = Pressure.z (rad), `period` = `PulsePeriodSeconds` (1 s if not set); the iolet `normal`; its centre in metres as `position` |
+| `initialconditions` | Uniform pressure 0 Pa |
 
 There is no `<properties>` section, so HemeLB writes no field output until
 you add one (see [XmlConfiguration.md](XmlConfiguration.md)). Inlet and

@@ -6,6 +6,7 @@
 #include "geometry/ParmetisHeader.h"
 #include "geometry/decomposition/OptimisedDecomposition.h"
 #include "geometry/decomposition/DecompositionWeights.h"
+#include "geometry/decomposition/ComputationalWeight.h"
 #include "geometry/LookupTree.h"
 
 #include "lb/lattices/D3Q27.h"
@@ -176,6 +177,16 @@ namespace hemelb::geometry::decomposition
         std::array<int, 6> siteCounters;
         std::fill(begin(siteCounters), end(siteCounters), 0);
 
+        double largestCost = 0;
+        if (!geometry.computationalWeights.empty())
+        {
+            for (std::size_t i = 0; i < procForBlockOct.size(); ++i)
+            {
+                auto gmy = geometry.GetBlockIdFromBlockCoordinates(tree.GetLeafCoords(i));
+                largestCost = std::max(largestCost, double(geometry.computationalWeights.at(gmy)) /
+                                                        fluidSitesPerBlockOct[i]);
+            }
+        }
         vertexWeights.resize(localVertexCount);
         idx_t i_wgt = 0;
         // For each block (counting up by lowest site id)...
@@ -216,7 +227,13 @@ namespace hemelb::geometry::decomposition
                     }
                 }();
                 ++siteCounters[site_type_i];
-                vertexWeights[i_wgt++] = hemelbSiteWeights[site_type_i];
+                vertexWeights[i_wgt++] =
+                    geometry.computationalWeights.empty()
+                        ? hemelbSiteWeights[site_type_i]
+                        : ComputationalSiteWeight(
+                              double(geometry.computationalWeights.at(block_gmy)) /
+                                  fluidSitesPerBlockOct[block_idx],
+                              largestCost);
             }
         }
 

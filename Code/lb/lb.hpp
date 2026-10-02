@@ -52,6 +52,7 @@ namespace hemelb::lb
         auto initParams = InitParams();
         initParams.latDat = &dom;
         initParams.lbmParams = &mParams;
+        initParams.state = mState;
         initParams.neighbouringDataManager = neighbouringDataManager;
         initParams.siteRanges.resize(2);
 

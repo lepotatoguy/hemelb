@@ -45,7 +45,8 @@ namespace hemelb::lb
             for (Direction i = 0; i < LatticeType::NUMVECTORS; ++i)
             {
                 Direction iBar = LatticeType::INVERSEDIRECTIONS[i];
-                if (iBar >= i) {
+                if (iBar > i)
+                {
                     ans[j] = {i, iBar};
                     ++j;
                 }
@@ -61,33 +62,23 @@ namespace hemelb::lb
 
         void CalculateDensityMomentumFeq(VarsType& hydroVars, site_t index)
         {
-            LatticeType::CalculateDensityMomentumFEq(hydroVars.f,
-                                                     hydroVars.density,
-                                                     hydroVars.momentum.x,
-                                                     hydroVars.momentum.y,
-                                                     hydroVars.momentum.z,
-                                                     hydroVars.velocity.x,
-                                                     hydroVars.velocity.y,
-                                                     hydroVars.velocity.z,
-                                                     hydroVars.f_eq.f);
+            LatticeType::CalculateDensityMomentumFEq(hydroVars.f, hydroVars.density,
+                                                     hydroVars.momentum, hydroVars.velocity,
+                                                     hydroVars.GetFEq());
 
             for (unsigned int ii = 0; ii < LatticeType::NUMVECTORS; ++ii)
             {
-                hydroVars.f_neq.f[ii] = hydroVars.f[ii] - hydroVars.f_eq.f[ii];
+                hydroVars.f_neq[ii] = hydroVars.f[ii] - hydroVars.f_eq[ii];
             }
         }
 
         void CalculateFeq(VarsType& hydroVars, site_t index)
         {
-            LatticeType::CalculateFeq(hydroVars.density,
-                                      hydroVars.momentum.x,
-                                      hydroVars.momentum.y,
-                                      hydroVars.momentum.z,
-                                      hydroVars.f_eq.f);
+            LatticeType::CalculateFeq(hydroVars.density, hydroVars.momentum, hydroVars.GetFEq());
 
             for (unsigned int ii = 0; ii < LatticeType::NUMVECTORS; ++ii)
             {
-                hydroVars.f_neq.f[ii] = hydroVars.f[ii] - hydroVars.f_eq.f[ii];
+                hydroVars.f_neq[ii] = hydroVars.f[ii] - hydroVars.f_eq[ii];
             }
         }
 
@@ -107,15 +98,15 @@ namespace hemelb::lb
 
             if constexpr (HasZero) {
                 // Special case the null velocity.
-                hydroVars.SetFPostCollision(iZero,
-                                            hydroVars.f[iZero] + omega_plus * hydroVars.f_neq.f[iZero]);
+                hydroVars.SetFPostCollision(iZero, hydroVars.f[iZero] +
+                                                       omega_plus * hydroVars.f_neq[iZero]);
             }
 
             // Now deal with the non-zero
             for (auto [i, iBar]: directionPairs)
             {
-                distribn_t sym = 0.5 * omega_plus * (hydroVars.f_neq.f[i] + hydroVars.f_neq.f[iBar]);
-                distribn_t asym = 0.5 * omega_minus * (hydroVars.f_neq.f[i] - hydroVars.f_neq.f[iBar]);
+                distribn_t sym = 0.5 * omega_plus * (hydroVars.f_neq[i] + hydroVars.f_neq[iBar]);
+                distribn_t asym = 0.5 * omega_minus * (hydroVars.f_neq[i] - hydroVars.f_neq[iBar]);
                 hydroVars.SetFPostCollision(i, hydroVars.f[i] + sym + asym);
                 hydroVars.SetFPostCollision(iBar, hydroVars.f[iBar] + sym - asym);
             }

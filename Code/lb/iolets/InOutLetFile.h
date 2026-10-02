@@ -7,6 +7,8 @@
 #define HEMELB_LB_IOLETS_INOUTLETFILE_H
 
 #include <filesystem>
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "lb/iolets/InOutLet.h"
@@ -41,6 +43,7 @@ namespace hemelb::lb
           }
 
           void SetPressureScale(double scale) { pressureScale = scale; }
+          void SetPeriodic(bool value) { periodic = value; }
 
           inline LatticeDensity GetDensityMin() const override
           {
@@ -52,7 +55,16 @@ namespace hemelb::lb
           }
           inline LatticeDensity GetDensity(LatticeTimeStep timeStep) const override
           {
-            return densityTable[timeStep];
+              if (!periodic)
+                  return densityTable.at(timeStep);
+              double period = file_data_lat.back().first - file_data_lat.front().first;
+              double x = file_data_lat.front().first + std::fmod(double(timeStep), period);
+              auto upper =
+                  std::upper_bound(file_data_lat.begin(), file_data_lat.end(), x,
+                                   [](double t, DataPair const &p) { return t < p.first; });
+              auto lower = upper - 1;
+              return std::lerp(lower->second, upper->second,
+                               (x - lower->first) / (upper->first - lower->first));
           }
           void Initialise(const util::UnitConverter* unitConverter) override;
 
@@ -62,6 +74,7 @@ namespace hemelb::lb
           LatticeDensity densityMax;
           std::filesystem::path pressureFilePath;
           double pressureScale = 1.0;
+          bool periodic = false;
           using DataPair = std::pair<LatticeTime, LatticeDensity>;
           std::vector<DataPair> file_data_lat;
       };

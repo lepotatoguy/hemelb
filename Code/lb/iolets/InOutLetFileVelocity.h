@@ -34,6 +34,7 @@ namespace hemelb::lb
             velocityFilePath = path;
           }
 
+          void SetPeriodic(bool value) { periodic = value; }
           LatticeVelocity GetVelocity(const LatticePosition& x, const LatticeTimeStep t) const override;
           /*LatticeVelocity GetVelocity2(const util::Vector3D<int64_t> globalCoordinates,
                                                                   const LatticeTimeStep t) const;*/
@@ -47,6 +48,9 @@ namespace hemelb::lb
           std::string velocityWeightsFilePath;
           void CalculateTable(LatticeTimeStep startTS, LatticeTimeStep endTS, PhysicalTime timeStepLength);
           std::vector<LatticeSpeed> velocityTable;
+          bool periodic = false;
+          std::vector<std::pair<double, double>> profile;
+          double SpeedAt(LatticeTimeStep step) const;
           const util::UnitConverter* units;
 
           std::map<std::vector<int>, double> weights_table;

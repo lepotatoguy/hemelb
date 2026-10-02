@@ -21,6 +21,7 @@ namespace hemelb::geometry {
 namespace hemelb::lb
 {
     class BoundaryValues;
+    class SimulationState;
 
     class LbmParameters
     {
@@ -31,6 +32,13 @@ namespace hemelb::lb
             beta = -1.0 / (2.0 * tau);
         }
       public:
+        double spongeRatio = 1;
+        LatticeDistance spongeWidth = 0;
+        LatticeTimeStep spongeLifetime = 0;
+        double smagorinsky = 0.1;
+        double elasticWallStiffness = 0;
+        double boundaryVelocityRatio = 0;
+        std::vector<LatticePosition> outletPositions;
         inline LbmParameters()
         {
             CalcDerivedParams();
@@ -139,7 +147,8 @@ namespace hemelb::lb
         std::vector<std::pair<site_t, site_t> > siteRanges;
 
         // The array with the imposed density at each boundary.
-        BoundaryValues *boundaryObject;
+        BoundaryValues *boundaryObject = nullptr;
+        SimulationState const *state = nullptr;
 
         // The lattice data object. Currently only used for accessing the boundary id
         // of each site next to an inlet or an outlet.

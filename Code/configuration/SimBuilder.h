@@ -112,6 +112,8 @@ namespace hemelb::configuration {
         [[nodiscard]] IoletPtr BuildParabolicVelocityIolet(ParabolicVelocityIoletConfig const&) const;
         [[nodiscard]] IoletPtr BuildWomersleyVelocityIolet(WomersleyVelocityIoletConfig const&) const;
         [[nodiscard]] IoletPtr BuildFileVelocityIolet(FileVelocityIoletConfig const&) const;
+        [[nodiscard]] IoletPtr
+        BuildWindkesselPressureIolet(WindkesselPressureIoletConfig const &) const;
         void BuildBaseIolet(IoletConfigBase const& conf, lb::InOutLet* obj) const;
         [[nodiscard]] std::shared_ptr<redblood::FlowExtension> BuildFlowExtension(FlowExtensionConfig const& conf) const;
 
@@ -272,12 +274,17 @@ namespace hemelb::configuration {
         ndm->ShareNeeds();
         ndm->TransferNonFieldDependentInformation();
 
+        auto elasticAtCorner = [](auto choice)
+        {
+            return choice == "AUTO" ? build_info::WALL_BOUNDARY == "GZSElastic"
+                                    : choice.view().ends_with("GZSE");
+        };
+        unsigned elasticTypes = (build_info::WALL_BOUNDARY == "GZSElastic" ? 2u : 0u) |
+                                (elasticAtCorner(build_info::WALL_INLET_BOUNDARY) ? 4u : 0u) |
+                                (elasticAtCorner(build_info::WALL_OUTLET_BOUNDARY) ? 8u : 0u);
         control.propertyDataSource = std::make_shared<extraction::LbDataSourceIterator>(
-                lbm->GetPropertyCache(),
-                *control.fieldData,
-                ioComms.Rank(),
-                unit_converter
-        );
+            lbm->GetPropertyCache(), *control.fieldData, ioComms.Rank(), unit_converter,
+            lbm->GetLbmParams()->elasticWallStiffness, elasticTypes);
 
         control.propertyExtractor = BuildPropertyExtraction(
                 control.fileManager->GetDataExtractionPath(),

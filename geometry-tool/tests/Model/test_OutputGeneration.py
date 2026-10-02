@@ -81,7 +81,10 @@ class TestPolyDataGenerator:
         import xml.etree.ElementTree as ET
 
         periods = [e.get("value") for e in ET.parse(p.OutputXmlFile).iter("period")]
-        assert [val_to_float(v) for v in periods] == [float(written), float(written)]  # one inlet and one outlet
+        assert [val_to_float(v) for v in periods] == [
+            float(written),
+            float(written),
+        ]  # one inlet and one outlet
 
     def test_valid_profile_has_no_warnings(self, tmpdir):
         generator = OutputGeneration.PolyDataGenerator(self._test_profile(tmpdir))

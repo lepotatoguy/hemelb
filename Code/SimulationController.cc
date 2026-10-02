@@ -4,6 +4,9 @@
 // license in the file LICENSE.
 
 #include "SimulationController.h"
+#include "tracers/TracerController.h"
+#include "lb/iolets/InOutLetWindkessel.h"
+#include "lb/iolets/InOutLetReadWriteVelocity.h"
 
 #include <map>
 #include <algorithm>
@@ -230,6 +233,14 @@ namespace hemelb
       fflush(nullptr);
     }
 
+    if (simConfig.tracers)
+    {
+        tracers::Advance(*simConfig.tracers, *domainData, latticeBoltzmannModel->GetPropertyCache(),
+                         ioComms, simulationState->GetTimeStep());
+        if (ioComms.OnIORank())
+            tracers::Write(*simConfig.tracers, fileManager->GetReportPath(), *unitConverter,
+                           simulationState->GetTimeStep() + 1);
+    }
     fieldData->SwapOldAndNew();
     simulationState->Increment();
   }
@@ -240,6 +251,8 @@ namespace hemelb
     lb::MacroscopicPropertyCache& propertyCache = latticeBoltzmannModel->GetPropertyCache();
 
     propertyCache.ResetRequirements();
+    if (simConfig.tracers)
+        propertyCache.velocityCache.SetRefreshFlag();
 
     if (incompressibilityChecker)
     {
@@ -297,6 +310,18 @@ namespace hemelb
         SimConfig ans = simConfig;
         if (simConfig.HasColloidSection())
             throw (Exception() << "Checkpointing not implemented for colloids");
+        auto snapshot = [](auto &configs, lb::BoundaryValues const &values)
+        {
+            for (std::size_t i = 0; i < configs.size(); ++i)
+                if (auto wk =
+                        dynamic_cast<lb::InOutLetWindkessel const *>(values.GetGlobalIolet(i)))
+                    configs[i] = wk->GetConfig();
+                else if (auto coupling = dynamic_cast<lb::InOutLetReadWriteVelocity const *>(
+                             values.GetGlobalIolet(i)))
+                    configs[i] = coupling->GetConfig();
+        };
+        snapshot(ans.inlets, *inletValues);
+        snapshot(ans.outlets, *outletValues);
         return ans;
     }
 }

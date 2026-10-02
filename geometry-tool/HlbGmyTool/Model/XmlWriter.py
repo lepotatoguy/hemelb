@@ -122,7 +122,9 @@ class XmlWriter(object):
                 iolet, "condition", type="pressure", subtype="cosine"
             )
             self.QuantityElement(condition, "mean", io.Pressure.x * 133.3223874, "Pa")
-            self.QuantityElement(condition, "amplitude", io.Pressure.y * 133.3223874, "Pa")
+            self.QuantityElement(
+                condition, "amplitude", io.Pressure.y * 133.3223874, "Pa"
+            )
             self.QuantityElement(condition, "phase", io.Pressure.z, "rad")
             period = float(self.profile.PulsePeriodSeconds)
             # Write whole numbers as before (value="1"), not as "1.0".

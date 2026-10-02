@@ -9,6 +9,8 @@
 
 #include "geometry/Domain.h"
 #include "lb/iolets/BoundaryComms.h"
+#include "lb/iolets/InOutLetWindkessel.h"
+#include "lb/iolets/InOutLetReadWriteVelocity.h"
 #include "log/Logger.h"
 #include "util/numerical.h"
 
@@ -111,10 +113,13 @@ namespace hemelb::lb
 
       void BoundaryValues::RequestComms()
       {
-        for (int i = 0; i < ssize(localIoletIDs); i++)
-        {
-          HandleComms(GetLocalIolet(i));
-        }
+          for (auto &iolet : iolets)
+              if (auto coupling = dynamic_cast<InOutLetReadWriteVelocity *>(iolet.get()))
+                  coupling->BeginStep(bcComms, state->GetTimeStep());
+          for (int i = 0; i < ssize(localIoletIDs); i++)
+          {
+              HandleComms(GetLocalIolet(i));
+          }
       }
 
       void BoundaryValues::HandleComms(InOutLet* iolet)
@@ -129,6 +134,19 @@ namespace hemelb::lb
 
       void BoundaryValues::EndIteration()
       {
+          // All ranks call in global iolet order, including ranks without sites.
+          for (auto &iolet : iolets)
+          {
+              if (auto coupling = dynamic_cast<InOutLetReadWriteVelocity *>(iolet.get()))
+                  coupling->EndStep(bcComms);
+              if (auto wk = dynamic_cast<InOutLetWindkessel *>(iolet.get()))
+              {
+                  auto values = wk->GetFlowSample();
+                  bcComms.AllReduceInPlace(std::span<double>(values), MPI_SUM);
+                  wk->Advance(values);
+              }
+          }
+
         for (int i = 0; i < ssize(localIoletIDs); i++)
         {
           if (GetLocalIolet(i)->IsCommsRequired())

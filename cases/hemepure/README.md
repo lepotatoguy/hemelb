@@ -11,5 +11,6 @@ executables. Build `hemeXtract` from its own source instead.
 These original input files use XML version 3 and now load directly in the
 solver. `hlb-convert-config input.xml converted/input.xml` can optionally save
 version 6 XML. See [the conversion guide](../../doc/user/scalability-and-inputs.md) and
-[the case audit](../../research/CASE_STATUS.json). Missing geometry, unsupported
-features, malformed source XML, and invalid boundary radii are recorded there.
+[CPU model requirements](../../doc/user/cpu-models.md). Some cases lack their
+geometry or referenced checkpoint; malformed XML and invalid boundary radii
+remain errors. Case audit logs are local validation artifacts, excluded from Git.

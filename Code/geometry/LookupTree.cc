@@ -265,6 +265,12 @@ namespace hemelb::geometry::octree {
             std::vector<SiteRankIndex> tmp(sites_per_block);
             rank_that_owns_site_win.Get(std::span<SiteRankIndex>(tmp.begin(), sites_per_block),
                     rank, ComputeBlockStart(blockIdx));
+            // Evict by generation to bound restart owner lookup memory. Return values
+            // are copied, so eviction cannot invalidate a caller reference.
+            const auto maxBlocks = std::max<std::size_t>(
+                1, cacheBudgetBytes / (sites_per_block * sizeof(SiteRankIndex)));
+            if (cache.size() >= maxBlocks)
+                cache.clear();
             cache[blockIdx] = std::move(tmp);
         }
         // Cache now must contain a copy of the remote data.

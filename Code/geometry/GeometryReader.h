@@ -30,8 +30,9 @@ namespace hemelb::geometry
     public:
         using BlockLocation = util::Vector3D<site_t>;
 
-        GeometryReader(const lb::LatticeInfo&,
-                       reporting::Timers &timings, net::IOCommunicator ioComm, bool optimise = true);
+        GeometryReader(const lb::LatticeInfo &, reporting::Timers &timings,
+                       net::IOCommunicator ioComm, bool optimise = true, unsigned readerCount = 0,
+                       unsigned readerSpacing = 1);
         ~GeometryReader();
 
         GmyReadResult LoadAndDecompose(const std::string& dataFilePath);
@@ -114,6 +115,7 @@ namespace hemelb::geometry
         U64 nFluidBlocks;
         //! The number of fluid sites on each block in the file.
         std::map<U64, site_t> fluidSitesOnEachBlock;
+        std::map<U64, U64> computationalWeights;
         struct BlockMetadata {
             unsigned compressed, uncompressed;
             std::uint64_t offset;
@@ -122,6 +124,7 @@ namespace hemelb::geometry
         std::map<U64, BlockMetadata> blockMetadata;
         block_cache compressedCache;
         bool optimise;
+        unsigned readerCount, readerSpacing;
         unsigned headerRecordLength = 12;
         //! The process for fluid-containing blocks in octree order
         std::vector<proc_t> procForBlockOct;
