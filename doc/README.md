@@ -28,6 +28,10 @@ guide: other branches may use different versions and units.
 
 ## Files and units
 
+Pressure uses mmHg and pressure gradients use mmHg/m. Stress and traction use
+Pa; velocity uses m/s, length uses m, and time uses s. The solver calculates in
+lattice units.
+
 | File | Purpose | Units and interpretation |
 | :--- | :--- | :--- |
 | `.stl` | Triangulated vessel surface | Coordinates use the units selected in the geometry profile |

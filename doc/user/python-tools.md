@@ -10,7 +10,7 @@ hlb-dump-extracted-properties --help
 
 The Python reader accepts extraction versions 4 and 5. The solver on
 `fix/hemelb-improvements` writes version 5, with velocity in m/s and pressure in
-mmHg. This reader does not support version 6 output. See the
+mmHg. This reader does not support version 6/7 output. See the
 [format reference](../dev/file-formats/extraction.md) for binary layouts.
 
 ## Install separately

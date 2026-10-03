@@ -15,6 +15,10 @@ this file records what changed and how it was checked at the time.
 
 ### Documentation
 
+- Clarified the existing HemeLB unit conventions: pressure in mmHg, pressure
+  gradients in mmHg/m, and stress and traction in Pa. Solver and file units
+  are unchanged on this branch.
+
 - Moved the bundled example to the root-level `examples/` folder and updated
   the walkthrough, documentation links, and example paths.
 - Bundled matching cylinder STL, geometry-tool profile, GMY, and version 5 XML
