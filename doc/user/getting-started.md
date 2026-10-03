@@ -52,7 +52,7 @@ A successful run writes these files:
 hlb-dump-extracted-properties results/Extracted/whole.xtr whole.csv
 ```
 
-`whole.csv` contains velocity in m/s and pressure in Pa. Results for each
+`whole.csv` contains velocity in m/s and pressure in mmHg. Results for each
 saved timestep appear in a separate block; keep the comment headers to
 identify each timestep.
 

@@ -167,7 +167,7 @@ def main():
     )
     p.add_argument("--timeout", type=float, default=600)
     p.add_argument("--reference-pressure-unit", choices=["Pa", "mmHg"], required=True)
-    p.add_argument("--candidate-pressure-unit", choices=["Pa", "mmHg"], default="Pa")
+    p.add_argument("--candidate-pressure-unit", choices=["Pa", "mmHg"], default="mmHg")
     p.add_argument("--pressure-atol", type=float, default=5e-5)
     p.add_argument("--velocity-atol", type=float, default=1e-8)
     p.add_argument("--rtol", type=float, default=1e-5)

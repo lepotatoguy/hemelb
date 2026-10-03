@@ -37,7 +37,7 @@ assertion settings. The branching-vessel record is the broader comparison at
 | Geometry I/O controls | Cached compressed blocks through redistribution; runtime decomposition, reader count and spacing | Sparse block metadata already present; reader/decomposition controls are compiled in, and the ParMETIS path rereads blocks | [Reader](../../Code/geometry/GeometryReader.cc) versus [reference reader](https://github.com/UCL-CCS/HemePure/blob/0bf67b16b23b41a06507810337a445f9916d62bf/src/geometry/GeometryReader.cc); cluster benefit unverified |
 | Input diagnostics | Checks bounds, decompression, finite values, iolet IDs, weights and waveform records | Some geometry checks disabled; narrower validation paths | Named rejection checks; no exhaustive fault campaign against the reference |
 | Model configuration | Runtime LES coefficient, weighted read/write profiles, bounded coupling waits, explicit periodic physical-time waveforms | Fixed LES coefficient, compile-time weighting switch, legacy file timing/coupling behavior | [CPU models](../user/cpu-models.md), [coupling](../user/coupling.md); equation differences listed below |
-| Analysis workflow | SI metadata in v6 output, v4/v5/v6 Python readers, installed CSV/ParaView commands | Legacy output with separately maintained preprocessing/extraction tools | [Python tools](../user/python-tools.md) and [root examples](../../examples/README.md) |
+| Analysis workflow | Explicit units in v7 output, v4/v5/v6/v7 Python readers, installed CSV/ParaView commands | Legacy output with separately maintained preprocessing/extraction tools | [Python tools](../user/python-tools.md) and [root examples](../../examples/README.md) |
 | Run diagnostics | Completed updates, MLUPS, imbalance, halo volume, setup/lifetime peak RSS | Phase timers and memory logs | [Metric definitions](../user/scalability-and-inputs.md); instrumentation alone does not make a run faster |
 | Installation and regression coverage | Automated Linux/macOS installation, GNU build matrix, CPU model and MPI restart checks | Site-oriented FullBuild script; unit tests disabled by default | Verified GitHub evidence below; this does not measure scientific accuracy |
 | Additional HemeLB modules | RBC builds and parallel regressions pass in CI; local MPWide multiscale build/mock checks pass | No corresponding RBC or multiscale module in this checkout | [Build options](../../CMake/GlobalOptions.cmake); production coupled physics remains unverified |
@@ -82,7 +82,7 @@ is not established.
 | Shared geometry ownership metadata | Optional `HEMELB_USE_MPI_WIN` shares ownership arrays within a node | Active metadata and ownership structures remain replicated | Confirmed source gap. The reference README warns about implementation/platform limitations; its memory benefit has not been measured here. |
 | Legacy particle distribution/output | ParticleSet contains ownership migration, neighbor communication and particle XDR output | New maintained passive tracers replicate their list and cap it at 100,000; old colloid code remains unmaintained | Source-level scalability/workflow gap. Neither active-colloid implementation was physically validated in this audit. |
 | CPU production/scaling history | README reports CPU runs at large core counts and lists applications | Comparative measurements here use one workstation | Reference-reported experience; publication/scaling claims were not independently audited. No cluster winner established. |
-| Existing ecosystem | Existing case scripts and external HemePure tools consume its legacy formats | New output is v6/SI and passive-tracer output is CSV | This branch reads old inputs/checkpoints; older binaries and external tools are not guaranteed to read its new output. |
+| Existing ecosystem | Existing case scripts and external HemePure tools consume its legacy formats | New output is v7 with mmHg pressure and passive-tracer output is CSV | This branch reads old inputs/checkpoints; older binaries and external tools are not guaranteed to read its new output. |
 
 The reference also exposes an optional `HEMELB_USE_BIGMPI` header-reading path
 without a direct branch option. This branch instead scans/broadcasts bounded
@@ -107,7 +107,7 @@ Passive tracers use CSV rather than legacy particle XDR. `windkessel/GKmodel`
 remains a supplied-case/source mismatch, not an alias for WK2. Shared
 experimental virtual-site and active-colloid code remains outside the validated
 model set. Restarting an old fluid-only checkpoint cannot recover outlet or
-particle state that the original writer did not save. New v6 outputs are not
+particle state that the original writer did not save. New v7 outputs are not
 promised to work in older binaries or extraction tools.
 
 ## Priority list, implemented work and checks

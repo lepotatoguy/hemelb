@@ -154,4 +154,155 @@ namespace hemelb::tests
         REQUIRE(io::xml::Document("legacy.xml").GetRoot().GetAttributeOrThrow<unsigned>("version") == version);
     }
 
+    TEST_CASE_METHOD(helpers::FolderTestFixture, "Pressure XML6 uses mmHg and preserves explicit Pa inputs", "[configuration]") {
+        const std::string units = GENERATE("Pa", "mmHg");
+        const double scale = units == "mmHg" ? mmHg_TO_PASCAL : 1.0;
+        io::xml::Document doc(resources::Resource("config.xml").Path());
+        auto root = doc.GetRoot();
+        auto reference = root.GetChildOrThrow("simulation").AddChild("reference_pressure");
+        reference.SetAttribute("units", units); reference.SetAttribute("value", 2.0);
+        auto uniform = root.GetChildOrThrow("initialconditions").GetChildOrThrow("pressure").GetChildOrThrow("uniform");
+        uniform.SetAttribute("units", units); uniform.SetAttribute("value", 3.0);
+        auto inlet = root.GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition");
+        for (auto name: {"amplitude", "mean"}) {
+            auto pressure = inlet.GetChildOrThrow(name);
+            pressure.SetAttribute("units", units); pressure.SetAttribute("value", 4.0);
+        }
+        doc.SaveFile("pressure.xml");
+        const auto config = SyntaxReader("pressure.xml").Read();
+        REQUIRE(std::get<EquilibriumIC>(config.GetInitialCondition()).p_Pa == Approx(3 * scale));
+        REQUIRE(config.GetSimInfo().fluid.reference_pressure_Pa == Approx(2 * scale));
+        REQUIRE(std::get<CosinePressureIoletConfig>(config.GetInlets()[0]).mean_Pa == Approx(4 * scale));
+        REQUIRE(std::get<CosinePressureIoletConfig>(config.GetInlets()[0]).amp_Pa == Approx(4 * scale));
+        SimConfigWriter("pressure-out.xml").Write(config);
+        io::xml::Document written("pressure-out.xml");
+        auto output = written.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition").GetChildOrThrow("mean");
+        REQUIRE(output.GetAttributeOrThrow("units") == "mmHg");
+        REQUIRE(output.GetAttributeOrThrow<double>("value") == Approx(4 * scale / mmHg_TO_PASCAL));
+        const auto roundtrip = SyntaxReader("pressure-out.xml").Read();
+        REQUIRE(std::get<EquilibriumIC>(roundtrip.GetInitialCondition()).p_Pa == Approx(3 * scale));
+        REQUIRE(roundtrip.GetSimInfo().fluid.reference_pressure_Pa == Approx(2 * scale));
+        REQUIRE(std::get<CosinePressureIoletConfig>(roundtrip.GetInlets()[0]).mean_Pa == Approx(4 * scale));
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture, "Pressure gradients accept conventional units without rescaling elastic modulus", "[configuration]") {
+        const std::string subtype = GENERATE("womersley", "womersleyElastic");
+        const std::string units = GENERATE("Pa/m", "mmHg/m");
+        const double scale = units == "mmHg/m" ? mmHg_TO_PASCAL : 1.0;
+        io::xml::Document doc(resources::Resource("config.xml").Path());
+        auto condition = doc.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition");
+        for (auto name: {"amplitude", "mean", "phase", "period"})
+            condition.GetChildOrThrow(name).Delete();
+        condition.SetAttribute("type", "velocity"); condition.SetAttribute("subtype", subtype);
+        auto quantity = [&](char const* name, char const* unit, double value) {
+            auto child = condition.AddChild(name);
+            child.SetAttribute("units", unit); child.SetAttribute("value", value);
+        };
+        quantity("radius", "m", 0.01);
+        quantity("pressure_gradient_amplitude", units.c_str(), 2.0);
+        quantity("period", "s", 1.0);
+        quantity("womersley_number", "dimensionless", 4.0);
+        if (subtype == "womersleyElastic") {
+            quantity("youngs_modulus", "Pa", 10000.0);
+            quantity("poisson_ratio", "dimensionless", 0.3);
+            quantity("axial_position", "m", 0.0);
+        }
+        doc.SaveFile("gradient.xml");
+        const auto config = SyntaxReader("gradient.xml").Read();
+        if (subtype == "womersley")
+            REQUIRE(std::get<WomersleyVelocityIoletConfig>(config.GetInlets()[0]).pgrad_amp_Pam == Approx(2 * scale));
+        else {
+            const auto& elastic = std::get<ElasticWomersleyVelocityIoletConfig>(config.GetInlets()[0]);
+            REQUIRE(elastic.pgrad_amp_Pam == Approx(2 * scale));
+            REQUIRE(elastic.youngs_modulus_Pa == 10000.0);
+        }
+        SimConfigWriter("gradient-out.xml").Write(config);
+        io::xml::Document output("gradient-out.xml");
+        auto outputCondition = output.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition");
+        auto gradient = outputCondition.GetChildOrThrow("pressure_gradient_amplitude");
+        REQUIRE(gradient.GetAttributeOrThrow("units") == "mmHg/m");
+        REQUIRE(gradient.GetAttributeOrThrow<double>("value") == Approx(2 * scale / mmHg_TO_PASCAL));
+        const auto roundtrip = SyntaxReader("gradient-out.xml").Read();
+        if (subtype == "womersley")
+            REQUIRE(std::get<WomersleyVelocityIoletConfig>(roundtrip.GetInlets()[0]).pgrad_amp_Pam == Approx(2 * scale));
+        else {
+            REQUIRE(std::get<ElasticWomersleyVelocityIoletConfig>(roundtrip.GetInlets()[0]).youngs_modulus_Pa == 10000.0);
+            condition.GetChildOrThrow("youngs_modulus").SetAttribute("units", "mmHg");
+            doc.SaveFile("invalid-modulus.xml");
+            REQUIRE_THROWS_WITH(SyntaxReader("invalid-modulus.xml").Read(), Catch::Matchers::Contains("Invalid units"));
+        }
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture, "Pressure-file XML6 defaults retain Pa and explicit mmHg", "[configuration]") {
+        const std::string units = GENERATE("", "Pa", "mmHg");
+        io::xml::Document doc(resources::Resource("config.xml").Path());
+        auto condition = doc.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition");
+        for (auto name: {"amplitude", "mean", "phase", "period"})
+            condition.GetChildOrThrow(name).Delete();
+        condition.SetAttribute("subtype", "file");
+        if (!units.empty()) condition.SetAttribute("units", units);
+        condition.AddChild("path").SetAttribute("value", "pressure.txt");
+        doc.SaveFile("file.xml");
+        const auto config = SyntaxReader("file.xml").Read();
+        REQUIRE(std::get<FilePressureIoletConfig>(config.GetInlets()[0]).file_mmHg == (units == "mmHg"));
+        SimConfigWriter("file-out.xml").Write(config);
+        const auto roundtrip = SyntaxReader("file-out.xml").Read();
+        REQUIRE(std::get<FilePressureIoletConfig>(roundtrip.GetInlets()[0]).file_mmHg == (units == "mmHg"));
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture, "Windkessel states write mmHg and retain old Pa state values", "[configuration]") {
+        const std::string attribute = GENERATE("pressure_Pa", "pressure_mmHg");
+        const double scale = attribute == "pressure_mmHg" ? mmHg_TO_PASCAL : 1.0;
+        io::xml::Document doc(resources::Resource("config.xml").Path());
+        auto condition = doc.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition");
+        for (auto name: {"amplitude", "mean", "phase", "period"})
+            condition.GetChildOrThrow(name).Delete();
+        condition.SetAttribute("subtype", "WK2");
+        auto quantity = [&](char const* name, char const* unit, double value) {
+            auto child = condition.AddChild(name);
+            child.SetAttribute("units", unit); child.SetAttribute("value", value);
+        };
+        quantity("R", "kg/m^4*s", 1.0);
+        quantity("C", "m^4*s^2/kg", 1.0);
+        quantity("area", "m^2", 0.01);
+        quantity("radius", "m", 0.01);
+        auto state = condition.AddChild("state");
+        state.SetAttribute(attribute.c_str(), 2.0);
+        state.SetAttribute("flow_m3s", 0.1);
+        state.SetAttribute("previous_flow_m3s", 0.2);
+        doc.SaveFile("windkessel.xml");
+        const auto config = SyntaxReader("windkessel.xml").Read();
+        REQUIRE(std::get<WindkesselPressureIoletConfig>(config.GetInlets()[0]).pressure_Pa == Approx(2 * scale));
+        SimConfigWriter("windkessel-out.xml").Write(config);
+        io::xml::Document output("windkessel-out.xml");
+        auto outputState = output.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition").GetChildOrThrow("state");
+        REQUIRE(outputState.GetAttributeOrThrow<double>("pressure_mmHg") == Approx(2 * scale / mmHg_TO_PASCAL));
+        REQUIRE_FALSE(outputState.GetAttributeMaybe("pressure_Pa"));
+        const auto roundtrip = SyntaxReader("windkessel-out.xml").Read();
+        REQUIRE(std::get<WindkesselPressureIoletConfig>(roundtrip.GetInlets()[0]).pressure_Pa == Approx(2 * scale));
+        state.SetAttribute("pressure_Pa", 3.0);
+        state.SetAttribute("pressure_mmHg", 4.0);
+        doc.SaveFile("ambiguous.xml");
+        REQUIRE_THROWS(SyntaxReader("ambiguous.xml").Read());
+    }
+
+    TEST_CASE_METHOD(helpers::FolderTestFixture, "Multiscale pressure writes conventional units without changing reference velocity", "[configuration]") {
+        io::xml::Document doc(resources::Resource("four_cube_multiscale.xml").Path());
+        auto pressure = doc.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition").GetChildOrThrow("pressure");
+        pressure.SetAttribute("units", "mmHg"); pressure.SetAttribute("value", 2.0);
+        doc.SaveFile("multiscale.xml");
+        const auto config = SyntaxReader("multiscale.xml").Read();
+        const auto& original = std::get<MultiscalePressureIoletConfig>(config.GetInlets()[0]);
+        REQUIRE(original.pressure_reference_Pa == Approx(2 * mmHg_TO_PASCAL));
+        SimConfigWriter("multiscale-out.xml").Write(config);
+        io::xml::Document written("multiscale-out.xml");
+        auto writtenPressure = written.GetRoot().GetChildOrThrow("inlets").GetChildOrThrow("inlet").GetChildOrThrow("condition").GetChildOrThrow("pressure");
+        REQUIRE(writtenPressure.GetAttributeOrThrow<std::string>("units") == "mmHg");
+        REQUIRE(writtenPressure.GetAttributeOrThrow<double>("value") == Approx(2.0));
+        const auto roundtrip = SyntaxReader("multiscale-out.xml").Read();
+        const auto& actual = std::get<MultiscalePressureIoletConfig>(roundtrip.GetInlets()[0]);
+        REQUIRE(actual.pressure_reference_Pa == Approx(original.pressure_reference_Pa));
+        REQUIRE(actual.velocity_reference_ms == original.velocity_reference_ms);
+    }
+
 }

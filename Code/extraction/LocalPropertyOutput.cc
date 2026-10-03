@@ -13,6 +13,7 @@
 #include "net/IOCommunicator.h"
 #include "util/span.h"
 #include "units.h"
+#include "constants.h"
 
 namespace hemelb::extraction
 {
@@ -156,7 +157,7 @@ namespace hemelb::extraction
 	  return io::formats::extraction::GetFieldHeaderLength(
 	    f.name,
 	    f.noffsets,
-	    code::type_to_enum(f.typecode)
+            GetFieldUnits(f.src)
 	  );
 	}
       );
@@ -198,7 +199,7 @@ namespace hemelb::extraction
                          << field.noffsets;
 
             double scale = overload_visit(
-                field.src, [&](source::Pressure) { return dPressure; }, [&](source::Velocity)
+                field.src, [&](source::Pressure) { return dPressure / mmHg_TO_PASCAL; }, [&](source::Velocity)
                 { return dx / dt; }, [&](source::ShearStress) { return dPressure; },
                 [&](source::VonMisesStress) { return dPressure; }, [&](source::ShearRate)
                 { return 1.0 / dt; }, [&](source::StressTensor) { return dPressure; },
@@ -207,14 +208,11 @@ namespace hemelb::extraction
                 [&](source::NormalProjectionTraction) { return dPressure; },
                 [&](source::WallExtension) { return dx; },
                 [](source::Distributions) { return 0.0; }, [](source::MpiRank) { return 0.0; });
-            std::visit([&](auto&& tag) {
-                           using T = decltype(tag);
-                           // Configured pressure offsets are in Pa; the file adds offsets before scaling.
-                           for(auto& offset: field.offset)
-                               headerWriter << T(std::holds_alternative<source::Pressure>(field.src) ? offset / scale : offset);
-                           headerWriter << T(scale);
-                       },
-                       field.typecode);
+            // Conversion metadata must retain fractional values for every body datatype.
+            for (auto offset: field.offset)
+                headerWriter << (std::holds_alternative<source::Pressure>(field.src) ? offset / dPressure : offset);
+            headerWriter << scale;
+            headerWriter << GetFieldUnits(field.src);
         }
 
         HASSERT(headerWriter.GetBuf().size() == total_header_len);

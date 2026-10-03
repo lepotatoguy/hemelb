@@ -59,6 +59,7 @@ from . import Generation
 
 np.seterr(divide="ignore")
 
+
 # Add Pythonic printing
 class DoubleVector(Generation.DoubleVector):
     def __str__(self):

@@ -1,8 +1,10 @@
 # XML configuration reference
 
 This reference covers fluid simulation settings on `feat/scalability-input-improvements`.
-Use `<hemelbsettings version="6">` for new inputs. Physical pressures use Pa,
-and pressure gradients use Pa/m. The geometry tool writes version 6 XML.
+Use `<hemelbsettings version="6">` for new inputs. Physical pressures use mmHg,
+and pressure gradients use mmHg/m. Explicit `Pa` and `Pa/m` inputs are also
+accepted and converted without changing their physical values. The geometry
+tool writes version 6 XML.
 Existing XML3 and XML5 inputs load directly with their legacy mmHg units and
 position conventions; see [compatibility and geometry setup](scalability-and-inputs.md).
 The examples and tables below use version 6.
@@ -49,7 +51,7 @@ to the XML file. Output filenames belong under the run's `Extracted/` folder.
 | `extra_warmup_steps` | No | `lattice` | Warmup steps added to the total; default 0 |
 | `fluid_density` | No | `kg/m3` | Fluid density corresponding to lattice density 1; default 1000 |
 | `fluid_viscosity` | No | `Pa.s` | Dynamic viscosity; default 0.004 |
-| `reference_pressure` | No | `Pa` | Physical pressure corresponding to lattice density 1; default 0 |
+| `reference_pressure` | No | `mmHg` | Physical pressure corresponding to lattice density 1; default 0 |
 | `checkpoint` | No | `period` attribute in lattice updates | Save fluid and supported model state; see [checkpoints](checkpoints.md) |
 | `smagorinsky_constant` | No | `dimensionless` | LES coefficient; default 0.1, zero disables LES |
 | `elastic_wall_stiffness` | No | `lattice` | Positive stiffness required for elastic-wall builds |
@@ -84,8 +86,8 @@ must be enough configured iolets for every ID used by the geometry.
   <position value="(0.0,0.0,0.0)" units="m" />
   <normal value="(0.0,0.0,1.0)" units="dimensionless" />
   <condition type="pressure" subtype="cosine">
-    <mean value="1.333223874" units="Pa" />
-    <amplitude value="0" units="Pa" />
+    <mean value="0.01" units="mmHg" />
+    <amplitude value="0" units="mmHg" />
     <phase value="0" units="rad" />
     <period value="1" units="s" />
   </condition>
@@ -106,13 +108,13 @@ All listed children are required.
 
 | Subtype | Children |
 | :--- | :--- |
-| `cosine` | `mean` and `amplitude` (`Pa`), `phase` (`rad`), `period` (`s`) |
-| `file` | `<path value="pressure.txt" />`; time/pressure pairs use seconds and Pa by default; optional condition `units="mmHg"` preserves legacy data |
+| `cosine` | `mean` and `amplitude` (`mmHg`), `phase` (`rad`), `period` (`s`) |
+| `file` | `<path value="pressure.txt" />`; time/pressure pairs use seconds; set condition `units="mmHg"` for mmHg pressure or `units="Pa"` for Pa; omitted units retain Pa in version 6 inputs |
 | `WK2`, `WK3`, `fileWK` | Resistance, capacitance, area, and radius or profile path; see [CPU models](cpu-models.md#windkessel-outlets) |
-| `multiscale` | `pressure` (`Pa`), `velocity` (`m/s`), and `<label value="..." />`; use with the multiscale workflow |
+| `multiscale` | `pressure` (`mmHg`), `velocity` (`m/s`), and `<label value="..." />`; use with the multiscale workflow |
 
 The geometry tool generates cosine pressure conditions. Its profile stores
-mean and amplitude in mmHg in `Pressure.x` and `.y`, converted to Pa in XML;
+mean and amplitude in mmHg in `Pressure.x` and `.y`, retained in XML;
 `Pressure.z` is the phase in radians. Period comes from `PulsePeriodSeconds`.
 
 For file waveforms, `timing="periodic"` repeats the physical-time interval
@@ -125,7 +127,7 @@ See [CPU models](cpu-models.md#file-waveforms).
 | Subtype | Required children |
 | :--- | :--- |
 | `parabolic` | `radius` (`m`), `maximum` (`m/s`) |
-| `womersley` | `radius` (`m`), `pressure_gradient_amplitude` (`Pa/m`), `period` (`s`), `womersley_number` (`dimensionless`) |
+| `womersley` | `radius` (`m`), `pressure_gradient_amplitude` (`mmHg/m`), `period` (`s`), `womersley_number` (`dimensionless`) |
 | `file` | `<path value="velocity.txt" />`, `radius` (`m`); file time/velocity pairs use seconds and m/s |
 | `womersleyElastic` | Elastic analytical profile; see [CPU models](cpu-models.md#yang-pressure-and-elastic-boundaries) |
 | `readWrite` | File-based exchange with an external peer; see [coupling](coupling.md) |
@@ -143,7 +145,7 @@ start initializes equilibrium at rest:
 ```xml
 <initialconditions>
   <pressure>
-    <uniform value="0" units="Pa" />
+    <uniform value="0" units="mmHg" />
   </pressure>
 </initialconditions>
 ```
@@ -273,6 +275,6 @@ option. Use the [tracer guide](tracers.md) for seeding, emission, and restart.
 File-based read/write coupling also uses the fluid build with a velocity
 boundary; it does not require MPWide.
 
-Version 6 moves checkpoint scheduling to `<simulation>` and uses Pa. Legacy
+Version 6 moves checkpoint scheduling to `<simulation>` and uses mmHg pressure. Legacy
 `stresstype` and camera settings are normalized when loading XML3/5; omit them
 from new XML6 files.

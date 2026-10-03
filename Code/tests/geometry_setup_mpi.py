@@ -70,13 +70,16 @@ def verify_reference_pressure(work, launcher, executable):
     field_start = 88 + ((name_length + 3) // 4) * 4
     components, typecode, offsets = struct.unpack_from('>III', data, field_start)
     assert (components, typecode, offsets) == (1, 0, 1)
-    offset, scale = struct.unpack_from('>ff', data, field_start + 12)
-    assert math.isclose(offset * scale, 2, rel_tol=1e-6)
+    offset, scale = struct.unpack_from('>dd', data, field_start + 12)
+    assert math.isclose(offset * scale, 2 / 133.3223874, rel_tol=1e-6)
+    unit_start = field_start + 28
+    unit_length = struct.unpack_from('>I', data, unit_start)[0]
+    assert data[unit_start + 4:unit_start + 4 + unit_length] == b'mmHg'
     body = 84 + header_length + 8
     for i in range(count):
         lattice_pressure = struct.unpack_from('>f', data, body + i * 16 + 12)[0]
-        assert math.isclose((lattice_pressure + offset) * scale, 3, abs_tol=1e-5)
-    print('Nonzero reference pressure: decoded physical pressure is 3 Pa')
+        assert math.isclose((lattice_pressure + offset) * scale, 3 / 133.3223874, abs_tol=1e-7)
+    print('Nonzero reference pressure: decoded mmHg pressure equals 3 Pa')
 
 
 def main():

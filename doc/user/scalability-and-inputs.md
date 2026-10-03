@@ -2,8 +2,11 @@
 
 The solver reads XML versions 3, 5, and 6 directly. HemePure version 3 and
 HemeLB version 5 inputs retain their mmHg pressure interpretation, including
-pressure-file values. Version 6 uses Pa by default. Legacy lattice iolet
-positions are converted in memory using voxel size and origin. Source XML and
+pressure-file values. New version 6 configurations use mmHg for pressure and
+mmHg/m for pressure gradients. Explicit Pa and Pa/m values remain accepted.
+Version 6 pressure-file and coupling conditions without a unit attribute retain
+their historical Pa interpretation. Legacy lattice iolet positions are converted in memory
+using voxel size and origin. Source XML and
 pressure files are preserved; no preprocessing command is required.
 
 Run an existing input with `hemelb -in input.xml -out results`. Optionally
@@ -26,11 +29,11 @@ From a source checkout, the converter also runs as:
 PYTHONPATH=python-tools python -m hlb.converters.Config old/input.xml converted/input.xml
 ```
 
-Conversion preserves the source files, rebases input paths, converts mmHg to Pa,
+Conversion preserves the source files, rebases input paths, retains mmHg pressure,
 and maps lattice iolet positions to metres using voxel size and origin. Pressure
-file inputs produce a converted sidecar next to the output XML. Existing output
-files are rejected. The geometry tool also writes version 6 XML, converting the
-pressure values stored in its GUI profiles from mmHg to Pa.
+file inputs write a copy beside the output XML, retaining mmHg pressure; the
+source data files are unchanged. Existing output files are rejected. The geometry tool also writes version 6 XML, retaining the
+mmHg pressure values stored in its GUI profiles.
 
 Pressure and velocity boundary choices still depend on the executable's CMake
 configuration. `hemelb-confcheck --syntax-only input.xml` checks the XML schema
@@ -104,18 +107,18 @@ It is not a separately measured loop-only peak. Unsupported platforms report -1.
 
 ## Extraction versions
 
-The Python extraction reader accepts versions 4, 5, and 6. Versions 4 and 5 store
-physical values with offsets; legacy pressure units remain as stored by the
-original writer, usually mmHg. The Python reader does not convert those old
-pressure fields to Pa. Version 6 stores lattice values and adds timestep,
-mass scale, reference pressure, and per-field conversion scales. Decode a field
-as `(stored + offset) * scale`; a zero scale marks an unscaled field such as
-rank IDs or distributions. Pressure bodies contain the lattice pressure
-difference, with the reference pressure divided by the pressure scale encoded
-as the field offset. With `physical_units=False`, offsets still apply, but
-scales do not.
+The Python extraction reader accepts versions 4, 5, 6, and 7. Versions 4/5
+retain physical values and their original units, typically mmHg pressure.
+Version 6 uses lattice values and conversion scales, returning pressure in Pa.
+Version 7 adds explicit field units and returns pressure in mmHg, while stress
+and traction remain in Pa. Both modern formats store timestep, mass scale,
+reference pressure, and per-field scales. Decode a field as
+`(stored + offset) * scale`; a zero scale marks an unscaled field such as rank
+IDs or distributions. Pressure bodies contain a lattice pressure difference;
+the offset restores reference pressure in the field's declared units. With
+`physical_units=False`, offsets still apply, but scales do not.
 
-Checkpoint input accepts extraction versions 4, 5, and 6 directly, with float or
+Checkpoint input accepts extraction versions 4, 5, 6, and 7 directly, with float or
 double distributions as supported by the file format. Float values are promoted
 to the solver's double precision and offsets are restored. The checkpoint must
 contain one field named `distributions`, matching the executable's lattice and
@@ -123,11 +126,12 @@ current geometry, together with its `.off` file. Rank counts may differ between
 saving and loading. Legacy nested `<pressure><checkpoint .../></pressure>`
 initial conditions are accepted. Existing `<properties><checkpoint file="...%d..."
 period="..."/></properties>` paths and periods are retained as distribution
-outputs; new checkpoint and extraction data use version 6.
+outputs; new checkpoint and extraction data use version 7.
 
 Pressure-file units are persisted in generated version 6 restart XML as
 `<condition type="pressure" subtype="file" units="mmHg">`. Version 6 file
-conditions accept `units="Pa"` or `units="mmHg"`, defaulting to Pa. This avoids
+conditions accept `units="Pa"` or `units="mmHg"`. Omitted units in version 6
+retain the historical Pa interpretation; versions 3/5 use mmHg. This avoids
 reinterpreting a legacy file when restarting. Optional field `datatype` values
 (`float`, `double`, `int32`, `uint32`, `int64`, `uint64`) are also preserved in
 saved XML so double-precision legacy checkpoint outputs retain their precision.

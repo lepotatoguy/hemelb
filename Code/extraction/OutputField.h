@@ -97,6 +97,23 @@ namespace hemelb::extraction
 
   }
 
+  inline std::string GetFieldUnits(source::Type const& src) {
+    return overload_visit(src,
+      [](source::Pressure) { return "mmHg"; },
+      [](source::Velocity) { return "m/s"; },
+      [](source::ShearStress) { return "Pa"; },
+      [](source::VonMisesStress) { return "Pa"; },
+      [](source::ShearRate) { return "s^-1"; },
+      [](source::StressTensor) { return "Pa"; },
+      [](source::Traction) { return "Pa"; },
+      [](source::TangentialProjectionTraction) { return "Pa"; },
+      [](source::NormalProjectionTraction) { return "Pa"; },
+      [](source::WallExtension) { return "m"; },
+      [](source::Distributions) { return "lattice"; },
+      [](source::MpiRank) { return "dimensionless"; }
+    );
+  }
+
   struct OutputField
   {
     std::string name;

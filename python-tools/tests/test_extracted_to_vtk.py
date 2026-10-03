@@ -34,15 +34,26 @@ def _extraction(path, version=5, changed_sites=False):
             typecode = 5 if name == "large_integer" else 0
             offsets = [100.0] if name == "pressure" else []
             header += struct.pack(">II", typecode, len(offsets))
-            header += b"".join(struct.pack(">f", value) for value in offsets)
-        if version == 6:
-            header += struct.pack(
-                ">f" if typecode == 0 else ">Q", 2 if typecode == 0 else 0
+            header += b"".join(
+                struct.pack(">d" if version == 7 else ">f", value) for value in offsets
             )
+        if version >= 6:
+            header += struct.pack(
+                ">d" if version == 7 else (">f" if typecode == 0 else ">Q"),
+                2 if typecode == 0 else 0,
+            )
+        if version == 7:
+            units = {
+                "pressure": "mmHg",
+                "custom_velocity": "m/s",
+                "stress": "Pa",
+                "large_integer": "dimensionless",
+            }
+            header += _string(units[name])
         headers.append(header)
     field_header = b"".join(headers)
     output = struct.pack(">III", HemeLbMagicNumber, ExtractionMagicNumber, version)
-    if version == 6:
+    if version >= 6:
         output += struct.pack(
             ">7dQII",
             0.2,
@@ -88,7 +99,7 @@ def _extraction(path, version=5, changed_sites=False):
     return path
 
 
-@pytest.mark.parametrize("version", [4, 5, 6])
+@pytest.mark.parametrize("version", [4, 5, 6, 7])
 @pytest.mark.parametrize("step_length", [None, 0.01])
 def test_roundtrip_fields_positions_and_row_order(tmp_path, version, step_length):
     source = _extraction(tmp_path / "source.xtr", version)
@@ -97,7 +108,7 @@ def test_roundtrip_fields_positions_and_row_order(tmp_path, version, step_length
     datasets = ET.parse(pvd).getroot().findall("Collection/DataSet")
     assert [float(node.get("timestep")) for node in datasets] == [
         (
-            time * (0.025 if version == 6 else 1)
+            time * (0.025 if version >= 6 else 1)
             if step_length is None
             else time * step_length
         )
@@ -134,6 +145,14 @@ def test_roundtrip_fields_positions_and_row_order(tmp_path, version, step_length
             if length == (6,):
                 expected = expected[:, [0, 3, 5, 1, 4, 2]]
             np.testing.assert_array_equal(actual, expected)
+        if version == 7:
+            assert (
+                grid.GetFieldData().GetAbstractArray("pressure_units").GetValue(0)
+                == "mmHg"
+            )
+            assert (
+                grid.GetFieldData().GetAbstractArray("stress_units").GetValue(0) == "Pa"
+            )
         if version >= 5:
             assert (
                 vtk_to_numpy(grid.GetCellData().GetArray("large_integer")).dtype

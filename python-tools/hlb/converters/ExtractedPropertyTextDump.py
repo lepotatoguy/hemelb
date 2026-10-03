@@ -30,7 +30,9 @@ def _write_dump(filename, stream):
     print("# File has {} sites.".format(propFile.siteCount), file=stream)
     print("# File has {} fields:".format(propFile.fieldCount), file=stream)
     for name, xdrType, memType, length, offset, *_ in propFile._fieldSpec:
-        print('#     "{0}", length {1}'.format(name, length), file=stream)
+        unit = getattr(propFile, "field_units", {}).get(name)
+        suffix = ", units " + unit if unit else ""
+        print('#     "{0}", length {1}{2}'.format(name, length, suffix), file=stream)
     print("# Geometry origin = {} m".format(propFile.originMetres), file=stream)
     print("# Voxel size = {} m".format(propFile.voxelSizeMetres), file=stream)
 

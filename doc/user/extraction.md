@@ -2,8 +2,12 @@
 
 Add `<properties>` to the configuration to save fields for analysis. The
 geometry tool does not add field output by default. New files use extraction
-version 6; the bundled Python reader restores offsets and scales to return
+version 7; the bundled Python reader restores offsets and scales to return
 physical values. See [Python tools](python-tools.md) for CSV and ParaView export.
+
+Version 7 headers name each field's physical unit, including custom-named
+fields. Existing version 6 pressure remains Pa when read; versions 4/5 retain
+their stored physical units.
 
 ## Save a local region
 
@@ -52,10 +56,10 @@ Sphere selectors reduce saved data but do not change the simulated domain.
 
 ## Choose fields and precision
 
-| Field type | Physical interpretation with the version 6 reader |
+| Field type | Physical interpretation of version 7 output |
 | :--- | :--- |
 | `velocity` | Three components in m/s |
-| `pressure` | Scalar pressure in Pa, including reference pressure |
+| `pressure` | Scalar pressure in mmHg, including reference pressure |
 | `vonmisesstress`, `shearstress` | Scalar stress in Pa |
 | `shearrate` | Scalar rate in s⁻¹ |
 | `stresstensor` | Six symmetric components in Pa |
@@ -89,7 +93,7 @@ hlb-dump-extracted-properties results/Extracted/region.xtr region.csv
 hlb-extracted-to-vtk results/Extracted/region.xtr region
 ```
 
-Open `region.pvd` in ParaView. Version 6 exports use physical coordinates,
+Open `region.pvd` in ParaView. Version 7 exports use physical coordinates,
 physical field values, and time in seconds from the header. Only selected
 sites appear in the exported voxel grid. The exporter handles the new wall
 fields and reorders symmetric tensors for VTK. For binary header details and

@@ -132,16 +132,20 @@ namespace hemelb::configuration {
     }
 
     namespace {
-        void ConvertLegacyQuantities(Element element) {
-            if (auto units = element.GetAttributeMaybe("units"); units && element.GetAttributeMaybe("value")) {
-                if (*units == "mmHg" || *units == "mmHg/m") {
-                    const double value = element.GetAttributeOrThrow<double>("value");
-                    if (!std::isfinite(value)) throw Exception() << "Non-finite legacy pressure at " << element.GetPath();
-                    element.SetAttribute("value", value * mmHg_TO_PASCAL);
-                    element.SetAttribute("units", *units == "mmHg" ? "Pa" : "Pa/m");
-                }
-            }
-            for (auto child: element.Children()) ConvertLegacyQuantities(child);
+        // Only pressure quantities accept mmHg. Stress and elastic modulus remain Pa.
+        double PopPressureValue(Element& element, bool gradient = false) {
+            const auto units = element.PopAttributeOrThrow("units");
+            const auto siUnits = gradient ? "Pa/m" : "Pa";
+            const auto conventionalUnits = gradient ? "mmHg/m" : "mmHg";
+            if (units != siUnits && units != conventionalUnits)
+                throw Exception() << "Invalid pressure units at " << element.GetPath()
+                                  << ": expected " << conventionalUnits << " or " << siUnits;
+            auto value = element.PopAttributeOrThrow<double>("value");
+            if (units == conventionalUnits) value *= mmHg_TO_PASCAL;
+            if (!std::isfinite(value))
+                throw Exception() << "Non-finite pressure at " << element.GetPath();
+            CheckEmpty(element);
+            return value;
         }
 
         void NormaliseLegacyConfig(Element root) {
@@ -217,7 +221,6 @@ namespace hemelb::configuration {
                         if (auto unused = selector.GetChildOrNull("normal")) unused.Delete();
                 }
             }
-            ConvertLegacyQuantities(root);
             root.SetAttribute("version", 6U);
         }
     }
@@ -507,10 +510,10 @@ namespace hemelb::configuration {
                     }).value_or(DEFAULT_FLUID_VISCOSITY_Pas);
 
             // Optional element (default = 0)
-            // <reference_pressure value="float" units="Pa" />
+            // <reference_pressure value="float" units="mmHg" />
             ans.fluid.reference_pressure_Pa = simEl.PopChildOrNull("reference_pressure")->transform(
                     [](Element& el) {
-                        return PopDimensionalValue<PhysicalPressure>(el, "Pa");
+                        return PopPressureValue(el);
                     }).value_or(0);
 
             ans.checkpoint = simEl.PopChildOrNull("checkpoint")->transform(
@@ -673,7 +676,11 @@ namespace hemelb::configuration {
                     conditionEl->PopChildOrThrow("path")->PopAttributeOrThrow("value"));
             if (auto state = conditionEl->PopChildOrNull("state"))
             {
-                c.pressure_Pa = state->PopAttributeOrThrow<double>("pressure_Pa");
+                if (auto conventional = state->PopAttributeMaybe<double>("pressure_mmHg")) {
+                    c.pressure_Pa = *conventional * mmHg_TO_PASCAL;
+                } else {
+                    c.pressure_Pa = state->PopAttributeOrThrow<double>("pressure_Pa");
+                }
                 c.flow_m3s = state->PopAttributeOrThrow<double>("flow_m3s");
                 c.previous_flow_m3s = state->PopAttributeOrThrow<double>("previous_flow_m3s");
                 CheckEmpty(*state);
@@ -719,8 +726,8 @@ namespace hemelb::configuration {
         {
             ElasticWomersleyVelocityIoletConfig c;
             c.radius_m = PopDimensionalValue<double>(*conditionEl->PopChildOrThrow("radius"), "m");
-            c.pgrad_amp_Pam = PopDimensionalValue<double>(
-                *conditionEl->PopChildOrThrow("pressure_gradient_amplitude"), "Pa/m");
+            c.pgrad_amp_Pam = PopPressureValue(
+                *conditionEl->PopChildOrThrow("pressure_gradient_amplitude"), true);
             c.period_s = PopDimensionalValue<double>(*conditionEl->PopChildOrThrow("period"), "s");
             c.womersley = PopDimensionalValue<double>(
                 *conditionEl->PopChildOrThrow("womersley_number"), "dimensionless");
@@ -1127,7 +1134,7 @@ namespace hemelb::configuration {
                         << "XML contains both <pressure> and <checkpoint> sub elements of <initialconditions>";
             } else {
                 // Only pressure
-                auto p0_Pa = PopDimensionalValue<PhysicalPressure>(*pressureEl->PopChildOrThrow("uniform"), "Pa");
+                auto p0_Pa = PopPressureValue(*pressureEl->PopChildOrThrow("uniform"));
                 initial_condition = EquilibriumIC(t0, p0_Pa);
                 CheckEmpty(*pressureEl);
             }
@@ -1156,8 +1163,8 @@ namespace hemelb::configuration {
     {
         CosinePressureIoletConfig newIolet;
 
-        newIolet.amp_Pa = PopDimensionalValue<PhysicalPressure>(*conditionEl.PopChildOrThrow("amplitude"), "Pa");
-        newIolet.mean_Pa = PopDimensionalValue<PhysicalPressure>(*conditionEl.PopChildOrThrow("mean"), "Pa");
+        newIolet.amp_Pa = PopPressureValue(*conditionEl.PopChildOrThrow("amplitude"));
+        newIolet.mean_Pa = PopPressureValue(*conditionEl.PopChildOrThrow("mean"));
         newIolet.phase_rad = PopDimensionalValue<Angle>(*conditionEl.PopChildOrThrow("phase"), "rad");
         newIolet.period_s = PopDimensionalValue<LatticeTime>(*conditionEl.PopChildOrThrow("period"), "s");
         CheckEmpty(conditionEl);
@@ -1185,7 +1192,7 @@ namespace hemelb::configuration {
         MultiscalePressureIoletConfig newIolet;
 
         auto pressureEl = conditionEl.PopChildOrThrow("pressure");
-        PopDimensionalValue(*pressureEl, "Pa", newIolet.pressure_reference_Pa);
+        newIolet.pressure_reference_Pa = PopPressureValue(*pressureEl);
 
         auto velocityEl = conditionEl.PopChildOrThrow("velocity");
         PopDimensionalValue(*velocityEl, "m/s", newIolet.velocity_reference_ms);
@@ -1210,8 +1217,8 @@ namespace hemelb::configuration {
         WomersleyVelocityIoletConfig newIolet;
 
         PopDimensionalValue(*conditionEl.PopChildOrThrow("radius"), "m", newIolet.radius_m);
-        PopDimensionalValue(*conditionEl.PopChildOrThrow("pressure_gradient_amplitude"),
-                            "Pa/m", newIolet.pgrad_amp_Pam);
+        newIolet.pgrad_amp_Pam = PopPressureValue(
+            *conditionEl.PopChildOrThrow("pressure_gradient_amplitude"), true);
         PopDimensionalValue(*conditionEl.PopChildOrThrow("period"), "s", newIolet.period_s);
         PopDimensionalValue(*conditionEl.PopChildOrThrow("womersley_number"), "dimensionless", newIolet.womersley);
         CheckEmpty(conditionEl);

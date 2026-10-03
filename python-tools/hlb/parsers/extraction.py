@@ -86,6 +86,7 @@ class xtr_parser_base:
         if not physical_units:
             assert self.VERSION >= 6
         self.OutputPhysicalUnits = physical_units
+        self.field_units = {}
         self.FieldHeaderStart = MagicVersionLength + self.MainHeaderLength
 
     def _load_field_header(self, xtr_file):
@@ -124,7 +125,7 @@ class xtr_common_4_5:
 
 
 class xtr_common_5_6:
-    """Same field headers for V5 & 6"""
+    """Common field parsing with version-specific conversion metadata."""
 
     TYPECODE_TYPE = [np.float32, np.float64, np.int32, np.uint32, np.int64, np.uint64]
     TYPECODE_STR = [">f4", ">f8", ">i4", ">u4", ">i8", ">u8"]
@@ -140,6 +141,18 @@ class xtr_common_5_6:
     def _parse_scale(self, decoder, tc):
         return None
 
+    def _parse_units(self, decoder, name):
+        pass
+
+    def _parse_offsets(self, decoder, tc, count):
+        return np.asarray(
+            [self.UNPACK_TYPE[tc](decoder)() for _ in range(count)],
+            dtype=self.TYPECODE_TYPE[tc],
+        )
+
+    def _get_memory_type(self, tc, data_offset, scale):
+        return self.TYPECODE_TYPE[tc]
+
     def ParseFieldHeader(self, xtr_file):
         decoder = self._load_field_header(xtr_file)
 
@@ -153,11 +166,8 @@ class xtr_common_5_6:
             name = decoder.unpack_string().decode("ascii")
             length = decoder.unpack_uint()
             tc = decoder.unpack_uint()
-            np_type = self.TYPECODE_TYPE[tc]
             n_offsets = decoder.unpack_uint()
-            offsets = np.empty(n_offsets, dtype=np_type)
-            for iOff in range(n_offsets):
-                offsets[iOff] = self.UNPACK_TYPE[tc](decoder)()
+            offsets = self._parse_offsets(decoder, tc, n_offsets)
 
             if n_offsets == 0:
                 d_off = None
@@ -171,8 +181,14 @@ class xtr_common_5_6:
                     f"Invalid number of offsets in extraction file for field '{name}'"
                 )
             scale = self._parse_scale(decoder, tc)
+            self._parse_units(decoder, name)
             self._fieldSpec.Append(
-                name, length, self.TYPECODE_STR[tc], np_type, d_off, scale
+                name,
+                length,
+                self.TYPECODE_STR[tc],
+                self._get_memory_type(tc, d_off, scale),
+                d_off,
+                scale,
             )
 
         return self._fieldSpec
@@ -292,6 +308,33 @@ class ExtractedPropertyV6Parser(xtr_parser_base, xtr_common_5_6):
             return None
 
 
+class ExtractedPropertyV7Parser(ExtractedPropertyV6Parser):
+    """Lattice values with explicit physical units for every field."""
+
+    VERSION = 7
+
+    def _parse_offsets(self, decoder, tc, count):
+        return np.asarray([decoder.unpack_double() for _ in range(count)])
+
+    def _parse_scale(self, decoder, tc):
+        scale = decoder.unpack_double()
+        return scale if self.OutputPhysicalUnits and scale != 0.0 else None
+
+    def _get_memory_type(self, tc, data_offset, scale):
+        dtype = self.TYPECODE_TYPE[tc]
+        if np.issubdtype(dtype, np.integer) and (
+            data_offset is not None or scale is not None
+        ):
+            return np.float64
+        return dtype
+
+    def _parse_units(self, decoder, name):
+        unit = decoder.unpack_string().decode("ascii")
+        self.field_units[name] = (
+            unit if self.OutputPhysicalUnits or unit == "dimensionless" else "lattice"
+        )
+
+
 class ExtractedProperty:
     """Represent the contents of a HemeLB property extraction file."""
 
@@ -299,6 +342,7 @@ class ExtractedProperty:
         4: ExtractedPropertyV4Parser,
         5: ExtractedPropertyV5Parser,
         6: ExtractedPropertyV6Parser,
+        7: ExtractedPropertyV7Parser,
     }
 
     def __init__(self, filename, physical_units=True):
@@ -339,6 +383,7 @@ class ExtractedProperty:
         self.parser.ParseMainHeader(self._file, self)
 
         self._ReadFieldHeader()
+        self.field_units = self.parser.field_units
         self._DetermineTimes()
 
         # At this point, we can close the file. All external access uses memory maps.

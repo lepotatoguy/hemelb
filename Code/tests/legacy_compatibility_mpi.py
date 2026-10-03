@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 
-from checkpoint_restart_mpi import RESOURCE_DIR, MPIRUN_FLAGS, make_config, run, checkpoint_at, saved_sites
+from checkpoint_restart_mpi import RESOURCE_DIR, MPIRUN_FLAGS, make_config, run, checkpoint_at, saved_sites, checkpoint_data_start
 
 MMHG_TO_PA = 133.3223874
 
@@ -45,26 +45,30 @@ def make_legacy_checkpoint(source, offsets, destination, version, float_values):
     vectors = struct.unpack_from('>I', data, 104)[0]
     name = b'distributions'
     field = struct.pack('>I', len(name)) + name + bytes(3)
-    value_offset = 0.125 if version == 4 else 0.0
+    value_offset = 0.125 if version in (4, 7) else 0.0
     if version == 4:
         field += struct.pack('>Id', vectors, value_offset)
     else:
-        field += struct.pack('>III', vectors, 0 if float_values else 1, 0)
+        field += struct.pack('>III', vectors, 0 if float_values else 1, 1 if version == 7 else 0)
         if version == 6: field += struct.pack('>f' if float_values else '>d', 0.0)
-    if version == 6:
+        if version == 7:
+            field += struct.pack('>ddI', value_offset, 0.0, 7) + b'lattice' + bytes(1)
+    if version >= 6:
         header = bytearray(data[:84])
+        struct.pack_into('>I', header, 8, version)
         struct.pack_into('>I', header, 80, len(field))
     else:
         dx = struct.unpack_from('>d', data, 12)[0]
         origin = struct.unpack_from('>3d', data, 36)
         header = struct.pack('>III4dQII', 0x686c6221, 0x78747204, version, dx, *origin, count, 1, len(field))
-    timestep = struct.unpack_from('>Q', data, 124)[0]
+    data_start = checkpoint_data_start(data)
+    timestep = struct.unpack_from('>Q', data, data_start)[0]
     body = bytearray(struct.pack('>Q', timestep))
     expected = {}
     old_size = 12 + vectors * 8
     new_size = 12 + vectors * (4 if float_values else 8)
     fmt = f'>{vectors}' + ('f' if float_values else 'd')
-    for position in range(132, len(data), old_size):
+    for position in range(data_start + 8, len(data), old_size):
         coord = struct.unpack_from('>III', data, position)
         values = struct.unpack_from(f'>{vectors}d', data, position + 12)
         encoded = struct.pack(fmt, *(v - value_offset for v in values))
@@ -131,13 +135,13 @@ def main():
                 print(f'XML v{version}, pressure {"file" if file_pressure else "cosine"}: distributions match v6 within 1e-12; source unchanged')
         source = checkpoint_at(baseline, 2)
         source_offsets = baseline / 'Checkpoints/distributions.off'
-        for version, float_values in ((4, True), (5, False), (5, True), (6, True)):
+        for version, float_values in ((4, True), (5, False), (5, True), (6, True), (7, True), (7, False)):
             label = f'xtr-v{version}-{"float" if float_values else "double"}'
             path = work / (label + '.xtr')
             decoded = make_legacy_checkpoint(source, source_offsets, path, version, float_values)
             config = work / (label + '.xml')
             make_config(config, path, path.with_suffix('.off'), changes={'simulation/steps': '2'})
-            if version != 6:
+            if version < 6:
                 tree = legacy_xml(ET.parse(config), 3 if version == 4 else 5)
                 if version == 4:
                     initial = tree.getroot().find('initialconditions')

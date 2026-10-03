@@ -1,9 +1,9 @@
 # HemeLB documentation
 
-These guides describe `feat/scalability-input-improvements`. New XML and
-extraction/checkpoint output use version 6, with pressure in Pa. Existing
+These guides describe `feat/scalability-input-improvements`. New XML uses version 6;
+extraction/checkpoint output uses version 7, with pressure in mmHg. Existing
 HemePure XML3 and HemeLB XML5 inputs load directly with their legacy units;
-extraction readers and checkpoint loading accept versions 4, 5, and 6.
+extraction readers and checkpoint loading accept versions 4, 5, 6, and 7.
 Use the solver and Python tools from this branch together.
 
 ## Start here
@@ -40,13 +40,18 @@ Use the solver and Python tools from this branch together.
 
 ## Files and units
 
+Pressure uses mmHg and pressure gradients use mmHg/m. Stress and traction use
+Pa; velocity uses m/s, length uses m, and time uses s. The solver calculates in
+lattice units. Existing extraction version 6 files retain their Pa pressure
+interpretation; versions 4/5 retain their original units.
+
 | File | Purpose | Units and interpretation |
 | :--- | :--- | :--- |
 | `.stl` | Triangulated vessel surface | Coordinates use the units selected in the geometry profile |
 | `.pr2` | YAML geometry profile | Centres, radii, seed point, and voxel size use STL units; time settings use seconds |
 | `.gmy`, `.gmy+` | Voxelised geometry and boundary links | Integer lattice coordinates; physical origin and voxel size come from the XML |
-| `.xml` | Simulation configuration | Version 6: positions in metres, times in seconds, pressures in Pa; legacy XML3/5 retains mmHg |
-| `.xtr` | Extracted fields or checkpoint distributions | Version 6 output stores lattice values and conversion metadata; the bundled reader returns velocity in m/s and pressure in Pa |
+| `.xml` | Simulation configuration | Version 6: positions in metres, times in seconds, pressures in mmHg; explicit Pa inputs are converted |
+| `.xtr` | Extracted fields or checkpoint distributions | Version 7 output stores lattice values, conversion metadata, and field units; the bundled reader returns velocity in m/s and pressure in mmHg |
 | `.off` | Companion extraction offsets | Byte offsets for the MPI ranks that wrote the data; required for checkpoint loading |
 | `restart.xml` | Saved configuration and supported model state | Written beside `Checkpoints/<step>/distributions.xtr`; preserve the checkpoint folder and companion offsets |
 | `tracers.csv` | Passive particle trajectories | Time in seconds, positions in metres, velocity in m/s |

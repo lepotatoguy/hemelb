@@ -13,7 +13,7 @@ Replace the inlet condition with this version 6 example, keeping the normal
 and position matched to the geometry:
 
 ```xml
-<condition type="velocity" subtype="readWrite" pressure_units="Pa" timeout_s="60">
+<condition type="velocity" subtype="readWrite" pressure_units="mmHg" timeout_s="60">
   <radius value="0.0005" units="m" />
   <area value="7.853981633974483e-7" units="m^2" />
   <frequency value="10" units="lattice" />
@@ -27,7 +27,7 @@ and position matched to the geometry:
 
 The values illustrate the schema. Choose geometry, exchange frequency, and
 conversion factors for your peer. With unit factors, input flow is in m³/s
-and output pressure is in Pa. Paths are relative to the configuration XML.
+and output pressure is in mmHg. Paths are relative to the configuration XML.
 Create the exchange directory and initial flow record before launching HemeLB.
 
 ## Exchange protocol
@@ -40,9 +40,10 @@ to the XML. Factors and smoothing must be finite; smoothing lies between 0 and 1
 
 The peer writes one ASCII record containing physical time and flow. HemeLB
 converts flow to the peak parabolic speed, smooths it, and writes the next
-exchange time and sampled pressure through an atomic file rename. New v6 inputs
-use Pa by default; legacy inputs retain mmHg. Set `pressure_units="Pa"` or
-`"mmHg"` explicitly when exchanging data with another program.
+exchange time and sampled pressure through an atomic file rename. Set
+`pressure_units="mmHg"` to use the pressure convention shown above, or `"Pa"`
+when required by the peer. Omitted units retain Pa for version 6 inputs and
+mmHg for legacy version 3/5 inputs.
 
 Initial speed and the time origin come from the first flow-file record. The first
 exchange occurs at update 2 after warmup and reads that initial peer timestamp.

@@ -1,8 +1,8 @@
 # Troubleshooting
 
 Use the guides from the branch you built. These checks apply to
-`feat/scalability-input-improvements`: new XML6 and extraction6, pressure in Pa,
-and TinyXML2. XML3/5 and extraction/checkpoint4/5 also load directly. For a repeatable baseline, try the
+`feat/scalability-input-improvements`: new XML6 and extraction7, pressure in mmHg,
+and TinyXML2. XML3/5 and extraction/checkpoint4/5/6 also load directly. For a repeatable baseline, try the
 [first-run example](getting-started.md).
 
 ## Installation and imports
@@ -41,7 +41,7 @@ layouts.
 | Message or symptom | Check or action |
 | :--- | :--- |
 | Geometry file does not exist | Check `<geometry><datafile path="..." /></geometry>`; relative paths start at the XML's folder |
-| XML version or units rejected | Use XML6/Pa for new configurations; retain XML3/5 legacy units when loading old files. Use the exact unit strings in the [XML reference](XmlConfiguration.md) |
+| XML version or units rejected | Use XML6/mmHg for new configurations; retain XML3/5 legacy units when loading old files. Use the exact unit strings in the [XML reference](XmlConfiguration.md) |
 | Boundary inconsistent with compile-time choice | Pressure requires `NASHZEROTHORDERPRESSUREIOLET` or `YANGPRESSUREIOLET`; velocity requires `LADDIOLET`, independently for inlets/outlets |
 | Geometry uses more inlets/outlets than configured | Keep the XML iolet order and count from the profile that generated the GMY |
 | Too many MPI processes for fluid blocks | Reduce the process count to the limit in the error message |
@@ -65,7 +65,7 @@ boundary choices. Geometry and referenced-file checks happen during simulation s
 | VTK conversion places cells incorrectly | Use `hlb-extracted-to-vtk` to export physical coordinates from the extraction header; check that the run used the matching GMY/XML pair |
 | Restart cannot find an offset file | Pass the shared `.off` path explicitly; see the [checkpoint workflow](checkpoints.md) |
 | Checkpoint geometry or distribution mismatch | Use the original voxel size, origin, fluid-site set, and lattice; keep the corresponding offsets |
-| Newer extraction format rejected | The bundled Python reader handles versions 4, 5, and 6; use tools from the branch that wrote other formats |
+| Newer extraction format rejected | The bundled Python reader handles versions 4, 5, 6, and 7; use tools from the branch that wrote other formats |
 
 ## Reporting a reproducible failure
 

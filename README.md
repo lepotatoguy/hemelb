@@ -10,8 +10,9 @@ an STL surface into solver inputs; the Python tools read and convert results.
 
 This branch adds CPU boundary models, sparse geometry setup, runtime
 decomposition, coupling, and passive tracers. It reads existing HemePure XML3
-and HemeLB XML5 inputs and extraction/checkpoint versions 4, 5, and 6. New XML
-and output use version 6, with pressure in Pa. See the
+and HemeLB XML5 inputs and extraction/checkpoint versions 4, 5, 6, and 7. New XML
+uses version 6 and output uses version 7, with pressure in mmHg and stress in
+Pa. See the
 [changelog](CHANGELOG.md) and [compatibility guide](doc/user/scalability-and-inputs.md).
 
 The geometry GUI has a scrollable editor and combines repeated preview updates

@@ -121,11 +121,15 @@ python Scripts/compare-cpu-solvers.py \
   --reference /path/to/baseline/hemelb \
   --candidate /path/to/optimized/hemelb \
   --reference-config benchmark.xml --candidate-config benchmark.xml \
-  --reference-pressure-unit Pa --candidate-pressure-unit Pa \
+  --reference-pressure-unit Pa --candidate-pressure-unit mmHg \
   --ranks 1 2 4 --repeats 5 \
   --pressure-atol 0 --velocity-atol 0 --rtol 0 \
   --output cpu-comparison
 ```
+
+The command assumes a version 6 baseline (pressure in Pa) and a current
+version 7 candidate (pressure in mmHg). Set `--reference-pressure-unit mmHg`
+for a baseline that writes mmHg. Recorded timings above predate version 7.
 
 Activate the installed Python-tools environment first. The benchmark script
 alternates execution order, records executable/input/geometry hashes and

@@ -60,12 +60,15 @@ def compare(reference, actual, pressure_fields=()):
             expected, computed = gold[field].astype(np.float64), data[field].astype(
                 np.float64
             )
-            if old.version < 6 and field in pressure_fields:
-                expected *= MMHG_TO_PA
+            if field in pressure_fields:
+                if old.version < 6 or old.field_units.get(field) == "mmHg":
+                    expected *= MMHG_TO_PA
+                if new.field_units.get(field) == "mmHg":
+                    computed *= MMHG_TO_PA
             finite = np.isfinite(expected)
             np.testing.assert_array_equal(finite, np.isfinite(computed))
-            # The reference stores physical float32; XML6 stores lattice
-            # float32 and a scale. Compare in SI with a float32 rounding bound.
+            # The reference stores physical float32; modern output stores
+            # lattice float32 and a scale. Compare in SI with a rounding bound.
             # Double checkpoint distributions retain the original 1e-12 bound.
             tolerance = (
                 16 * np.finfo(np.float32).eps * np.max(np.abs(expected[finite]))

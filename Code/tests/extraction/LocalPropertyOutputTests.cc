@@ -97,7 +97,7 @@ namespace hemelb::tests
     TEST_CASE_METHOD(helpers::HasCommsTestFixture, "LocalPropertyOutput") {
         using xtr = io::formats::extraction;
         char writtenMainHeader[xtr::MainHeaderLength];
-        constexpr size_t fieldHeaderLength = 0x3c;
+        constexpr size_t fieldHeaderLength = 0x58;
         char writtenFieldHeader[fieldHeaderLength];
 
         // The code won't overwrite any existing file
@@ -130,11 +130,27 @@ namespace hemelb::tests
 
         SECTION("Header length calculation") {
             auto hl = [](extraction::OutputField const& f) {
-                return xtr::GetFieldHeaderLength(f.name, f.noffsets, extraction::code::type_to_enum(f.typecode));
+                return xtr::GetFieldHeaderLength(f.name, f.noffsets, extraction::GetFieldUnits(f.src));
             };
 
             auto hlen = hl(pressure) + hl(velocity);
             REQUIRE(hlen == fieldHeaderLength);
+        }
+
+        SECTION("Integer pressure retains fractional conversion metadata") {
+            simpleOutFile.fields[0].typecode = std::int32_t{0};
+            auto propertyWriter = std::make_unique<extraction::LocalPropertyOutput>(simpleDataSource, simpleOutFile, Comms());
+            auto writtenFile = io::FILE::open(simpleOutFile.filename, "r");
+            REQUIRE(writtenFile.read(writtenMainHeader, 1, xtr::MainHeaderLength) == xtr::MainHeaderLength);
+            REQUIRE(writtenFile.read(writtenFieldHeader, 1, fieldHeaderLength) == fieldHeaderLength);
+            io::XdrMemReader reader(reinterpret_cast<std::byte*>(writtenFieldHeader), fieldHeaderLength);
+            REQUIRE(reader.read<std::string>() == "Pressure");
+            REQUIRE(reader.read<std::uint32_t>() == 1);
+            REQUIRE(reader.read<std::uint32_t>() == 2);
+            REQUIRE(reader.read<std::uint32_t>() == 1);
+            REQUIRE(reader.read<double>() == Approx(600.0));
+            REQUIRE(reader.read<double>() == Approx(0.00010000821012400604));
+            REQUIRE(reader.read<std::string>() == "mmHg");
         }
 
         SECTION("Write") {
@@ -157,7 +173,7 @@ namespace hemelb::tests
             const char expectedMainHeader[] =
                     "\x68\x6C\x62\x21" // Magic
                     "\x78\x74\x72\x04" // Magic
-                    "\x00\x00\x00\x06" // Version
+                    "\x00\x00\x00\x07" // Version
                     "\x3F\x33\xA9\x2A\x30\x55\x32\x61" // dx
                     "\x3F\xE0\x00\x00\x00\x00\x00\x00" // dt
                     "\x3E\xB0\xC6\xF7\xA0\xB5\xED\x8D" // dm
@@ -167,7 +183,7 @@ namespace hemelb::tests
                     "\x40\xC4\xD4\xE5\x3F\x39\xD1\xB3" // reference pressure
                     "\x00\x00\x00\x00\x00\x00\x00\x40" // # sites
                     "\x00\x00\x00\x02" // # fields
-                    "\x00\x00\x00\x3c" // field header length
+                    "\x00\x00\x00\x58" // field header length
             ;
             // +1 for null terminator
             STATIC_REQUIRE(sizeof(expectedMainHeader) == xtr::MainHeaderLength + 1);
@@ -188,15 +204,17 @@ namespace hemelb::tests
                     "\x00\x00\x00\x01"  // n values
                     "\x00\x00\x00\x00"  // type code
                     "\x00\x00\x00\x01"  // n offsets
-                    "\x44\x16\x00\x00"  // reference pressure divided by pressure scale
-                    "\x3c\x5a\x74\xe"  // scale
+                    "\x40\x82\xc0\x00\x00\x00\x00\x00"  // reference pressure divided by pressure scale
+                    "\x3f\x1a\x37\x6f\xf7\x9e\x1d\xb0"  // pressure scale to mmHg
+                    "\x00\x00\x00\x04" "mmHg"
 
                     "\x00\x00\x00\x08"  // name length
                     "Velocity" // name
                     "\x00\x00\x00\x03"  // n values
                     "\x00\x00\x00\x00"  // type code
                     "\x00\x00\x00\x00"  // n offsets
-                    "\x3a\x1d\x49\x52"  // scale
+                    "\x3f\x43\xa9\x2a\x30\x55\x32\x61"  // velocity scale to m/s
+                    "\x00\x00\x00\x03" "m/s\x00"
             ;
             // +1 for null terminator
             STATIC_REQUIRE(sizeof(expectedFieldHeader) == fieldHeaderLength + 1);

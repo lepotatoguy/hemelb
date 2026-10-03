@@ -2,8 +2,8 @@
 
 A fluid checkpoint can be restarted with a different number of MPI
 processes from the run that saved it. The loader accepts extraction versions
-4, 5, and 6, restores stored distribution offsets, and promotes legacy floats
-to double precision. New checkpoints use version 6 and a saved restart XML;
+4, 5, 6, and 7, restores stored distribution offsets, and promotes legacy floats
+to double precision. New checkpoints use version 7 and a saved restart XML;
 see the [user workflow](../user/checkpoints.md).
 
 ## How the reader works

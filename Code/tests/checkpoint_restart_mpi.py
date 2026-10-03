@@ -46,11 +46,19 @@ def run(launcher, executable, ranks, config, output):
         raise RuntimeError(f"{' '.join(command)} failed:\n{result.stdout}")
 
 
+def checkpoint_data_start(data):
+    # Both v6 and v7 keep the main header layout; field header size can vary.
+    version = struct.unpack_from(">I", data, 8)[0]
+    if version not in (6, 7):
+        raise AssertionError("Expected a current checkpoint format")
+    return 84 + struct.unpack_from(">I", data, 80)[0]
+
+
 def checkpoint_at(output, timestep):
     matches = []
     for path in (output / "Checkpoints").glob("*/distributions.xtr"):
         data = path.read_bytes()
-        if struct.unpack_from(">Q", data, 124)[0] == timestep:
+        if struct.unpack_from(">Q", data, checkpoint_data_start(data))[0] == timestep:
             matches.append(path)
     if len(matches) != 1:
         raise AssertionError(f"Expected one checkpoint at timestep {timestep}, got {matches}")
@@ -65,10 +73,11 @@ def saved_sites(path):
     count = struct.unpack_from(">Q", data, 68)[0]
     vectors = struct.unpack_from(">I", data, 104)[0]
     record_size = 12 + 8 * vectors
-    if len(data) != 132 + count * record_size:
+    start = checkpoint_data_start(data) + 8
+    if len(data) != start + count * record_size:
         raise AssertionError("Unexpected checkpoint record length")
     sites = {}
-    for offset in range(132, len(data), record_size):
+    for offset in range(start, len(data), record_size):
         coordinate = struct.unpack_from(">III", data, offset)
         values = struct.unpack_from(f">{vectors}d", data, offset + 12)
         if coordinate in sites:
@@ -85,6 +94,23 @@ def check_rejects_other_geometry(work, launcher, executable):
     run(launcher, executable, 1, fresh, saved)
     checkpoint = checkpoint_at(saved, 2)
     offsets = saved / "Checkpoints/distributions.off"
+    # Corrupt only the unit label, retaining the valid body and offsets.
+    data = bytearray(checkpoint.read_bytes())
+    units_end = checkpoint_data_start(data)
+    assert data[units_end - 8:units_end - 1] == b"lattice"
+    data[units_end - 8:units_end - 1] = b"invalid"
+    bad_units = work / "invalid-units.xtr"
+    bad_units.write_bytes(data)
+    unit_config = work / "invalid-units.xml"
+    make_config(unit_config, bad_units, saved / "Checkpoints/distributions.off")
+    try:
+        run(launcher, executable, 2, unit_config, work / "invalid-units-out")
+    except RuntimeError as error:
+        if "Checkpoint distributions must use lattice units" not in str(error):
+            raise AssertionError(f"unit label: failed for another reason:\n{error}")
+    else:
+        raise AssertionError("Checkpoint with invalid distribution units was accepted")
+    print("invalid distribution units: rejected")
     cases = {
         "voxel size": {"simulation/voxel_size": "1.5e-06"},
         "origin": {"simulation/origin": "(-1.0e-05,-1.05e-05,-2.45248049736e-05)"},

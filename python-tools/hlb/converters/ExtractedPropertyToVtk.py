@@ -45,7 +45,7 @@ def _voxel_grid(coordinates, voxel_size, origin):
 def export(input_file, output_prefix=None, step_length=None):
     """Write ASCII VTU files and return the PVD path. Existing outputs are refused.
 
-    Collection times use v6 timestep metadata or an explicit step_length in seconds.
+    Collection times use embedded timestep metadata or an explicit step_length in seconds.
     Legacy files without either use lattice timesteps.
     Six-component fields follow HemeLB's symmetric tensor convention.
     """
@@ -83,6 +83,11 @@ def export(input_file, output_prefix=None, step_length=None):
     if len(set(coordinates)) != len(coordinates):
         raise ValueError("extraction contains duplicate grid coordinates")
     grid = _voxel_grid(coordinates, extraction.voxelSizeMetres, extraction.originMetres)
+    for name, unit in extraction.field_units.items():
+        units = vtk.vtkStringArray()
+        units.SetName(name + "_units")
+        units.InsertNextValue(unit)
+        grid.GetFieldData().AddArray(units)
     prefix.parent.mkdir(parents=True, exist_ok=True)
     writer = vtk.vtkXMLUnstructuredGridWriter()
     writer.SetInputData(grid)
@@ -146,7 +151,7 @@ def main(argv=None):
     parser.add_argument(
         "--step-length",
         type=float,
-        help="seconds per lattice timestep; v6 uses embedded metadata, legacy files otherwise use lattice steps",
+        help="seconds per lattice timestep; v6 and later use embedded metadata, legacy files otherwise use lattice steps",
     )
     args = parser.parse_args(argv)
     try:

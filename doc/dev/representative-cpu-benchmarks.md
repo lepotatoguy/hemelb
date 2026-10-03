@@ -194,19 +194,23 @@ python Scripts/compare-cpu-solvers.py \
   --candidate /path/to/hemelb-LBGK \
   --reference-config prepared-cpu-cases/sixbranch/LBGK/reference.xml \
   --candidate-config prepared-cpu-cases/sixbranch/LBGK/candidate.xml \
-  --reference-pressure-unit mmHg --candidate-pressure-unit Pa \
+  --reference-pressure-unit mmHg --candidate-pressure-unit mmHg \
   --reference-rank-offset 1 --ranks 1 2 4 --repeats 3 \
   --pressure-atol 5e-5 --velocity-atol 1e-8 --rtol 1e-5 \
   --output sixbranch-LBGK-workers
 ```
+
+The command uses the current version 7 branch output (mmHg pressure). The
+recorded version 6 runs above used Pa pressure and compared both solvers in Pa;
+use `--candidate-pressure-unit Pa` when reproducing those older binaries.
 
 Repeat for TRT/MRT and the two bifurcation inputs. Omit
 `--reference-rank-offset 1` for equal allocations. Use a separate output
 folder and `--peak-rss --repeats 1` for memory recording; wrapper timings
 must not be merged into timing medians. Input preparation refuses an existing
 output folder and writes geometry hashes, site counts and parameter values
-into `cases.json`. All 18 generated XML files reproduced the executed inputs
-byte-for-byte in the local reproduction check.
+into `cases.json`. At the recorded revision, all 18 generated XML files reproduced the executed
+inputs byte-for-byte in the local reproduction check.
 
 Raw inputs, executable hashes, logs, per-run JSON and the summary CSV are in
 ignored `research/cpu-representative/`. The preparation/comparison scripts

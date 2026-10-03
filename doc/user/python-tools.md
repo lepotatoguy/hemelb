@@ -8,11 +8,11 @@ conda activate gmy-tool
 hlb-dump-extracted-properties --help
 ```
 
-The Python reader accepts extraction versions 4, 5, and 6. This branch writes
-version 6 with lattice-to-physical conversion metadata. By default the reader
-returns velocity in m/s and pressure in Pa. Legacy version 4/5 values retain
-their writer's physical units, typically mmHg for pressure; no automatic
-conversion to Pa is applied to those old files. See the
+The Python reader accepts extraction versions 4, 5, 6, and 7. This branch
+writes version 7 with field units and conversion metadata. The reader returns
+velocity in m/s, pressure in mmHg, and stress and traction in Pa. Existing
+version 6 files retain Pa pressure; version 4/5 files retain their writer's
+physical units, typically mmHg pressure. See the
 [format reference](../dev/file-formats/extraction.md) for binary layouts.
 
 ## Install separately
@@ -42,6 +42,7 @@ headers (`#`), a separate block for each saved timestep, and one row per site.
 Vector fields are split into component columns. A timestep appears in its
 comment header, not in every row, so do not discard the headers when combining
 multiple timesteps. The file suffix `.csv` does not remove those comments.
+Version 7 field headers identify each field's units.
 
 To load one timestep as arrays, use the Python interface below. See
 [field extraction](extraction.md) for selectors, precision, and timestep windows.
@@ -55,7 +56,7 @@ Conversion is optional:
 hlb-convert-config old.xml converted/input.xml
 ```
 
-The converter writes version 6, converts pressure quantities to Pa, converts
+The converter writes version 6, keeps pressure quantities in mmHg, converts
 legacy lattice iolet positions to metres, and rebases file paths. It can create
 converted pressure-data sidecars; keep them with the new XML. It refuses an
 existing output path. The [compatibility guide](scalability-and-inputs.md)
@@ -68,18 +69,19 @@ from hlb.parsers.extraction import ExtractedProperty
 
 extraction = ExtractedProperty("results/Extracted/whole.xtr")
 print(extraction.times)
+print(extraction.field_units)  # Units keyed by field name for version 7
 fields = extraction.GetByIndex(0)
 print(fields.grid)       # Integer lattice coordinates
 print(fields.position)   # Positions in metres
 print(fields.velocity)   # m/s, when the XML requested velocity
-print(fields.pressure)   # Pa for version 6 output
+print(fields.pressure)   # mmHg for version 7 output
 ```
 
 `GetByTimeStep(t)` selects a stored timestep; `GetByIndex(i)` selects its index
 in `times`. Fields use the names given in the XML, defaulting to their type
 names. The reader restores field offsets from the header. Row order and its
 synthetic `id` are not a persistent site identity: match different files or
-rank counts by `grid` coordinates. For version 6,
+rank counts by `grid` coordinates. For versions 6 and 7,
 `ExtractedProperty(path, physical_units=False)` skips multiplication by field
 scales but still restores offsets. This option is unavailable for versions 4/5.
 
@@ -93,6 +95,7 @@ hlb-extracted-to-vtk results/Extracted/whole.xtr whole
 
 Open `whole.pvd`, click **Apply**, and select `pressure` or `velocity`
 (**Magnitude**) under cell data. Use the time controls to view the saved frames.
+New version 7 pressure is in mmHg; stress and traction are in Pa.
 
 ## Geometry commands
 

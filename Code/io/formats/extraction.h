@@ -14,7 +14,7 @@ namespace hemelb::io::formats
         static constexpr std::uint32_t MagicNumber = 0x78747204;
 
         // The version number of the file format.
-        static constexpr std::uint32_t VersionNumber = 6;
+        static constexpr std::uint32_t VersionNumber = 7;
 
         // The length of the main header. Made up of:
         // uint - HemeLbMagicNumber
@@ -36,8 +36,9 @@ namespace hemelb::io::formats
         // uint32 - number of elements
         // uint32 - type code
         // uint32 - number of offsets (valid values are {0, 1, n elem})
-        // type[n offsets] - offsets (n offsets items of type implied above)
-        // type - scale lattice to physical units (0 => no scaling)
+        // double[n offsets] - offsets
+        // double - scale lattice to physical units (0 => no scaling)
+        // string - physical unit of the scaled field
         enum class TypeCode : std::uint32_t {
             FLOAT,
             DOUBLE,
@@ -52,19 +53,19 @@ namespace hemelb::io::formats
             // XDR pads up to the nearest multiple of four bytes and also
             // stores the length of the string.
             auto len_bytes = str.length();
-            auto len_words = (len_bytes - 1U) / 4U + 1U;
+            auto len_words = (len_bytes + 3U) / 4U;
             return (1 + len_words) * 4U;
         }
 
         // Compute the length (in bytes) of a field header
-        static inline std::size_t GetFieldHeaderLength(std::string const &name, std::uint32_t noff, TypeCode tc) {
+        static inline std::size_t GetFieldHeaderLength(std::string const &name, std::uint32_t noff, std::string const& units) {
             std::size_t len = GetStoredLengthOfString(name);
             len += 4U;  // number of elements
             len += 4U;  // type code
             len += 4U;  // number of offsets
-            std::size_t elemsize = (tc == TypeCode::FLOAT || tc == TypeCode::INT32 || tc == TypeCode::UINT32) ? 4U : 8U;
-            len += elemsize * noff; // offsets
-            len += elemsize; // scale
+            len += 8U * noff; // offsets
+            len += 8U; // scale
+            len += GetStoredLengthOfString(units);
             return len;
         }
     };

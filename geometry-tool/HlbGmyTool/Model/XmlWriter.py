@@ -96,7 +96,7 @@ class XmlWriter(object):
     def DoInitialConditions(self, root):
         ic = SubElement(root, "initialconditions")
         pressure = SubElement(ic, "pressure")
-        self.QuantityElement(pressure, "uniform", 0.0, "Pa")
+        self.QuantityElement(pressure, "uniform", 0.0, "mmHg")
         return
 
     def DoProperties(self, root):
@@ -121,10 +121,8 @@ class XmlWriter(object):
             condition = SubElement(
                 iolet, "condition", type="pressure", subtype="cosine"
             )
-            self.QuantityElement(condition, "mean", io.Pressure.x * 133.3223874, "Pa")
-            self.QuantityElement(
-                condition, "amplitude", io.Pressure.y * 133.3223874, "Pa"
-            )
+            self.QuantityElement(condition, "mean", io.Pressure.x, "mmHg")
+            self.QuantityElement(condition, "amplitude", io.Pressure.y, "mmHg")
             self.QuantityElement(condition, "phase", io.Pressure.z, "rad")
             period = float(self.profile.PulsePeriodSeconds)
             # Write whole numbers as before (value="1"), not as "1.0".

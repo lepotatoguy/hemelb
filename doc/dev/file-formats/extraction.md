@@ -28,7 +28,7 @@ The file begins with a main header (length = 84 bytes)
 * uint32 - Length of the field header that follows
   
 HemeLbMagicNumber = 0x686c6221 ("hlb!"), ExtractionMagicNumber =
-0x78747204 ("xtr" + 4). The version number is currently 6.
+0x78747204 ("xtr" + 4). The version number is currently 7.
 
 ## Field header
 This header has fieldCount entries and in each one:
@@ -37,8 +37,9 @@ This header has fieldCount entries and in each one:
  * uint32 - a type code indicating what the data type is (see below)
  * uint32 - number of offset values that follow (valid values are {0,
             1, n_values})
- * type[n_offsets] - the array of offsets, saved as the type indicated above
- * type - lattice-to-physical scale; zero indicates no scaling
+ * double[n_offsets] - the array of offsets (version 7)
+ * double - lattice-to-physical scale; zero indicates no scaling (version 7)
+ * XDR string - physical unit for this field (version 7 only)
 
 ## Field data type codes
 The data in the main file is saved as one of the following types (see
@@ -63,22 +64,39 @@ Each record consists of:
       header, saved as the type indicated. Decode as `(stored + offset) * scale`,
       using no scale multiplication when the stored scale is zero. Pressure
       stores a lattice pressure difference and its field offset is reference
-      pressure divided by the pressure scale.
+      pressure expressed in the field's physical unit, divided by its scale.
+      The main-header reference pressure remains in Pa, so version 7 pressure
+      offsets convert that value to mmHg before division.
 
 ## Physical units and legacy formats
 
-The default Python reader returns velocity in m/s, pressure and stresses in Pa,
-and wall extension in metres for version 6. `physical_units=False` skips scale
-multiplication but still restores stored offsets. Version 4/5 headers are
-60 bytes, omit timestep/mass/reference-pressure metadata, and encode no
-per-field scale. Version 4 fields have a component count and one double offset
-without a type code; all field bodies are floats. Version 5 adds type codes
-and configurable offsets. Both legacy formats store physical values using the
-original writer's conventions, typically mmHg pressure. The reader does not
-convert those legacy pressures to Pa.
+The default Python reader returns velocity in m/s, pressure in mmHg, stress
+and traction in Pa, and wall extension in metres for version 7. Every field
+header carries an explicit unit string, including custom-named fields. Python
+exposes these strings through `field_units`; CSV field headers and VTK field
+metadata retain them. The main-header reference pressure is in Pa because it
+records the solver's physical reference, independently of field units.
 
-New `.xtr` files are read with this branch's tools; backward loading support
-does not imply that older binaries can read version 6 output. See
+Version 7 stores offsets and scales as doubles independently of the field's
+body datatype, so integer fields retain fractional conversions. The Python
+reader returns floating-point arrays for scaled integer fields.
+
+Version 6 has the same 84-byte main header but no field-unit strings. Offsets
+and scales use the field's body datatype. Its pressure and stress scales return
+Pa, and the reader preserves that interpretation. For versions 6/7,
+`physical_units=False` skips scale multiplication but still restores stored
+offsets.
+
+Version 4/5 headers are 60 bytes, omit timestep/mass/reference-pressure
+metadata, and encode no per-field scale. Version 4 fields have a component
+count and one double offset without a type code; all field bodies are floats.
+Version 5 adds type codes and configurable offsets. These formats store
+physical values using the original writer's conventions, typically mmHg
+pressure. Reading old files does not convert their pressure values to another
+unit.
+
+New `.xtr` files require tools that support version 7. Backward loading support
+does not imply that older binaries can read new output. See
 [field extraction](../../user/extraction.md) and [Python tools](../../user/python-tools.md).
 
 ## Offset files
@@ -87,14 +105,21 @@ The offset files are a companion to this file - see
 
 ## Changelog
 
+### Version 7
+
+Stores offsets and scales as doubles and adds an XDR unit string after each
+field's scale. The main header and record layout match version 6. Pressure
+scales and offsets return mmHg; stress and traction remain Pa. Unit metadata identifies custom-named fields without
+changing their names. The Python reader and checkpoint loader accept versions
+4, 5, 6, and 7.
+
 ### Version 6
 
 Adds timestep, mass scale, reference pressure, and per-field scales. Field bodies
-use lattice units. The Python reader accepts versions 4, 5, and 6; older versions
-retain their physical-unit interpretation. Checkpoint loading also accepts all
-three versions, restores distribution offsets, and promotes stored floats to
-double precision. The geometry, lattice vector count, and offset-file layout
-are checked before loading.
+use lattice units. Pressure and stress scales use Pa. Readers preserve this
+historical interpretation. Checkpoint loading restores distribution offsets
+and promotes stored floats to double precision. The geometry, lattice vector
+count, and offset-file layout are checked before loading.
 
 ### Version 5
 

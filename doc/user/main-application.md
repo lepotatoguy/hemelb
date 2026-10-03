@@ -112,8 +112,8 @@ to the XML; the `-out` argument is relative to the shell's current directory.
 
 The run writes `report.txt` and `report.xml`. Extracted fields appear under `Extracted/` when requested in `<properties>`.
 `<simulation><checkpoint period="..." /></simulation>` creates checkpoints
-and saved restart XML under `Checkpoints/<step>/`. The version 6 reader returns
-pressure in Pa, including for runs started from legacy XML. Follow [quick start](getting-started.md) for a configuration
+and saved restart XML under `Checkpoints/<step>/`. The version 7 reader returns
+pressure in mmHg, including for runs started from legacy XML. Follow [quick start](getting-started.md) for a configuration
 with output enabled and [checkpoints](checkpoints.md) for restart instructions.
 
 Ranks cannot outnumber blocks containing fluid; the solver reports the limit

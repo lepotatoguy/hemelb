@@ -127,8 +127,8 @@ switching branches.
 CI loads the upstream XML5 cylinder and checkpoint fixtures directly. Its
 comparison driver sets their historical initial timestep of 1 explicitly and
 includes the final extraction. It compares pressure in Pa and permits only a
-float32 rounding bound when matching physical legacy snapshots to scaled XML6
-output. Double checkpoint distributions retain the `1e-12` bound. Site sets,
+float32 rounding bound when matching physical legacy snapshots to scaled
+version 6/7 output. Version 7 mmHg fields are converted to Pa for this comparison. Double checkpoint distributions retain the `1e-12` bound. Site sets,
 extraction times, field shapes, finiteness and offset payloads are checked.
 
 The installer regression generates a pipe and runs a stable, low-Mach pressure

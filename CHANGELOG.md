@@ -39,15 +39,25 @@
   the default when periodic mode is absent.
 - Optional AVX2 and AVX512 CPU build paths with unaligned access and scalar
   tails. Existing scalar and SSE3 defaults are retained.
-- `hlb-convert-config` optionally converts XML3/5 to XML6, converts pressure
-  quantities to Pa, maps lattice iolet positions to metres, rebases paths,
-  and writes converted pressure-file sidecars without overwriting inputs.
+- `hlb-convert-config` optionally converts XML3/5 to XML6, retains pressure
+  quantities in mmHg, maps lattice iolet positions to metres, rebases paths,
+  and preserves pressure-file units without overwriting inputs.
 - [Scripts/compare-cpu-solvers.py](Scripts/compare-cpu-solvers.py) compares CPU
   runs with matched inputs and either equal worker counts or equal allocated
   MPI rank counts, with optional peak-memory recording.
 
 ### Changed
 
+- Generated XML pressure quantities and new extracted results follow the
+  HemeLB convention: mmHg for pressure and mmHg/m for pressure gradients.
+  Stress, traction, and Young modulus retain Pa. Explicit Pa inputs remain
+  accepted; existing pressure files and extraction files retain their unit
+  interpretation.
+- Extraction version 7 stores an explicit unit string for each field,
+  including custom-named fields. Python exposes these as `field_units`; CSV
+  headers and VTK field metadata carry the units without renaming arrays.
+  Conversion scales and offsets use double precision independently of the
+  field datatype, preserving fractional conversions for integer fields.
 - The geometry GUI opens with a usable editor and preview layout, scrolls
   controls into view in smaller windows, and redraws camera and placement
   changes. Repeated updates within a wx event share one repaint, and macOS
@@ -61,18 +71,18 @@
   while retaining existing precision, input handling and checkpoint formats.
   [Measured timings and limitations](doc/dev/cpu-performance.md) are recorded.
 - Integrated the upstream checkpoint implementation. New solver and geometry
-  configurations use XML6 and Pa; extraction output uses version 6 with
-  timestep duration, reference pressure, and lattice-to-physical conversion
-  metadata. TinyXML-2 replaces TinyXML.
+  configurations use XML6 with mmHg pressure; extraction output uses version 7
+  with timestep duration, reference pressure, lattice-to-physical conversion
+  metadata, and explicit field units. TinyXML-2 replaces TinyXML.
 - Modern fluid checkpoints save double-precision distributions and matching
   restart XML under `Checkpoints/<step>/`. Saved configurations retain
   supported boundary, coupling, waveform, tracer, output, and decomposition
   settings. Checkpoint folder names count completed updates; field samples
   use global timesteps starting at zero.
-- Python extraction readers accept versions 4, 5, and 6. Version 6 fields are
-  returned in physical units by default, including pressure in Pa. Legacy
-  files retain their stored physical units, including mmHg pressure.
-- `hlb-extracted-to-vtk` handles version 6 fields and automatically uses the
+- Python extraction readers accept versions 4, 5, 6, and 7. Version 7 fields
+  return mmHg pressure and Pa stress/traction. Existing version 6 files retain
+  Pa pressure; version 4/5 files retain their stored physical units.
+- `hlb-extracted-to-vtk` handles version 6/7 fields and automatically uses the
   embedded timestep duration for ParaView collection times in seconds.
   Normal traction and wall-extension fields are exported with their scales.
 - Adapted the optional MPWide multiscale module to the current configuration
@@ -159,7 +169,7 @@ for executable hashes and the earlier baseline results.
 - Legacy TRT/MRT `relaxation_parameter` values do not override the branch
   kernels' native parameter rules. The [benchmark record](doc/dev/representative-cpu-benchmarks.md)
   documents the matched rates and the remaining legacy-parameter parity gap.
-- Fluid checkpoints in extraction versions 4, 5, and 6 can restart with a
+- Fluid checkpoints in extraction versions 4, 5, 6, and 7 can restart with a
   different MPI rank count. Legacy float distributions are promoted to
   double and stored offsets are restored. Geometry and lattice metadata
   must match the new run.

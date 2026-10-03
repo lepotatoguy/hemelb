@@ -118,19 +118,29 @@ def convert(source, destination):
                 "value", "(" + ",".join(format(v, ".17g") for v in coords) + ")"
             )
             element.set("units", "m")
-    for element in root.iter():
-        unit = element.get("units")
-        if unit in ("mmHg", "mmHg/m") and element.get("value") is not None:
-            element.set(
-                "value", format(number(element.get("value")) * MMHG_TO_PA, ".17g")
-            )
-            element.set("units", "Pa" if unit == "mmHg" else "Pa/m")
+    # Normalize only pressure quantities, keeping stress and elastic modulus in Pa.
+    pressure_paths = (
+        "./simulation/reference_pressure",
+        "./initialconditions/pressure/uniform",
+        ".//condition/mean",
+        ".//condition/amplitude",
+        ".//condition/pressure",
+        ".//condition/pressure_gradient_amplitude",
+    )
+    for path in pressure_paths:
+        for element in root.findall(path):
+            unit = element.get("units")
+            if unit in ("Pa", "Pa/m"):
+                element.set(
+                    "value", format(number(element.get("value")) / MMHG_TO_PA, ".17g")
+                )
+                element.set("units", "mmHg" if unit == "Pa" else "mmHg/m")
     stress = simulation.find("stresstype")
     if stress is not None:
         simulation.remove(stress)
     # Both legacy readers in this workspace default to zero reference pressure.
     if simulation.find("reference_pressure") is None:
-        ET.SubElement(simulation, "reference_pressure", units="Pa", value="0")
+        ET.SubElement(simulation, "reference_pressure", units="mmHg", value="0")
     properties = root.find("properties")
     if properties is not None:
         checkpoints = properties.findall("checkpoint")
@@ -202,10 +212,10 @@ def convert(source, destination):
                 if len(fields) != 2:
                     raise ValueError(f"Invalid pressure record at {input_path}:{index}")
                 t, p = map(number, fields)
-                lines.append(f"{t:.17g} {p * MMHG_TO_PA:.17g}\n")
+                lines.append(f"{t:.17g} {p:.17g}\n")
             pending_files.append((converted_path, "".join(lines)))
             path.set("value", os.path.relpath(converted_path, destination.parent))
-            condition.set("units", "Pa")
+            condition.set("units", "mmHg")
         else:
             path.set("value", os.path.relpath(input_path, destination.parent))
     for element in root.findall("./geometry/datafile"):

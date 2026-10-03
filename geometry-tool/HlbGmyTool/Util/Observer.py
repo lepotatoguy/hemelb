@@ -32,7 +32,7 @@ class NotifyOptions(object):
     def __init__(self, **kwargs):
         defaults = {
             "BEFORE_CHANGE": False,
-            "AFTER_CHANGE": True  # ,
+            "AFTER_CHANGE": True,  # ,
             # 'FOR_SETTING': True,
             # 'FOR_INSERTION': False,
             # 'FOR_REMOVAL': False,

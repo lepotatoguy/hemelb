@@ -18,10 +18,6 @@ def configs(tmp_path):
     current = Path(__file__).parent / "Model/data/test.xml"
     legacy = ET.parse(current)
     legacy.getroot().set("version", "5")
-    for quantity in legacy.getroot().iter():
-        if quantity.get("units") == "Pa":
-            quantity.set("units", "mmHg")
-            quantity.set("value", str(float(quantity.get("value")) / 133.3223874))
     reference = tmp_path / "legacy.xml"
     legacy.write(reference)
     generated = tmp_path / "generated.xml"
@@ -29,7 +25,7 @@ def configs(tmp_path):
     return reference, generated
 
 
-def test_compares_pressure_in_si(configs):
+def test_compares_pressure_in_mmhg(configs):
     compare(*configs)
 
 
@@ -40,7 +36,7 @@ def test_rejects_changed_geometry_or_physics(configs, change):
     if change == "pressure":
         tree.find("inlets/inlet/condition/mean").set("value", "1")
     elif change == "units":
-        tree.find("inlets/inlet/condition/mean").set("units", "mmHg")
+        tree.find("inlets/inlet/condition/mean").set("units", "Pa")
     elif change == "version":
         tree.getroot().set("version", "5")
     else:

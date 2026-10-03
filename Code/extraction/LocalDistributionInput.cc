@@ -224,17 +224,17 @@ namespace hemelb::extraction {
         const auto version = magicReader.read<uint32_t>();
         if (hlbMagic != fmt::HemeLbMagicNumber || xtrMagic != fmt::extraction::MagicNumber)
             throw Exception() << "Invalid checkpoint extraction magic";
-        if (version != 4 && version != 5 && version != 6)
+        if (version != 4 && version != 5 && version != 6 && version != 7)
             throw Exception() << "Unsupported checkpoint extraction version: " << version;
-        const uint64_t mainHeaderLength = version == 6 ? 84 : 60;
+        const uint64_t mainHeaderLength = version >= 6 ? 84 : 60;
         std::vector<std::byte> main(mainHeaderLength - magic.size());
         inputFile.Read(to_span(main));
         io::XdrMemReader header(main);
         const auto dx = header.read<double>();
-        if (version == 6) { header.read<double>(); header.read<double>(); }
+        if (version >= 6) { header.read<double>(); header.read<double>(); }
         PhysicalPosition origin;
         for (int i = 0; i < 3; ++i) header.read(origin[i]);
-        if (version == 6) header.read<double>();
+        if (version >= 6) header.read<double>();
         if (expectedVoxelSize) {
             const auto tol = 1e-9 * std::abs(*expectedVoxelSize);
             if (!std::isfinite(dx) || std::abs(dx - *expectedVoxelSize) > tol)
@@ -249,7 +249,7 @@ namespace hemelb::extraction {
         const auto fields = header.read<uint32_t>();
         const auto fieldLength = header.read<uint32_t>();
         if (fields != 1) throw Exception() << "Checkpoint file must contain exactly one distributions field";
-        if (fieldLength < 32 || fieldLength > 48)
+        if (fieldLength < 32 || fieldLength > (version == 7 ? 64 : 48))
             throw Exception() << "Invalid checkpoint field header length: " << fieldLength;
         std::vector<std::byte> fieldBuffer(fieldLength);
         inputFile.Read(to_span(fieldBuffer));
@@ -273,11 +273,18 @@ namespace hemelb::extraction {
             field.read(distField.numberOfOffsets);
             if (distField.numberOfOffsets > 1) throw Exception() << "Invalid checkpoint distribution offsets";
             if (distField.numberOfOffsets == 1)
-                distributionOffset = distributionBytes == sizeof(float) ? double(field.read<float>()) : field.read<double>();
-            if (version == 6) {
-                const double scale = distributionBytes == sizeof(float) ? double(field.read<float>()) : field.read<double>();
+                distributionOffset = version == 7 || distributionBytes == sizeof(double)
+                    ? field.read<double>() : double(field.read<float>());
+            if (version >= 6) {
+                const double scale = version == 7 || distributionBytes == sizeof(double)
+                    ? field.read<double>() : double(field.read<float>());
                 if (scale != 0.0) throw Exception() << "Checkpoint has scaling applied";
             }
+        }
+        if (version == 7) {
+            std::string units;
+            field.read(units);
+            if (units != "lattice") throw Exception() << "Checkpoint distributions must use lattice units";
         }
         if (!std::isfinite(distributionOffset)) throw Exception() << "Non-finite checkpoint distribution offset";
         if (field.GetPosition() != fieldLength) throw Exception() << "Checkpoint field header has trailing bytes";

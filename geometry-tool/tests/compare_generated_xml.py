@@ -3,7 +3,7 @@
 # the HemeLB team and/or their institutions, as detailed in the
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
-"""Compare generated XML6 with the legacy upstream geometry fixture in SI units."""
+"""Compare generated XML6 with the legacy upstream geometry fixture in conventional pressure units."""
 
 import argparse
 from pathlib import Path
@@ -28,7 +28,7 @@ def compare(reference, generated):
     # Zero is the implicit reference pressure in the generated configuration.
     if actual.find("simulation/reference_pressure") is None:
         ET.SubElement(
-            actual.find("simulation"), "reference_pressure", units="Pa", value="0"
+            actual.find("simulation"), "reference_pressure", units="mmHg", value="0"
         )
     # Conversion rebases this path into the temporary directory. The separate
     # GMY comparison checks the contents of the generated geometry file.

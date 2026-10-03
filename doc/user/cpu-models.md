@@ -121,7 +121,7 @@ not move the GMY wall or implement structural vessel mechanics. Stiffness must
 be positive. The ratio is optional and defaults to zero.
 
 An elastic Womersley velocity condition uses `subtype="womersleyElastic"`, with
-`radius` (m), `pressure_gradient_amplitude` (Pa/m), `period` (s),
+`radius` (m), `pressure_gradient_amplitude` (mmHg/m), `period` (s),
 `womersley_number` (dimensionless), `poisson_ratio` (dimensionless),
 `youngs_modulus` (Pa), and `axial_position` (m). Its analytical profile retains
 the source assumptions: wall thickness/radius 0.1 and equal wall/fluid density.

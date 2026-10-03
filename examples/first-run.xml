@@ -13,8 +13,8 @@
   <inlets>
     <inlet>
       <condition type="pressure" subtype="cosine">
-        <mean value="1.333223874" units="Pa" />
-        <amplitude value="0" units="Pa" />
+        <mean value="0.01" units="mmHg" />
+        <amplitude value="0" units="mmHg" />
         <phase value="0.0" units="rad" />
         <period value="1" units="s" />
       </condition>
@@ -25,8 +25,8 @@
   <outlets>
     <outlet>
       <condition type="pressure" subtype="cosine">
-        <mean value="0" units="Pa" />
-        <amplitude value="0" units="Pa" />
+        <mean value="0" units="mmHg" />
+        <amplitude value="0" units="mmHg" />
         <phase value="0.0" units="rad" />
         <period value="1" units="s" />
       </condition>
@@ -36,7 +36,7 @@
   </outlets>
   <initialconditions>
     <pressure>
-      <uniform value="0" units="Pa" />
+      <uniform value="0" units="mmHg" />
     </pressure>
   </initialconditions>
   <monitoring>

@@ -44,8 +44,8 @@ def test_units_coordinates_and_paths(tmp_path):
         "units": "m",
         "value": "(2,4,6)",
     }
-    assert float(root.find(".//mean").get("value")) == 2 * MMHG_TO_PA
-    assert root.find(".//mean").get("units") == "Pa"
+    assert float(root.find(".//mean").get("value")) == 2
+    assert root.find(".//mean").get("units") == "mmHg"
     assert root.find("geometry/datafile").get("path") == "../mesh.gmy"
 
 
@@ -62,7 +62,7 @@ def test_unsupported_physics_does_not_write_output(tmp_path):
 
 
 @pytest.mark.parametrize("kind", ["pressure", "yangpressure"])
-def test_pressure_files_are_converted_without_modifying_source(tmp_path, kind):
+def test_pressure_files_preserve_mmhg_without_modifying_source(tmp_path, kind):
     source = input_xml(tmp_path)
     tree = ET.parse(source)
     condition = tree.find(".//condition")
@@ -79,7 +79,8 @@ def test_pressure_files_are_converted_without_modifying_source(tmp_path, kind):
         tuple(map(float, line.split()))
         for line in (tmp_path / converted).read_text().splitlines()
     ]
-    assert pairs == [(0, 2 * MMHG_TO_PA), (1, 3 * MMHG_TO_PA), (2, 2 * MMHG_TO_PA)]
+    assert pairs == [(0, 2), (1, 3), (2, 2)]
+    assert ET.parse(destination).find(".//condition").get("units") == "mmHg"
     assert data.read_text() == "0 2\n1 3\n2 2\n"
 
 
@@ -118,3 +119,41 @@ def test_legacy_checkpoint_paths_and_precision_are_preserved(tmp_path):
     }
     assert output.find("field").get("datatype") == "double"
     assert root.find("simulation/checkpoint") is None
+
+
+@pytest.mark.parametrize("units,scale", [("mmHg/m", 1.0), ("Pa/m", MMHG_TO_PA)])
+def test_pressure_gradient_is_mmhg_but_elastic_modulus_stays_pa(tmp_path, units, scale):
+    source = input_xml(tmp_path)
+    tree = ET.parse(source)
+    condition = tree.find(".//condition")
+    condition.clear()
+    condition.attrib = {"type": "velocity", "subtype": "womersleyElastic"}
+    ET.SubElement(
+        condition, "pressure_gradient_amplitude", units=units, value=str(2 * scale)
+    )
+    ET.SubElement(condition, "youngs_modulus", units="Pa", value="10000")
+    tree.write(source)
+    destination = tmp_path / "new.xml"
+    convert(source, destination)
+    converted = ET.parse(destination)
+    gradient = converted.find(".//pressure_gradient_amplitude")
+    assert gradient.get("units") == "mmHg/m"
+    assert float(gradient.get("value")) == pytest.approx(2.0)
+    assert converted.find(".//youngs_modulus").attrib == {
+        "units": "Pa",
+        "value": "10000",
+    }
+
+
+def test_explicit_pa_pressure_converts_to_mmhg(tmp_path):
+    source = input_xml(tmp_path)
+    tree = ET.parse(source)
+    mean = tree.find(".//mean")
+    mean.set("units", "Pa")
+    mean.set("value", str(2 * MMHG_TO_PA))
+    tree.write(source)
+    destination = tmp_path / "new.xml"
+    convert(source, destination)
+    mean = ET.parse(destination).find(".//mean")
+    assert mean.get("units") == "mmHg"
+    assert float(mean.get("value")) == pytest.approx(2.0)

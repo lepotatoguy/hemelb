@@ -2,7 +2,7 @@
 
 A checkpoint lets you continue a stopped simulation from its saved fluid
 state. This branch writes double-precision fluid distributions in extraction
-version 6 and saves a restart configuration with supported boundary, coupling,
+version 7 and saves a restart configuration with supported boundary, coupling,
 and tracer state. A restart can use a different MPI rank count while keeping
 the same fluid geometry and lattice.
 
@@ -54,7 +54,7 @@ reader count and spacing must fit the new rank count.
 ## Load an existing fluid checkpoint
 
 HemePure version 4 and HemeLB version 5 checkpoints load directly, as do version
-6 checkpoints. To use a fluid-only file, configure initial conditions as:
+6 and 7 checkpoints. To use a fluid-only file, configure initial conditions as:
 
 ```xml
 <initialconditions>
