@@ -65,9 +65,7 @@ def config(path, model):
             subtype=(
                 "readWrite"
                 if model == "weightedReadWrite"
-                else "file"
-                if model == "periodicVelocity"
-                else model
+                else "file" if model == "periodicVelocity" else model
             ),
         )
         fields = [("radius", 0.0005, "m")]
@@ -136,6 +134,8 @@ def config(path, model):
 
 def check_wall_fields(path, elastic):
     data = path.read_bytes()
+    version = struct.unpack_from(">I", data, 8)[0]
+    assert version in (6, 7), "Expected modern extraction output"
     dx, dt, dm = struct.unpack_from(">3d", data, 12)
     reference = struct.unpack_from(">d", data, 60)[0]
     count, fields, header_bytes = struct.unpack_from(">QII", data, 68)
@@ -151,7 +151,24 @@ def check_wall_fields(path, elastic):
         values = struct.unpack_from(f">{noffsets + 1}d", data, offset)
         offset += 8 * (noffsets + 1)
         expected = dx if name == "wallextension" else dm / (dt * dt * dx)
-        assert math.isclose(values[-1], expected, rel_tol=1e-14)
+        if version == 7:
+            length = struct.unpack_from(">I", data, offset)[0]
+            offset += 4
+            unit = data[offset : offset + length].decode()
+            offset += (length + 3) // 4 * 4
+            expected_unit = (
+                "m"
+                if name == "wallextension"
+                else "mmHg" if name == "pressure" else "Pa"
+            )
+            assert unit == expected_unit, (name, unit, expected_unit)
+            if name == "pressure":
+                expected /= 133.3223874
+        assert math.isclose(values[-1], expected, rel_tol=1e-14), (
+            name,
+            values[-1],
+            expected,
+        )
         spec.append((name, components, values))
     assert offset == 84 + header_bytes
     assert struct.unpack_from(">Q", data, offset)[0] == 50
@@ -179,8 +196,9 @@ def check_wall_fields(path, elastic):
         ):
             assert math.isclose(full, normal + tangent, rel_tol=1e-12, abs_tol=1e-12)
         extension = row["wallextension"][0]
+        pressure_pa = row["pressure"][0] * (133.3223874 if version == 7 else 1)
         expected = (
-            ((row["pressure"][0] - reference) / (dm / (dt * dt * dx)) / 0.01 * dx)
+            ((pressure_pa - reference) / (dm / (dt * dt * dx)) / 0.01 * dx)
             if elastic
             else 0
         )
@@ -312,11 +330,14 @@ def main():
             tree = ET.parse(source)
             tree.getroot().set("version", "3")
             for index, condition in enumerate(tree.findall(".//condition")):
-                mean = float(condition.find("mean").get("value"))
+                quantity = condition.find("mean")
+                mean = float(quantity.get("value"))
+                if quantity.get("units") == "Pa":
+                    mean /= 133.3223874
+                else:
+                    assert quantity.get("units") == "mmHg"
                 profile = work / f"legacy-pressure-{index}.txt"
-                profile.write_text(
-                    f"0 {mean / 133.3223874:.17g}\n1 {mean / 133.3223874:.17g}\n"
-                )
+                profile.write_text(f"0 {mean:.17g}\n1 {mean:.17g}\n")
                 condition.clear()
                 condition.attrib.update(
                     type="yangpressure" if args.model == "yang" else "pressure",
