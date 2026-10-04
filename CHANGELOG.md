@@ -2,10 +2,11 @@
 
 ## Unreleased (`feat/scalability-input-improvements`)
 
-### Breaking
+### Upgrade notes
 
-Changes relative to upstream `432d3386` that can break existing scripts,
-builds or downstream code. Existing inputs remain readable; see
+Changes relative to upstream `432d3386` that may need action when you
+upgrade: updating scripts, rebuilding dependencies, or porting code.
+Existing inputs remain readable; see
 [compatibility](doc/user/scalability-and-inputs.md).
 
 - **Pressure output is in mmHg.** New extraction files use version 7, with
@@ -250,7 +251,7 @@ Changes in this fork are relative to upstream `hemelb-codes/hemelb` commit
 
 ## Unreleased (`fix/hemelb-improvements`)
 
-### Breaking
+### Upgrade notes
 
 - Single-timestep extraction files are now named with zero-padded
   timesteps (pattern `%0*lu`). They were previously padded with spaces,

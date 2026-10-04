@@ -59,7 +59,7 @@ Compared with HemePure:
 What it does not do yet: it ignores the `relaxation_parameter` setting in old HemePure TRT/MRT input
 files. Its speed on very large core counts and on supercomputer file systems
 has not been measured. If you are upgrading from the original HemeLB, read
-the [list of breaking changes](CHANGELOG.md#breaking) first.
+the [upgrade notes](CHANGELOG.md#upgrade-notes) first.
 
 ## Install
 
