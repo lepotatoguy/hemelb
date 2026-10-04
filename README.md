@@ -21,6 +21,47 @@ pressure in mmHg with phase in radians. See the
 [GUI walkthrough](doc/user/geometry-tool.md#run-gui) and
 [validation record](doc/dev/geometry-gui-validation.md).
 
+## How this branch differs
+
+Compared with the original HemeLB ([hemelb-codes/hemelb](https://github.com/hemelb-codes/hemelb), commit `432d3386`):
+
+- **It handles bad input files safely.** If a geometry file is damaged or
+  cut short, the program stops and tells you what is wrong, instead of
+  crashing or freezing. Very large geometries are also read correctly now.
+- **You can restart a run on a different number of processors.** Saved
+  checkpoints keep full precision, so a run can be continued with more or
+  fewer MPI processes than it started with.
+- **You choose more settings at run time.** How many processes read the
+  geometry, and how the work is split between processes, can be set without
+  rebuilding.
+- **It has more boundary and flow models,** taken from HemePure: Windkessel
+  outlets, Yang pressure boundaries, elastic walls, sponge layers and LES
+  turbulence models, coupling with another program, and particles that
+  follow the flow.
+- **Results state their units.** Pressure is saved in mmHg, and every saved
+  field records its unit.
+- **It is easier to install and use.** There is a one-command installer, a
+  ready-to-run example, export to ParaView, a speed and memory report after
+  each run, and automatic tests on Linux and macOS.
+
+Compared with HemePure:
+
+- **It keeps the red blood cell and multiscale features** that HemePure
+  does not have.
+- **It uses a modern C++ standard and build setup, with automatic tests.**
+  HemePure uses an older C++ standard, bundled library archives and build
+  scripts written for particular supercomputers.
+- **Restarts are more flexible.** HemePure can only restart on the same
+  processor layout and saves its state at lower precision.
+- **It can run existing HemePure cases.** It reads HemePure input files and
+  HemePure checkpoints.
+
+What it does not do yet: it has no GPU version (HemePure has a separate one).
+It ignores the `relaxation_parameter` setting in old HemePure TRT/MRT input
+files. Its speed on very large core counts and on supercomputer file systems
+has not been measured. If you are upgrading from the original HemeLB, read
+the [list of breaking changes](CHANGELOG.md#breaking) first.
+
 ## Install
 
 On macOS or Debian/Ubuntu Linux, from a terminal:

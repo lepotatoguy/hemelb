@@ -2,6 +2,38 @@
 
 ## Unreleased (`feat/scalability-input-improvements`)
 
+### Breaking
+
+Changes relative to upstream `432d3386` that can break existing scripts,
+builds or downstream code. Existing inputs remain readable; see
+[compatibility](doc/user/scalability-and-inputs.md).
+
+- **Pressure output is in mmHg.** New extraction files use version 7, with
+  pressure in mmHg, pressure gradients in mmHg/m, and stress and traction in
+  Pa. Scripts that assumed Pa pressure must convert, or read the per-field
+  unit strings (`field_units` in Python). Readers from upstream do not accept
+  version 7; use this branch's Python tools.
+- **Checkpoint layout.** Fluid checkpoints are written under
+  `Checkpoints/<step>/` with a matching restart XML, and folder names count
+  completed updates. Scripts that located checkpoint files by the old paths
+  must be updated.
+- **Build dependencies.** TinyXML-2 replaces TinyXML, and MPI 3 is required.
+  Rebuild the dependency superbuild; an existing TinyXML install is not used.
+  `Code/Doxyfile` has been removed.
+- **C++ API** (from the imported upstream `checkpoint` branch, `9d1cece0`).
+  Code that includes or links against solver internals must be ported:
+  - `SimulationMaster` is now `SimulationController`
+    (`Code/SimulationController.cc`), and `MultiscaleSimulationMaster` is
+    `MultiscaleSimulationController`.
+  - `PathManager` moved from `Code/io/` to `Code/configuration/`.
+  - `SimConfig::New` returns a `SimConfig` by value instead of a
+    `std::unique_ptr`; reading is done by `SimConfigReader`, and
+    `SimConfigWriter` writes restart XML.
+  - `util/utilityFunctions.h` and `util/utilityStructs.h` are removed; clock
+    helpers are in `util/clock.h`.
+- Single-timestep extraction file names are zero-padded, as in
+  `fix/hemelb-improvements` (see that section below).
+
 ### Added
 
 - Sparse geometry setup stores metadata by active block, reads requested
