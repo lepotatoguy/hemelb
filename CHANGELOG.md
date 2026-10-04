@@ -6,7 +6,7 @@ this file records what changed and how it was checked at the time.
 
 ## Unreleased (`fix/hemelb-improvements`)
 
-### Breaking
+### Upgrade notes
 
 - Single-timestep extraction files are now named with zero-padded
   timesteps (pattern `%0*lu`). They were previously padded with spaces,
