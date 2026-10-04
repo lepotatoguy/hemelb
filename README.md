@@ -56,8 +56,7 @@ Compared with HemePure:
 - **It can run existing HemePure cases.** It reads HemePure input files and
   HemePure checkpoints.
 
-What it does not do yet: it has no GPU version (HemePure has a separate one).
-It ignores the `relaxation_parameter` setting in old HemePure TRT/MRT input
+What it does not do yet: it ignores the `relaxation_parameter` setting in old HemePure TRT/MRT input
 files. Its speed on very large core counts and on supercomputer file systems
 has not been measured. If you are upgrading from the original HemeLB, read
 the [list of breaking changes](CHANGELOG.md#breaking) first.
