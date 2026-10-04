@@ -92,12 +92,37 @@ conditions. At wall/iolet intersections it retains Nash pressure with the select
 wall rule, matching HemePure's default corner configuration. `type="yangpressure"` requires a Yang build; `type="pressure"` is
 also accepted in that build. The implementation requires a straight inlet or
 outlet with two fluid sites behind each reconstruction link and uses the
-single-relaxation LBGK equations. Invalid stencils fail during setup. The build
-requires lattice relaxation time `tau >= 0.8`; the cylinder test was unstable at
-0.62 in both this implementation and the reference HemePure CPU build. The
-two-resolution steady-flow check uses tau 0.8; this is not a guarantee of
-stability for every geometry at larger tau. This restriction applies
-only to Yang builds; ordinary Nash pressure builds retain their existing range.
+single-relaxation LBGK equations. Invalid stencils fail during setup. Yang
+builds also require `tau >= 0.8`; see the next section. Ordinary Nash pressure
+builds retain their existing range.
+
+### Yang relaxation-time limit
+
+Yang builds reject lattice relaxation time `tau < 0.8` during setup
+(`Code/configuration/SimBuilder.cc`). The limit is empirical, not derived from
+an analysis of the scheme. It rests on two cylinder runs recorded in the
+[comparison document](../dev/comparison-and-roadmap.md):
+
+| tau | Result |
+| :--- | :--- |
+| 0.62 | Unstable in this implementation and in the reference HemePure CPU build (the reference aborted at update 805) |
+| 0.8 | 3000 updates completed; also used by the two-resolution steady-flow check |
+
+No value between 0.62 and 0.8 has been tested, so the threshold for that
+cylinder lies somewhere in that interval and 0.8 may be conservative. Passing
+at 0.8 also does not guarantee stability on other geometries or at larger tau.
+Relaxing the limit needs a tau sweep on the cylinder and on a
+patient-specific geometry, with the guard temporarily removed.
+
+HemeLB computes tau from the configuration as
+
+    tau = 0.5 + 3 * nu * dt / dx^2,    nu = viscosity / density
+
+with `dt` the `step_length` and `dx` the `voxel_size`. The limit is therefore
+equivalent to `dt >= 0.1 * dx^2 / nu`. To satisfy it at a fixed voxel size,
+increase `step_length`. A larger time step also raises the lattice velocity
+`u * dt / dx`, so check that the Mach number stays small. If a short time step
+is required, use Nash pressure boundaries instead.
 
 `HEMELB_WALL_INLET_BOUNDARY` and `HEMELB_WALL_OUTLET_BOUNDARY` default to
 `AUTO`, preserving the selected wall/iolet combination (Nash at Yang corners).

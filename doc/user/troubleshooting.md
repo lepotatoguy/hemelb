@@ -45,7 +45,7 @@ layouts.
 | Boundary inconsistent with compile-time choice | Pressure requires `NASHZEROTHORDERPRESSUREIOLET` or `YANGPRESSUREIOLET`; velocity requires `LADDIOLET`, independently for inlets/outlets |
 | Geometry uses more inlets/outlets than configured | Keep the XML iolet order and count from the profile that generated the GMY |
 | Too many MPI processes for fluid blocks | Reduce the process count to the limit in the error message |
-| Yang relaxation-time guard or invalid stencil | Use LBGK, tau at least 0.8, and straight iolets with two interior fluid sites; see [CPU models](cpu-models.md#yang-pressure-and-elastic-boundaries) |
+| Yang relaxation-time guard or invalid stencil | Use LBGK, tau at least 0.8, and straight iolets with two interior fluid sites; tau 0.8 means `step_length >= 0.1 * voxel_size^2 * density / viscosity`; see [Yang relaxation-time limit](cpu-models.md#yang-relaxation-time-limit) |
 | Reader count/spacing exceeds available ranks | Adjust `<decomposition>` reader settings for the current launch, including restarts; see [scalability](scalability-and-inputs.md) |
 | Coupling times out | Check peer timestamps, file paths, exchange units, and startup order; see [coupling](coupling.md) |
 | Output directory already exists | Choose a new `-out` folder |

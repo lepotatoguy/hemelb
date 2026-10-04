@@ -191,6 +191,8 @@ for executable hashes and the earlier baseline results.
 - Pressure and velocity waveform loading handles trailing newlines and
   unsorted records; the last record at a duplicate timestamp wins.
 - Pressure extraction restores nonzero reference pressure.
+- `Tools/estimates/estimate.py` compiles and runs again. The `main()` call
+  under its `__main__` guard had been lost when copyright headers were added.
 
 ### Documentation and examples
 
@@ -206,6 +208,10 @@ for executable hashes and the earlier baseline results.
   through simulation, checkpoint continuation, CSV output, and ParaView
   export. [Scripts/gmy-to-stl.py](Scripts/gmy-to-stl.py) is an optional helper
   for inspecting voxel geometry when the original STL is unavailable.
+- Documented the basis of the Yang `tau >= 0.8` limit in
+  [CPU models](doc/user/cpu-models.md#yang-relaxation-time-limit): it is
+  empirical (unstable at 0.62, stable at 0.8, nothing tested between), with
+  the equivalent `step_length` rule and the Mach-number trade-off.
 
 Changes in this fork are relative to upstream `hemelb-codes/hemelb` commit
 `432d3386`. Design notes are in [doc/dev](doc/dev).
