@@ -15,6 +15,10 @@ the [format reference](doc/dev/file-formats/extraction.md) for output details.
 Use the documentation from the branch you build: configuration and file-format
 versions can differ between branches.
 
+New to HemeLB? The [step-by-step guide](https://lepotatoguy.github.io/hemelb/improved.html)
+walks through installing, running the bundled example, and viewing results
+in ParaView.
+
 ## Install
 
 On macOS or Debian/Ubuntu Linux, from a terminal:
